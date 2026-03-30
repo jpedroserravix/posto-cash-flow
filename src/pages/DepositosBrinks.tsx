@@ -557,41 +557,11 @@ export default function DepositosBrinks() {
                   </Table>
                 </div>
 
-                <div className="mt-4 space-y-3 border-t pt-4">
+                <div className="mt-4 border-t pt-4">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold">Total Brinks:</span>
+                    <span className="font-semibold">Total do lote:</span>
                     <span className="font-bold text-lg">{formatCurrency(savedTotal)}</span>
                   </div>
-
-                  {role === 'admin' && conciliacao && (
-                    <>
-                      <div className="flex items-center gap-3 justify-between">
-                        <span className="font-semibold">Valor recebido no banco:</span>
-                        <div className="flex gap-2">
-                          <Input
-                            className="h-9 w-48 text-right"
-                            defaultValue={conciliacao.valor_banco?.toString() || ''}
-                            onChange={e => setValorBanco(e.target.value)}
-                            placeholder="0,00"
-                          />
-                          <Button size="sm" onClick={handleUpdateValorBanco}>Salvar</Button>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold">Diferença:</span>
-                        {(() => {
-                          const diff = (conciliacao.total_brinks || 0) - (conciliacao.valor_banco || 0);
-                          return (
-                            <span className={`font-bold text-lg ${
-                              diff === 0 ? 'text-success' : diff > 0 ? 'text-warning' : 'text-destructive'
-                            }`}>
-                              {formatCurrency(diff)}
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    </>
-                  )}
                 </div>
               </>
             )}
