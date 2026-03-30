@@ -14,16 +14,254 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      conciliacao_brinks: {
+        Row: {
+          created_at: string
+          id: string
+          lote_id: string
+          posto_id: string
+          total_brinks: number
+          valor_banco: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          lote_id: string
+          posto_id: string
+          total_brinks?: number
+          valor_banco?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          lote_id?: string
+          posto_id?: string
+          total_brinks?: number
+          valor_banco?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conciliacao_brinks_posto_id_fkey"
+            columns: ["posto_id"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      depositos_brinks: {
+        Row: {
+          created_at: string
+          data_caixa: string | null
+          data_deposito: string
+          depositante: string
+          id: string
+          lote_id: string
+          moeda: string
+          observacao: string | null
+          posto_id: string
+          tipo: string
+          turno: string | null
+          valor: number
+        }
+        Insert: {
+          created_at?: string
+          data_caixa?: string | null
+          data_deposito: string
+          depositante: string
+          id?: string
+          lote_id: string
+          moeda: string
+          observacao?: string | null
+          posto_id: string
+          tipo: string
+          turno?: string | null
+          valor: number
+        }
+        Update: {
+          created_at?: string
+          data_caixa?: string | null
+          data_deposito?: string
+          depositante?: string
+          id?: string
+          lote_id?: string
+          moeda?: string
+          observacao?: string | null
+          posto_id?: string
+          tipo?: string
+          turno?: string | null
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "depositos_brinks_posto_id_fkey"
+            columns: ["posto_id"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      depositos_manuais: {
+        Row: {
+          created_at: string
+          data: string
+          id: string
+          observacao: string | null
+          posto_id: string
+          turno: string
+          valor_depositado: number | null
+          valor_lancado: number
+        }
+        Insert: {
+          created_at?: string
+          data: string
+          id?: string
+          observacao?: string | null
+          posto_id: string
+          turno: string
+          valor_depositado?: number | null
+          valor_lancado: number
+        }
+        Update: {
+          created_at?: string
+          data?: string
+          id?: string
+          observacao?: string | null
+          posto_id?: string
+          turno?: string
+          valor_depositado?: number | null
+          valor_lancado?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "depositos_manuais_posto_id_fkey"
+            columns: ["posto_id"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      postos: {
+        Row: {
+          cnpj: string
+          created_at: string
+          id: string
+          nome: string
+        }
+        Insert: {
+          cnpj: string
+          created_at?: string
+          id?: string
+          nome: string
+        }
+        Update: {
+          cnpj?: string
+          created_at?: string
+          id?: string
+          nome?: string
+        }
+        Relationships: []
+      }
+      resumo_conferencia: {
+        Row: {
+          conferido: string
+          created_at: string
+          data: string
+          id: string
+          observacao: string | null
+          posto_id: string
+          turno: string
+        }
+        Insert: {
+          conferido?: string
+          created_at?: string
+          data: string
+          id?: string
+          observacao?: string | null
+          posto_id: string
+          turno: string
+        }
+        Update: {
+          conferido?: string
+          created_at?: string
+          data?: string
+          id?: string
+          observacao?: string | null
+          posto_id?: string
+          turno?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resumo_conferencia_posto_id_fkey"
+            columns: ["posto_id"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_posto: {
+        Row: {
+          id: string
+          posto_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          posto_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          posto_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_posto_posto_id_fkey"
+            columns: ["posto_id"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_posto_id: { Args: { _user_id: string }; Returns: string }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "funcionario"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +388,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "funcionario"],
+    },
   },
 } as const
