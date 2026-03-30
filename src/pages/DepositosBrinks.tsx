@@ -568,6 +568,87 @@ export default function DepositosBrinks() {
           </CardContent>
         </Card>
       )}
+
+      {/* Conciliação Bancária - Admin only */}
+      {role === 'admin' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Conciliação Bancária</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex flex-col gap-1">
+                <span className="text-sm font-medium">Data Inicial</span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className={cn("w-[180px] justify-start text-left font-normal", !concDataInicial && "text-muted-foreground")}>
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {concDataInicial ? format(concDataInicial, 'dd/MM/yyyy') : 'Selecionar'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={concDataInicial} onSelect={setConcDataInicial} locale={ptBR} className="p-3 pointer-events-auto" />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-sm font-medium">Data Final</span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className={cn("w-[180px] justify-start text-left font-normal", !concDataFinal && "text-muted-foreground")}>
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {concDataFinal ? format(concDataFinal, 'dd/MM/yyyy') : 'Selecionar'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={concDataFinal} onSelect={setConcDataFinal} locale={ptBR} className="p-3 pointer-events-auto" />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="flex items-end">
+                <Button onClick={buscarConciliacao} disabled={!concDataInicial || !concDataFinal || concLoading} size="sm">
+                  <Search className="w-4 h-4 mr-1" />
+                  {concLoading ? 'Buscando...' : 'Buscar'}
+                </Button>
+              </div>
+            </div>
+
+            {concTotalBrinks > 0 && (
+              <div className="space-y-3 border-t pt-4">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold">Total Brinks no período (excluindo OUTRO):</span>
+                  <span className="font-bold text-lg">{formatCurrency(concTotalBrinks)}</span>
+                </div>
+                <div className="flex items-center gap-3 justify-between">
+                  <span className="font-semibold">Valor creditado no banco (R$):</span>
+                  <Input
+                    className="h-9 w-48 text-right"
+                    value={concValorBanco}
+                    onChange={e => setConcValorBanco(e.target.value)}
+                    placeholder="0,00"
+                  />
+                </div>
+                {(() => {
+                  const vBanco = parseFloat(concValorBanco.replace(/\./g, '').replace(',', '.')) || 0;
+                  const diff = concTotalBrinks - vBanco;
+                  const hasInput = concValorBanco.trim() !== '';
+                  if (!hasInput) return null;
+                  return (
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold">Diferença:</span>
+                      <span className={cn("font-bold text-lg",
+                        diff === 0 ? 'text-green-600' : diff > 0 ? 'text-yellow-600' : 'text-red-600'
+                      )}>
+                        {formatCurrency(diff)}
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
