@@ -156,7 +156,7 @@ export default function DepositosBrinks() {
   const [loteId, setLoteId] = useState<string>('');
   const [valorBanco, setValorBanco] = useState<string>('');
   const [saving, setSaving] = useState(false);
-  const [viewMode, setViewMode] = useState<'import' | 'history'>('history');
+  const [viewMode, setViewMode] = useState<'import' | 'history' | 'conciliacao'>('history');
   const [historyLotes, setHistoryLotes] = useState<string[]>([]);
   const [selectedLote, setSelectedLote] = useState<string>('');
   const [duplicatesRemoved, setDuplicatesRemoved] = useState(0);
@@ -351,6 +351,10 @@ export default function DepositosBrinks() {
               <span><Upload className="w-4 h-4 mr-1" />Importar Arquivo</span>
             </Button>
           </label>
+          <Button variant={viewMode === 'history' ? 'secondary' : 'outline'} size="sm" onClick={() => setViewMode('history')}>Histórico</Button>
+          {role === 'admin' && (
+            <Button variant={viewMode === 'conciliacao' ? 'secondary' : 'outline'} size="sm" onClick={() => setViewMode('conciliacao')}>Conciliação</Button>
+          )}
         </div>
       </div>
 
@@ -570,7 +574,7 @@ export default function DepositosBrinks() {
       )}
 
       {/* Conciliação Bancária - Admin only */}
-      {role === 'admin' && (
+      {viewMode === 'conciliacao' && role === 'admin' && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Conciliação Bancária</CardTitle>
