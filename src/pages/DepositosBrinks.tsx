@@ -291,6 +291,27 @@ export default function DepositosBrinks() {
 
   const savedTotal = savedRows.reduce((sum, r) => sum + r.valor, 0);
 
+  const parseDateBR = (dateStr: string): string => {
+    // Convert "DD/MM/YYYY HH:MM:SS" or "DD/MM/YYYY" to ISO format
+    const parts = dateStr.trim().split(' ');
+    const datePart = parts[0];
+    const timePart = parts[1] || '00:00:00';
+    const [day, month, year] = datePart.split('/');
+    if (day && month && year && year.length === 4) {
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timePart}`;
+    }
+    return dateStr; // Return as-is if already in a valid format
+  };
+
+  const parseDateOnlyBR = (dateStr: string): string => {
+    // Convert "DD/MM/YYYY" to "YYYY-MM-DD"
+    const [day, month, year] = dateStr.trim().split('/');
+    if (day && month && year && year.length === 4) {
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+    return dateStr;
+  };
+
   const handleSave = async () => {
     if (!selectedPostoId || !loteId) return;
     setSaving(true);
@@ -298,12 +319,12 @@ export default function DepositosBrinks() {
     const inserts = rows.map(r => ({
       posto_id: selectedPostoId,
       lote_id: loteId,
-      data_deposito: r.data_deposito,
+      data_deposito: parseDateBR(r.data_deposito),
       moeda: r.moeda,
       valor: r.valor,
       tipo: r.tipo,
       depositante: r.depositante,
-      data_caixa: r.data_caixa || null,
+      data_caixa: r.data_caixa ? parseDateOnlyBR(r.data_caixa) : null,
       turno: r.turno || null,
       observacao: r.observacao || null,
     }));
