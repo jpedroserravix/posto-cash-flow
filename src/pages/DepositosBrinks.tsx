@@ -358,7 +358,14 @@ export default function DepositosBrinks() {
       {viewMode === 'import' && rows.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Importação — {rows.length} registros</CardTitle>
+            <CardTitle className="text-base">
+              Importação — {rows.length} registros
+              {duplicatesRemoved > 0 && (
+                <span className="text-sm font-normal text-muted-foreground ml-2">
+                  ({duplicatesRemoved} duplicados ignorados)
+                </span>
+              )}
+            </CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <Table>
