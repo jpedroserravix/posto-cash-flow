@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
 import { Upload, Save } from 'lucide-react';
-import { v4 as uuidv4 } from 'crypto';
+
 
 interface BrinksRow {
   id?: string;
