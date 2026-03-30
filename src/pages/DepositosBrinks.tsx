@@ -347,7 +347,7 @@ export default function DepositosBrinks() {
         <h1 className="text-xl font-bold">Depósitos Brinks</h1>
         <div className="flex gap-2 items-center">
           <label className="cursor-pointer">
-            <input type="file" accept=".csv,.html,.htm" className="hidden" onChange={handleFile} />
+            <input type="file" accept=".csv,.html,.htm,.xlsx,.xls" className="hidden" onChange={handleFile} />
             <Button asChild variant="default" size="sm">
               <span><Upload className="w-4 h-4 mr-1" />Importar Arquivo</span>
             </Button>
