@@ -303,15 +303,6 @@ export default function DepositosBrinks() {
       return;
     }
 
-    // Save conciliacao if admin
-    if (role === 'admin') {
-      await supabase.from('conciliacao_brinks').insert({
-        posto_id: selectedPostoId,
-        lote_id: loteId,
-        total_brinks: totalBrinks,
-        valor_banco: valorBancoNum || null,
-      });
-    }
 
     toast.success('Depósitos salvos com sucesso!');
     setRows([]);
