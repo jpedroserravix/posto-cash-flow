@@ -1,35 +1,22 @@
 
 
-# Conciliação Bancária por Período
+# Tornar a Conciliação Bancária mais visível
 
-## Resumo
+## Problema
 
-Substituir a conciliação atual (por lote, com campo único) por uma conciliação por período de datas, onde o administrador seleciona data inicial/final, o sistema soma os depósitos Brinks desse período (excluindo tipo "OUTRO"), e o admin digita o valor creditado no banco para ver a diferença.
+A seção de Conciliação Bancária existe no código (linha 572 do `DepositosBrinks.tsx`), renderizada para admins, mas fica escondida no final da página, abaixo da seção de importação e do histórico. O usuário precisa rolar muito para encontrá-la.
 
-## O que muda
+## Solução
 
-1. **Seção de conciliação no histórico (admin only)** -- linhas ~561-595 do `DepositosBrinks.tsx`:
-   - Remover a conciliação vinculada a lote
-   - Adicionar dois date pickers (data inicial e data final) usando Popover+Calendar
-   - Query ao banco: buscar todos os depósitos Brinks do posto selecionado no período, excluindo registros com `tipo = 'OUTRO'`, somando os valores
-   - Campo editável "Valor creditado no banco (R$)" com input numérico
-   - Diferença calculada: Total Brinks - Valor creditado
-   - Cores: verde (diferença = 0), amarelo (positivo), vermelho (negativo)
+Adicionar "Conciliação" como uma terceira opção no seletor de modo de visualização (que já tem "Importar" e "Histórico"), para que o admin possa acessar a conciliação bancária clicando em uma aba dedicada, sem precisar rolar a página.
 
-2. **A conciliação não precisa mais ser salva por lote na importação** -- linhas ~299-306:
-   - Remover a inserção automática na tabela `conciliacao_brinks` ao salvar importação
-   - A conciliação agora é uma ferramenta de consulta em tempo real (sem persistência obrigatória), ou opcionalmente salvar o resultado
+## O que muda em `src/pages/DepositosBrinks.tsx`
 
-3. **Manter a tabela `conciliacao_brinks` existente** mas ela pode ser usada opcionalmente para salvar registros de conferência por período. Alternativamente, a conciliação pode ser puramente calculada no frontend sem persistência.
+1. **Adicionar modo "conciliacao" ao viewMode** -- o estado `viewMode` passa a aceitar `'import' | 'history' | 'conciliacao'`
 
-## Detalhes Técnicos
+2. **Adicionar botão "Conciliação" na barra de modos** (próximo aos botões "Importar Arquivo" e "Histórico"), visível apenas para `role === 'admin'`
 
-- **Query por período**: `supabase.from('depositos_brinks').select('valor, tipo').eq('posto_id', postoId).gte('data_deposito', dataInicial).lte('data_deposito', dataFinal)` e filtrar `tipo !== 'OUTRO'` client-side ou com `.neq('tipo', 'OUTRO')`
-- **Date pickers**: Usar componente Calendar com Popover (shadcn pattern) com `format(date, 'dd/MM/yyyy')` para exibição pt-BR
-- **Estado**: `concDataInicial`, `concDataFinal`, `concTotalBrinks`, `concValorBanco`
-- **Posição**: Card separado abaixo do histórico, visível apenas para `role === 'admin'`
+3. **Mover o Card de Conciliação Bancária** para dentro de `{viewMode === 'conciliacao' && role === 'admin' && (...)}`, em vez de ficar sempre visível no final da página
 
-## Arquivos a editar
-
-- `src/pages/DepositosBrinks.tsx` -- refatorar seção de conciliação
+4. **Sem mudanças na lógica** -- a funcionalidade de busca por período, soma de depósitos e cálculo de diferença permanece idêntica
 
