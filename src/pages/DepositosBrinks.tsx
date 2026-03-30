@@ -574,7 +574,7 @@ export default function DepositosBrinks() {
       )}
 
       {/* Conciliação Bancária - Admin only */}
-      {role === 'admin' && (
+      {viewMode === 'conciliacao' && role === 'admin' && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Conciliação Bancária</CardTitle>
