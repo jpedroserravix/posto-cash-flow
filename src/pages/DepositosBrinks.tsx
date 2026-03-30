@@ -156,7 +156,7 @@ export default function DepositosBrinks() {
   const [loteId, setLoteId] = useState<string>('');
   const [valorBanco, setValorBanco] = useState<string>('');
   const [saving, setSaving] = useState(false);
-  const [viewMode, setViewMode] = useState<'import' | 'history'>('history');
+  const [viewMode, setViewMode] = useState<'import' | 'history' | 'conciliacao'>('history');
   const [historyLotes, setHistoryLotes] = useState<string[]>([]);
   const [selectedLote, setSelectedLote] = useState<string>('');
   const [duplicatesRemoved, setDuplicatesRemoved] = useState(0);
