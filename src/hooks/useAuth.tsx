@@ -16,13 +16,19 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const emptyAuthState = {
+const emptyAuthState: {
+  role: 'admin' | 'funcionario' | null;
+  postoId: string | null;
+  postoNome: string | null;
+  allPostos: { id: string; nome: string; cnpj: string }[];
+  selectedPostoId: string | null;
+} = {
   role: null,
   postoId: null,
   postoNome: null,
   allPostos: [],
   selectedPostoId: null,
-} as const;
+};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
