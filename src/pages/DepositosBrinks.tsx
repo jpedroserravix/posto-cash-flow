@@ -332,18 +332,6 @@ export default function DepositosBrinks() {
     else toast.success('Atualizado');
   };
 
-  const handleUpdateValorBanco = async () => {
-    if (!selectedLote) return;
-    const val = parseFloat(valorBanco.replace(/\./g, '').replace(',', '.')) || 0;
-    const { error } = await supabase.from('conciliacao_brinks')
-      .update({ valor_banco: val })
-      .eq('lote_id', selectedLote);
-    if (error) toast.error('Erro: ' + error.message);
-    else {
-      toast.success('Valor atualizado');
-      loadLote(selectedLote);
-    }
-  };
 
   const formatCurrency = (v: number) =>
     v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
