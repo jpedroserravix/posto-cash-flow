@@ -106,6 +106,45 @@ function parseHTML(text: string): BrinksRow[] {
   return result;
 }
 
+function parseXLSX(data: ArrayBuffer): BrinksRow[] {
+  const workbook = XLSX.read(data, { type: 'array' });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const jsonData = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, raw: false });
+  if (jsonData.length < 2) return [];
+
+  const headers = (jsonData[0] as string[]).map(h => (h || '').toString().trim().toUpperCase());
+  const dataIdx = headers.findIndex(h => h.includes('DATA') && h.includes('DEP'));
+  const moedaIdx = headers.findIndex(h => h.includes('MOEDA'));
+  const valorIdx = headers.findIndex(h => h.includes('VALOR'));
+  const tipoIdx = headers.findIndex(h => h.includes('TIPO'));
+  const depositanteIdx = headers.findIndex(h => h.includes('DEPOSITANTE'));
+
+  if (dataIdx === -1 || valorIdx === -1) {
+    toast.error('Planilha não contém as colunas esperadas (DATA DEP... e VALOR)');
+    return [];
+  }
+
+  return jsonData.slice(1).filter(row => row && row.length > 1).map(row => {
+    const cols = (row as string[]).map(c => (c || '').toString().trim());
+    const dataStr = cols[dataIdx] || '';
+    const valorStr = (cols[valorIdx] || '0').replace(/\./g, '').replace(',', '.');
+    return {
+      data_deposito: dataStr,
+      moeda: cols[moedaIdx] || '',
+      valor: parseFloat(valorStr) || 0,
+      tipo: cols[tipoIdx] || '',
+      depositante: cols[depositanteIdx] || '',
+      data_caixa: dataStr.split(' ')[0] || dataStr.substring(0, 10),
+      turno: '',
+      observacao: '',
+    };
+  });
+}
+
+function rowKey(r: { data_deposito: string; valor: number; depositante: string; tipo: string }) {
+  return `${r.data_deposito}|${r.valor}|${r.depositante}|${r.tipo}`;
+}
+
 export default function DepositosBrinks() {
   const { selectedPostoId, role } = useAuth();
   const [rows, setRows] = useState<BrinksRow[]>([]);
@@ -117,6 +156,7 @@ export default function DepositosBrinks() {
   const [historyLotes, setHistoryLotes] = useState<string[]>([]);
   const [selectedLote, setSelectedLote] = useState<string>('');
   const [conciliacao, setConciliacao] = useState<{ total_brinks: number; valor_banco: number | null } | null>(null);
+  const [duplicatesRemoved, setDuplicatesRemoved] = useState(0);
 
   // Load history
   useEffect(() => {
@@ -176,12 +216,16 @@ export default function DepositosBrinks() {
     const file = e.target.files?.[0];
     if (!file) return;
     
-    const text = await file.text();
     let parsed: BrinksRow[];
-    
-    if (file.name.endsWith('.html') || file.name.endsWith('.htm')) {
+
+    if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+      const buffer = await file.arrayBuffer();
+      parsed = parseXLSX(buffer);
+    } else if (file.name.endsWith('.html') || file.name.endsWith('.htm')) {
+      const text = await file.text();
       parsed = parseHTML(text);
     } else {
+      const text = await file.text();
       parsed = parseCSV(text);
     }
 
@@ -190,10 +234,31 @@ export default function DepositosBrinks() {
       return;
     }
 
-    setRows(parsed);
+    // Remove duplicates against existing saved data
+    const { data: existing } = await supabase
+      .from('depositos_brinks')
+      .select('data_deposito, valor, depositante, tipo')
+      .eq('posto_id', selectedPostoId!);
+
+    const existingKeys = new Set((existing || []).map(r => rowKey(r)));
+    const uniqueRows = parsed.filter(r => !existingKeys.has(rowKey(r)));
+    const dupsCount = parsed.length - uniqueRows.length;
+    setDuplicatesRemoved(dupsCount);
+
+    if (uniqueRows.length === 0) {
+      toast.warning('Todos os registros do arquivo já foram importados anteriormente.');
+      return;
+    }
+
+    setRows(uniqueRows);
     setLoteId(crypto.randomUUID());
     setViewMode('import');
-    toast.success(`${parsed.length} registros importados`);
+
+    if (dupsCount > 0) {
+      toast.success(`${uniqueRows.length} registros novos importados. ${dupsCount} duplicados ignorados.`);
+    } else {
+      toast.success(`${uniqueRows.length} registros importados`);
+    }
   };
 
   const updateRow = (index: number, field: keyof BrinksRow, value: string) => {
