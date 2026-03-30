@@ -159,8 +159,12 @@ export default function DepositosBrinks() {
   const [viewMode, setViewMode] = useState<'import' | 'history'>('history');
   const [historyLotes, setHistoryLotes] = useState<string[]>([]);
   const [selectedLote, setSelectedLote] = useState<string>('');
-  const [conciliacao, setConciliacao] = useState<{ total_brinks: number; valor_banco: number | null } | null>(null);
   const [duplicatesRemoved, setDuplicatesRemoved] = useState(0);
+  const [concDataInicial, setConcDataInicial] = useState<Date | undefined>();
+  const [concDataFinal, setConcDataFinal] = useState<Date | undefined>();
+  const [concTotalBrinks, setConcTotalBrinks] = useState<number>(0);
+  const [concValorBanco, setConcValorBanco] = useState<string>('');
+  const [concLoading, setConcLoading] = useState(false);
 
   // Load history
   useEffect(() => {
