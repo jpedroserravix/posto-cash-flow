@@ -6,10 +6,14 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 import { toast } from 'sonner';
-import { Upload, Save } from 'lucide-react';
+import { Upload, Save, CalendarIcon, Search } from 'lucide-react';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
-
 
 interface BrinksRow {
   id?: string;
@@ -155,8 +159,12 @@ export default function DepositosBrinks() {
   const [viewMode, setViewMode] = useState<'import' | 'history'>('history');
   const [historyLotes, setHistoryLotes] = useState<string[]>([]);
   const [selectedLote, setSelectedLote] = useState<string>('');
-  const [conciliacao, setConciliacao] = useState<{ total_brinks: number; valor_banco: number | null } | null>(null);
   const [duplicatesRemoved, setDuplicatesRemoved] = useState(0);
+  const [concDataInicial, setConcDataInicial] = useState<Date | undefined>();
+  const [concDataFinal, setConcDataFinal] = useState<Date | undefined>();
+  const [concTotalBrinks, setConcTotalBrinks] = useState<number>(0);
+  const [concValorBanco, setConcValorBanco] = useState<string>('');
+  const [concLoading, setConcLoading] = useState(false);
 
   // Load history
   useEffect(() => {
@@ -201,15 +209,27 @@ export default function DepositosBrinks() {
       observacao: d.observacao || '',
     })) || []);
 
-    // Load conciliacao if admin
-    if (role === 'admin') {
-      const { data: conc } = await supabase
-        .from('conciliacao_brinks')
-        .select('total_brinks, valor_banco')
-        .eq('lote_id', lId)
-        .single();
-      setConciliacao(conc);
+  };
+
+  const buscarConciliacao = async () => {
+    if (!selectedPostoId || !concDataInicial || !concDataFinal) return;
+    setConcLoading(true);
+    const dataIni = format(concDataInicial, 'yyyy-MM-dd');
+    const dataFim = format(concDataFinal, 'yyyy-MM-dd');
+    const { data, error } = await supabase
+      .from('depositos_brinks')
+      .select('valor, tipo')
+      .eq('posto_id', selectedPostoId)
+      .gte('data_deposito', dataIni)
+      .lte('data_deposito', dataFim + 'T23:59:59')
+      .neq('tipo', 'OUTRO');
+    if (error) {
+      toast.error('Erro ao buscar depósitos: ' + error.message);
+    } else {
+      const total = (data || []).reduce((sum, r) => sum + Number(r.valor), 0);
+      setConcTotalBrinks(total);
     }
+    setConcLoading(false);
   };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -295,15 +315,6 @@ export default function DepositosBrinks() {
       return;
     }
 
-    // Save conciliacao if admin
-    if (role === 'admin') {
-      await supabase.from('conciliacao_brinks').insert({
-        posto_id: selectedPostoId,
-        lote_id: loteId,
-        total_brinks: totalBrinks,
-        valor_banco: valorBancoNum || null,
-      });
-    }
 
     toast.success('Depósitos salvos com sucesso!');
     setRows([]);
@@ -321,18 +332,6 @@ export default function DepositosBrinks() {
     else toast.success('Atualizado');
   };
 
-  const handleUpdateValorBanco = async () => {
-    if (!selectedLote) return;
-    const val = parseFloat(valorBanco.replace(/\./g, '').replace(',', '.')) || 0;
-    const { error } = await supabase.from('conciliacao_brinks')
-      .update({ valor_banco: val })
-      .eq('lote_id', selectedLote);
-    if (error) toast.error('Erro: ' + error.message);
-    else {
-      toast.success('Valor atualizado');
-      loadLote(selectedLote);
-    }
-  };
 
   const formatCurrency = (v: number) =>
     v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -558,43 +557,94 @@ export default function DepositosBrinks() {
                   </Table>
                 </div>
 
-                <div className="mt-4 space-y-3 border-t pt-4">
+                <div className="mt-4 border-t pt-4">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold">Total Brinks:</span>
+                    <span className="font-semibold">Total do lote:</span>
                     <span className="font-bold text-lg">{formatCurrency(savedTotal)}</span>
                   </div>
-
-                  {role === 'admin' && conciliacao && (
-                    <>
-                      <div className="flex items-center gap-3 justify-between">
-                        <span className="font-semibold">Valor recebido no banco:</span>
-                        <div className="flex gap-2">
-                          <Input
-                            className="h-9 w-48 text-right"
-                            defaultValue={conciliacao.valor_banco?.toString() || ''}
-                            onChange={e => setValorBanco(e.target.value)}
-                            placeholder="0,00"
-                          />
-                          <Button size="sm" onClick={handleUpdateValorBanco}>Salvar</Button>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold">Diferença:</span>
-                        {(() => {
-                          const diff = (conciliacao.total_brinks || 0) - (conciliacao.valor_banco || 0);
-                          return (
-                            <span className={`font-bold text-lg ${
-                              diff === 0 ? 'text-success' : diff > 0 ? 'text-warning' : 'text-destructive'
-                            }`}>
-                              {formatCurrency(diff)}
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    </>
-                  )}
                 </div>
               </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Conciliação Bancária - Admin only */}
+      {role === 'admin' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Conciliação Bancária</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex flex-col gap-1">
+                <span className="text-sm font-medium">Data Inicial</span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className={cn("w-[180px] justify-start text-left font-normal", !concDataInicial && "text-muted-foreground")}>
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {concDataInicial ? format(concDataInicial, 'dd/MM/yyyy') : 'Selecionar'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={concDataInicial} onSelect={setConcDataInicial} locale={ptBR} className="p-3 pointer-events-auto" />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-sm font-medium">Data Final</span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className={cn("w-[180px] justify-start text-left font-normal", !concDataFinal && "text-muted-foreground")}>
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {concDataFinal ? format(concDataFinal, 'dd/MM/yyyy') : 'Selecionar'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={concDataFinal} onSelect={setConcDataFinal} locale={ptBR} className="p-3 pointer-events-auto" />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="flex items-end">
+                <Button onClick={buscarConciliacao} disabled={!concDataInicial || !concDataFinal || concLoading} size="sm">
+                  <Search className="w-4 h-4 mr-1" />
+                  {concLoading ? 'Buscando...' : 'Buscar'}
+                </Button>
+              </div>
+            </div>
+
+            {concTotalBrinks > 0 && (
+              <div className="space-y-3 border-t pt-4">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold">Total Brinks no período (excluindo OUTRO):</span>
+                  <span className="font-bold text-lg">{formatCurrency(concTotalBrinks)}</span>
+                </div>
+                <div className="flex items-center gap-3 justify-between">
+                  <span className="font-semibold">Valor creditado no banco (R$):</span>
+                  <Input
+                    className="h-9 w-48 text-right"
+                    value={concValorBanco}
+                    onChange={e => setConcValorBanco(e.target.value)}
+                    placeholder="0,00"
+                  />
+                </div>
+                {(() => {
+                  const vBanco = parseFloat(concValorBanco.replace(/\./g, '').replace(',', '.')) || 0;
+                  const diff = concTotalBrinks - vBanco;
+                  const hasInput = concValorBanco.trim() !== '';
+                  if (!hasInput) return null;
+                  return (
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold">Diferença:</span>
+                      <span className={cn("font-bold text-lg",
+                        diff === 0 ? 'text-green-600' : diff > 0 ? 'text-yellow-600' : 'text-red-600'
+                      )}>
+                        {formatCurrency(diff)}
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
             )}
           </CardContent>
         </Card>
