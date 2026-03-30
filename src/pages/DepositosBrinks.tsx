@@ -351,6 +351,10 @@ export default function DepositosBrinks() {
               <span><Upload className="w-4 h-4 mr-1" />Importar Arquivo</span>
             </Button>
           </label>
+          <Button variant={viewMode === 'history' ? 'secondary' : 'outline'} size="sm" onClick={() => setViewMode('history')}>Histórico</Button>
+          {role === 'admin' && (
+            <Button variant={viewMode === 'conciliacao' ? 'secondary' : 'outline'} size="sm" onClick={() => setViewMode('conciliacao')}>Conciliação</Button>
+          )}
         </div>
       </div>
 
