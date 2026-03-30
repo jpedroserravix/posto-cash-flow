@@ -209,15 +209,27 @@ export default function DepositosBrinks() {
       observacao: d.observacao || '',
     })) || []);
 
-    // Load conciliacao if admin
-    if (role === 'admin') {
-      const { data: conc } = await supabase
-        .from('conciliacao_brinks')
-        .select('total_brinks, valor_banco')
-        .eq('lote_id', lId)
-        .single();
-      setConciliacao(conc);
+  };
+
+  const buscarConciliacao = async () => {
+    if (!selectedPostoId || !concDataInicial || !concDataFinal) return;
+    setConcLoading(true);
+    const dataIni = format(concDataInicial, 'yyyy-MM-dd');
+    const dataFim = format(concDataFinal, 'yyyy-MM-dd');
+    const { data, error } = await supabase
+      .from('depositos_brinks')
+      .select('valor, tipo')
+      .eq('posto_id', selectedPostoId)
+      .gte('data_deposito', dataIni)
+      .lte('data_deposito', dataFim + 'T23:59:59')
+      .neq('tipo', 'OUTRO');
+    if (error) {
+      toast.error('Erro ao buscar depósitos: ' + error.message);
+    } else {
+      const total = (data || []).reduce((sum, r) => sum + Number(r.valor), 0);
+      setConcTotalBrinks(total);
     }
+    setConcLoading(false);
   };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
