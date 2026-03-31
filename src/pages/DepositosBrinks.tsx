@@ -725,9 +725,7 @@ export default function DepositosBrinks() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-xs whitespace-nowrap">{new Date(dep.data_deposito).toLocaleString('pt-BR')}</TableCell>
-                            <TableCell className="text-xs">{dep.moeda}</TableCell>
                             <TableCell className="text-right text-xs font-medium">{formatCurrency(dep.valor)}</TableCell>
-                            <TableCell className="text-xs">{dep.tipo}</TableCell>
                             <TableCell className="text-xs">{dep.depositante}</TableCell>
                             <TableCell>
                               <Input
