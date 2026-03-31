@@ -254,7 +254,7 @@ export default function DepositosBrinks() {
 
   // Extract unique values for dropdown filters
   const uniqueDepositantes = useMemo(() => [...new Set(allDepositos.map(d => d.depositante).filter(Boolean))].sort(), [allDepositos]);
-  const uniqueTipos = useMemo(() => [...new Set(allDepositos.map(d => d.tipo).filter(Boolean))].sort(), [allDepositos]);
+  
   const uniqueTurnos = useMemo(() => [...new Set(allDepositos.map(d => d.turno).filter(Boolean))].sort(), [allDepositos]);
 
   // Sort toggle
