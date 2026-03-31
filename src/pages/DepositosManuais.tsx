@@ -45,8 +45,9 @@ export default function DepositosManuais() {
   };
 
   const parseMoney = (v: string) => {
-    if (!v) return null;
-    return parseFloat(v.replace(/\./g, '').replace(',', '.')) || 0;
+    if (!v.trim()) return null;
+    const n = parseFloat(v.replace(/\./g, '').replace(',', '.'));
+    return isNaN(n) ? null : n;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -54,7 +55,7 @@ export default function DepositosManuais() {
     if (!selectedPostoId) return;
 
     const valorLancado = parseMoney(formData.valor_lancado);
-    if (!valorLancado) { toast.error('Informe o valor lançado'); return; }
+    if (valorLancado === null) { toast.error('Informe o valor lançado'); return; }
 
     const record = {
       posto_id: selectedPostoId,
