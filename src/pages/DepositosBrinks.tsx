@@ -648,16 +648,6 @@ export default function DepositosBrinks() {
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">Tipo</label>
-                  <Select value={filterTipo} onValueChange={setFilterTipo}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      {uniqueTipos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground">Turno</label>
                   <Select value={filterTurno} onValueChange={setFilterTurno}>
                     <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
