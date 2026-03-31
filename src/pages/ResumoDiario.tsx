@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -56,13 +56,11 @@ export default function ResumoDiario() {
     const { data: conferencias } = await supabase
       .from('resumo_conferencia')
       .select('*')
-      .eq('posto_id', selectedPostoId)
-      .is('turno', null);
+      .eq('posto_id', selectedPostoId);
 
-    // Build turno-level map: key = data|centroCusto|turno
     const turnoMap = new Map<string, { brinks: number; manual: number }>();
 
-    brinks?.forEach(b => {
+    brinks?.forEach((b) => {
       if (!b.data_caixa || !b.turno) return;
       const cc = b.centro_custo || 'SEM CENTRO';
       const key = `${b.data_caixa}|${cc}|${b.turno}`;
@@ -71,7 +69,7 @@ export default function ResumoDiario() {
       turnoMap.set(key, existing);
     });
 
-    manuais?.forEach(m => {
+    manuais?.forEach((m) => {
       const cc = m.centro_custo || 'SEM CENTRO';
       const key = `${m.data}|${cc}|${m.turno}`;
       const existing = turnoMap.get(key) || { brinks: 0, manual: 0 };
@@ -79,7 +77,6 @@ export default function ResumoDiario() {
       turnoMap.set(key, existing);
     });
 
-    // Group by data|centroCusto
     const groupMap = new Map<string, TurnoRow[]>();
     turnoMap.forEach((val, key) => {
       const [data, cc, turno] = key.split('|');
@@ -89,31 +86,42 @@ export default function ResumoDiario() {
       groupMap.set(groupKey, arr);
     });
 
-    // Build conference lookup: key = data|centroCusto
     const confMap = new Map<string, { conferido: string; observacao: string; id: string }>();
-    conferencias?.forEach(c => {
+    conferencias?.forEach((c) => {
       const cc = c.centro_custo || 'SEM CENTRO';
-      confMap.set(`${c.data}|${cc}`, { conferido: c.conferido, observacao: c.observacao || '', id: c.id });
+      const key = `${c.data}|${cc}`;
+      const existing = confMap.get(key);
+
+      if (!existing || c.turno === null) {
+        confMap.set(key, {
+          conferido: c.conferido,
+          observacao: c.observacao || '',
+          id: c.id,
+        });
+      }
     });
 
-    const result: GroupData[] = Array.from(groupMap.entries()).map(([key, turnos]) => {
-      const [data, centroCusto] = key.split('|');
-      const sorted = turnos.sort((a, b) => a.turno.localeCompare(b.turno));
-      const totalBrinks = sorted.reduce((s, t) => s + t.cofreBrinks, 0);
-      const totalManual = sorted.reduce((s, t) => s + t.manual, 0);
-      const conf = confMap.get(key);
-      return {
-        data,
-        centroCusto,
-        turnos: sorted,
-        totalBrinks,
-        totalManual,
-        totalGeral: totalBrinks + totalManual,
-        conferido: conf?.conferido || 'PENDENTE',
-        observacao: conf?.observacao || '',
-        resumoId: conf?.id,
-      };
-    }).sort((a, b) => b.data.localeCompare(a.data) || a.centroCusto.localeCompare(b.centroCusto));
+    const result: GroupData[] = Array.from(groupMap.entries())
+      .map(([key, turnos]) => {
+        const [data, centroCusto] = key.split('|');
+        const sorted = turnos.sort((a, b) => a.turno.localeCompare(b.turno));
+        const totalBrinks = sorted.reduce((sum, turno) => sum + turno.cofreBrinks, 0);
+        const totalManual = sorted.reduce((sum, turno) => sum + turno.manual, 0);
+        const conf = confMap.get(key);
+
+        return {
+          data,
+          centroCusto,
+          turnos: sorted,
+          totalBrinks,
+          totalManual,
+          totalGeral: totalBrinks + totalManual,
+          conferido: conf?.conferido || 'PENDENTE',
+          observacao: conf?.observacao || '',
+          resumoId: conf?.id,
+        };
+      })
+      .sort((a, b) => b.data.localeCompare(a.data) || a.centroCusto.localeCompare(b.centroCusto));
 
     setGroups(result);
   };
@@ -131,34 +139,48 @@ export default function ResumoDiario() {
     };
 
     if (group.resumoId) {
-      const { error } = await supabase.from('resumo_conferencia')
-        .update({ conferido: payload.conferido, observacao: payload.observacao })
+      const { error } = await supabase
+        .from('resumo_conferencia')
+        .update({
+          turno: null as string | null,
+          centro_custo: payload.centro_custo,
+          conferido: payload.conferido,
+          observacao: payload.observacao,
+        })
         .eq('id', group.resumoId);
-      if (error) { toast.error('Erro: ' + error.message); return; }
+
+      if (error) {
+        toast.error('Erro: ' + error.message);
+        return;
+      }
     } else {
-      const { error } = await supabase.from('resumo_conferencia')
-        .insert(payload);
-      if (error) { toast.error('Erro: ' + error.message); return; }
+      const { error } = await supabase.from('resumo_conferencia').insert(payload);
+
+      if (error) {
+        toast.error('Erro: ' + error.message);
+        return;
+      }
     }
+
     toast.success('Salvo');
     loadResumo();
   };
 
   const updateGroup = (index: number, field: 'conferido' | 'observacao', value: string) => {
-    setGroups(prev => prev.map((g, i) => i === index ? { ...g, [field]: value } : g));
+    setGroups((prev) => prev.map((group, i) => (i === index ? { ...group, [field]: value } : group)));
   };
 
-  const formatCurrency = (v: number) =>
-    v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const formatCurrency = (value: number) =>
+    value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
   const borderColor = (status: string) => {
-    if (status === 'OK') return 'border-l-4 border-l-green-500';
+    if (status === 'OK') return 'border-l-4 border-l-success';
     if (status === 'DIVERGÊNCIA') return 'border-l-4 border-l-destructive';
-    return 'border-l-4 border-l-yellow-500';
+    return 'border-l-4 border-l-warning';
   };
 
   if (!selectedPostoId) {
-    return <p className="text-muted-foreground text-center py-8">Selecione um posto para continuar.</p>;
+    return <p className="py-8 text-center text-muted-foreground">Selecione um posto para continuar.</p>;
   }
 
   return (
@@ -168,69 +190,85 @@ export default function ResumoDiario() {
       {groups.length === 0 ? (
         <Card>
           <CardContent className="py-6">
-            <p className="text-muted-foreground text-center text-sm">Nenhum dado para exibir. Importe depósitos Brinks ou cadastre depósitos manuais.</p>
+            <p className="text-center text-sm text-muted-foreground">
+              Nenhum dado para exibir. Importe depósitos Brinks ou cadastre depósitos manuais.
+            </p>
           </CardContent>
         </Card>
       ) : (
         groups.map((group, i) => (
           <Card key={`${group.data}-${group.centroCusto}`} className={borderColor(group.conferido)}>
-            <CardHeader className="pb-2 pt-4 px-4">
-              <div className="flex items-center justify-between">
+            <CardHeader className="px-4 pb-2 pt-4">
+              <div className="flex items-center justify-between gap-3">
                 <CardTitle className="text-base">
-                  {new Date(group.data + 'T00:00:00').toLocaleDateString('pt-BR')} — {group.centroCusto}
+                  {new Date(`${group.data}T00:00:00`).toLocaleDateString('pt-BR')} — {group.centroCusto}
                 </CardTitle>
                 <span className="text-lg font-bold">{formatCurrency(group.totalGeral)}</span>
               </div>
             </CardHeader>
+
             <CardContent className="px-4 pb-2">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="text-xs">Turno</TableHead>
-                    <TableHead className="text-xs text-right">Cofre Brinks</TableHead>
-                    <TableHead className="text-xs text-right">Manual</TableHead>
-                    <TableHead className="text-xs text-right">Total</TableHead>
+                    <TableHead className="text-right text-xs">Cofre Brinks</TableHead>
+                    <TableHead className="text-right text-xs">Manual</TableHead>
+                    <TableHead className="text-right text-xs">Total</TableHead>
                   </TableRow>
                 </TableHeader>
+
                 <TableBody>
-                  {group.turnos.map(t => (
-                    <TableRow key={t.turno}>
-                      <TableCell className="text-xs py-1">{t.turno}</TableCell>
-                      <TableCell className="text-xs text-right py-1">{formatCurrency(t.cofreBrinks)}</TableCell>
-                      <TableCell className="text-xs text-right py-1">{formatCurrency(t.manual)}</TableCell>
-                      <TableCell className="text-xs text-right py-1 font-medium">{formatCurrency(t.total)}</TableCell>
+                  {group.turnos.map((turno) => (
+                    <TableRow key={turno.turno}>
+                      <TableCell className="py-1 text-xs">{turno.turno}</TableCell>
+                      <TableCell className="py-1 text-right text-xs">{formatCurrency(turno.cofreBrinks)}</TableCell>
+                      <TableCell className="py-1 text-right text-xs">{formatCurrency(turno.manual)}</TableCell>
+                      <TableCell className="py-1 text-right text-xs font-medium">{formatCurrency(turno.total)}</TableCell>
                     </TableRow>
                   ))}
+
                   <TableRow className="border-t-2">
-                    <TableCell className="text-xs font-bold py-1">Soma</TableCell>
-                    <TableCell className="text-xs text-right font-bold py-1">{formatCurrency(group.totalBrinks)}</TableCell>
-                    <TableCell className="text-xs text-right font-bold py-1">{formatCurrency(group.totalManual)}</TableCell>
-                    <TableCell className="text-xs text-right font-bold py-1">{formatCurrency(group.totalGeral)}</TableCell>
+                    <TableCell className="py-1 text-xs font-bold">Soma</TableCell>
+                    <TableCell className="py-1 text-right text-xs font-bold">{formatCurrency(group.totalBrinks)}</TableCell>
+                    <TableCell className="py-1 text-right text-xs font-bold">{formatCurrency(group.totalManual)}</TableCell>
+                    <TableCell className="py-1 text-right text-xs font-bold">{formatCurrency(group.totalGeral)}</TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
             </CardContent>
-            <CardFooter className="px-4 pb-3 pt-1 flex items-center gap-2 flex-wrap">
-              <Select value={group.conferido} onValueChange={v => updateGroup(i, 'conferido', v)}>
-                <SelectTrigger className={`h-8 text-xs w-36 ${
-                  group.conferido === 'OK' ? 'border-green-500 text-green-600' :
-                  group.conferido === 'DIVERGÊNCIA' ? 'border-destructive text-destructive' :
-                  'border-yellow-500 text-yellow-600'
-                }`}>
+
+            <CardFooter className="flex flex-wrap items-center gap-2 px-4 pb-3 pt-1">
+              <Select value={group.conferido} onValueChange={(value) => updateGroup(i, 'conferido', value)}>
+                <SelectTrigger
+                  className={`h-8 w-36 text-xs ${
+                    group.conferido === 'OK'
+                      ? 'border-success text-success'
+                      : group.conferido === 'DIVERGÊNCIA'
+                        ? 'border-destructive text-destructive'
+                        : 'border-warning text-warning'
+                  }`}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {CONFERIDO_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                  {CONFERIDO_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
+
               <Input
-                className="h-8 text-xs flex-1 min-w-[120px]"
+                className="h-8 min-w-[120px] flex-1 text-xs"
                 value={group.observacao}
-                onChange={e => updateGroup(i, 'observacao', e.target.value)}
+                onChange={(e) => updateGroup(i, 'observacao', e.target.value)}
                 placeholder="Observação"
               />
+
               <Button size="sm" variant="ghost" onClick={() => handleSaveGroup(group)}>
-                <Save className="w-4 h-4" />
+                <Save className="h-4 w-4" />
               </Button>
             </CardFooter>
           </Card>
