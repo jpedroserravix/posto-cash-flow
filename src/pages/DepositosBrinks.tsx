@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -10,11 +10,26 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { Upload, Save, CalendarIcon, Search, CheckCircle } from 'lucide-react';
+import { Upload, Save, CalendarIcon, Search, CheckCircle, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
+
+type SortDir = 'asc' | 'desc' | null;
+
+function SortableHead({ label, active, dir, onClick, className }: { label: string; active: boolean; dir: SortDir; onClick: () => void; className?: string }) {
+  return (
+    <TableHead className={cn("cursor-pointer select-none hover:bg-muted/50", className)} onClick={onClick}>
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {!active && <ArrowUpDown className="w-3 h-3 text-muted-foreground" />}
+        {active && dir === 'asc' && <ArrowUp className="w-3 h-3" />}
+        {active && dir === 'desc' && <ArrowDown className="w-3 h-3" />}
+      </span>
+    </TableHead>
+  );
+}
 
 interface BrinksRow {
   id?: string;
