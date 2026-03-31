@@ -184,6 +184,16 @@ export default function DepositosBrinks() {
   const [contasBancarias, setContasBancarias] = useState<{ id: string; banco: string; agencia: string; conta: string }[]>([]);
   const [concSaving, setConcSaving] = useState(false);
 
+  // Sort & filter states for history
+  const [histSortField, setHistSortField] = useState<string | null>(null);
+  const [histSortDir, setHistSortDir] = useState<SortDir>(null);
+  const [histFilter, setHistFilter] = useState('');
+
+  // Sort & filter states for conciliação
+  const [concSortField, setConcSortField] = useState<string | null>(null);
+  const [concSortDir, setConcSortDir] = useState<SortDir>(null);
+  const [concFilter, setConcFilter] = useState('');
+
   // Load history
   useEffect(() => {
     if (!selectedPostoId) return;
