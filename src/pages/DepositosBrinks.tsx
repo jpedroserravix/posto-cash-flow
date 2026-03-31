@@ -284,10 +284,8 @@ export default function DepositosBrinks() {
       const q = filterText.toLowerCase();
       data = data.filter(r =>
         r.depositante.toLowerCase().includes(q) ||
-        r.tipo.toLowerCase().includes(q) ||
         r.observacao.toLowerCase().includes(q) ||
-        r.data_deposito.toLowerCase().includes(q) ||
-        r.moeda.toLowerCase().includes(q)
+        r.data_deposito.toLowerCase().includes(q)
       );
     }
 
