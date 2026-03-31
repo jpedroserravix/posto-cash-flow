@@ -183,6 +183,7 @@ export default function DepositosManuais() {
                 <TableRow>
                   <TableHead>Data</TableHead>
                   <TableHead>Turno</TableHead>
+                  <TableHead>Centro de Custo</TableHead>
                   <TableHead className="text-right">Valor Lançado</TableHead>
                   <TableHead className="text-right">Valor Depositado</TableHead>
                   <TableHead className="text-right">Saldo Pendente</TableHead>
