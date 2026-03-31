@@ -609,6 +609,7 @@ export default function DepositosBrinks() {
                   <TableHead>Depositante</TableHead>
                   <TableHead>Data Caixa</TableHead>
                   <TableHead>Turno</TableHead>
+                  <TableHead>Centro de Custo</TableHead>
                   <TableHead>Observação</TableHead>
                 </TableRow>
               </TableHeader>
@@ -625,6 +626,12 @@ export default function DepositosBrinks() {
                       <Select value={row.turno} onValueChange={v => updateImportRow(i, 'turno', v)}>
                         <SelectTrigger className="h-8 text-xs w-28"><SelectValue placeholder="Turno" /></SelectTrigger>
                         <SelectContent>{TURNOS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      <Select value={row.centro_custo} onValueChange={v => updateImportRow(i, 'centro_custo', v)}>
+                        <SelectTrigger className="h-8 text-xs w-36"><SelectValue placeholder="Centro Custo" /></SelectTrigger>
+                        <SelectContent>{CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                       </Select>
                     </TableCell>
                     <TableCell>
