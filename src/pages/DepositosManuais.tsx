@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, Save, X, FilterX, Check, Landmark } from 'lucide-react';
 import { FilterableHead } from '@/components/FilterableHead';
+import { HorizontalScrollSync } from '@/components/HorizontalScrollSync';
 import { cn } from '@/lib/utils';
 
 const TURNOS = ['TURNO 1', 'TURNO 2', 'TURNO 3'];

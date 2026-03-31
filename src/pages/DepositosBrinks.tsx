@@ -13,6 +13,7 @@ import { Upload, Save, Search, CheckCircle, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
 import { FilterableHead } from '@/components/FilterableHead';
+import { HorizontalScrollSync } from '@/components/HorizontalScrollSync';
 
 type SortDir = 'asc' | 'desc' | null;
 
