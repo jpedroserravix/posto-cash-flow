@@ -14,6 +14,7 @@ const CONFERIDO_OPTIONS = ['OK', 'PENDENTE', 'DIVERGÊNCIA'];
 interface ResumoRow {
   data: string;
   turno: string;
+  centroCusto: string;
   cofreBrinks: number;
   manual: number;
   total: number;
@@ -36,15 +37,15 @@ export default function ResumoDiario() {
     // Get brinks deposits grouped by data_caixa + turno
     const { data: brinks } = await supabase
       .from('depositos_brinks')
-      .select('data_caixa, turno, valor')
+      .select('data_caixa, turno, valor, centro_custo')
       .eq('posto_id', selectedPostoId)
       .not('data_caixa', 'is', null)
       .not('turno', 'is', null);
 
-    // Get manual deposits grouped by data + turno
+    // Get manual deposits grouped by data + turno + centro_custo
     const { data: manuais } = await supabase
       .from('depositos_manuais')
-      .select('data, turno, valor_lancado')
+      .select('data, turno, valor_lancado, centro_custo')
       .eq('posto_id', selectedPostoId);
 
     // Get existing conference records
@@ -53,19 +54,21 @@ export default function ResumoDiario() {
       .select('*')
       .eq('posto_id', selectedPostoId);
 
-    // Group
+    // Group by data|turno|centro_custo
     const map = new Map<string, { brinks: number; manual: number; conferido: string; observacao: string; resumoId?: string }>();
 
     brinks?.forEach(b => {
       if (!b.data_caixa || !b.turno) return;
-      const key = `${b.data_caixa}|${b.turno}`;
+      const cc = (b as any).centro_custo || 'SEM CENTRO';
+      const key = `${b.data_caixa}|${b.turno}|${cc}`;
       const existing = map.get(key) || { brinks: 0, manual: 0, conferido: 'PENDENTE', observacao: '', resumoId: undefined };
       existing.brinks += b.valor;
       map.set(key, existing);
     });
 
     manuais?.forEach(m => {
-      const key = `${m.data}|${m.turno}`;
+      const cc = (m as any).centro_custo || 'SEM CENTRO';
+      const key = `${m.data}|${m.turno}|${cc}`;
       const existing = map.get(key) || { brinks: 0, manual: 0, conferido: 'PENDENTE', observacao: '', resumoId: undefined };
       existing.manual += m.valor_lancado;
       map.set(key, existing);
@@ -73,7 +76,8 @@ export default function ResumoDiario() {
 
     // Merge conference data
     conferencias?.forEach(c => {
-      const key = `${c.data}|${c.turno}`;
+      const cc = (c as any).centro_custo || 'SEM CENTRO';
+      const key = `${c.data}|${c.turno}|${cc}`;
       const existing = map.get(key);
       if (existing) {
         existing.conferido = c.conferido;
@@ -84,10 +88,11 @@ export default function ResumoDiario() {
 
     const result: ResumoRow[] = Array.from(map.entries())
       .map(([key, val]) => {
-        const [data, turno] = key.split('|');
+        const [data, turno, centroCusto] = key.split('|');
         return {
           data,
           turno,
+          centroCusto: centroCusto || '',
           cofreBrinks: val.brinks,
           manual: val.manual,
           total: val.brinks + val.manual,
@@ -96,7 +101,7 @@ export default function ResumoDiario() {
           resumoId: val.resumoId,
         };
       })
-      .sort((a, b) => b.data.localeCompare(a.data) || a.turno.localeCompare(b.turno));
+      .sort((a, b) => b.data.localeCompare(a.data) || a.turno.localeCompare(b.turno) || a.centroCusto.localeCompare(b.centroCusto));
 
     setRows(result);
   };
@@ -115,6 +120,7 @@ export default function ResumoDiario() {
           posto_id: selectedPostoId,
           data: row.data,
           turno: row.turno,
+          centro_custo: row.centroCusto || null,
           conferido: row.conferido,
           observacao: row.observacao || null,
         });
@@ -149,6 +155,7 @@ export default function ResumoDiario() {
                 <TableRow>
                   <TableHead>Data</TableHead>
                   <TableHead>Turno</TableHead>
+                  <TableHead>Centro de Custo</TableHead>
                   <TableHead className="text-right">Cofre Brinks</TableHead>
                   <TableHead className="text-right">Manual</TableHead>
                   <TableHead className="text-right">Total</TableHead>
@@ -159,9 +166,10 @@ export default function ResumoDiario() {
               </TableHeader>
               <TableBody>
                 {rows.map((row, i) => (
-                  <TableRow key={`${row.data}-${row.turno}`}>
+                  <TableRow key={`${row.data}-${row.turno}-${row.centroCusto}`}>
                     <TableCell className="text-xs">{new Date(row.data + 'T00:00:00').toLocaleDateString('pt-BR')}</TableCell>
                     <TableCell className="text-xs">{row.turno}</TableCell>
+                    <TableCell className="text-xs">{row.centroCusto || '—'}</TableCell>
                     <TableCell className="text-right text-xs font-medium">{formatCurrency(row.cofreBrinks)}</TableCell>
                     <TableCell className="text-right text-xs font-medium">{formatCurrency(row.manual)}</TableCell>
                     <TableCell className="text-right text-xs font-bold">{formatCurrency(row.total)}</TableCell>

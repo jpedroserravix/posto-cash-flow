@@ -15,10 +15,13 @@ interface ManualDeposit {
   id: string;
   data: string;
   turno: string;
+  centro_custo: string | null;
   valor_lancado: number;
   valor_depositado: number | null;
   observacao: string | null;
 }
+
+const CENTROS_CUSTO = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO'];
 
 export default function DepositosManuais() {
   const { selectedPostoId } = useAuth();
@@ -27,7 +30,7 @@ export default function DepositosManuais() {
   const [showForm, setShowForm] = useState(false);
 
   // Form state
-  const [formData, setFormData] = useState({ data: '', turno: '', valor_lancado: '', valor_depositado: '', observacao: '' });
+  const [formData, setFormData] = useState({ data: '', turno: '', centro_custo: '', valor_lancado: '', valor_depositado: '', observacao: '' });
 
   useEffect(() => {
     if (selectedPostoId) loadDeposits();
@@ -61,6 +64,7 @@ export default function DepositosManuais() {
       posto_id: selectedPostoId,
       data: formData.data,
       turno: formData.turno,
+      centro_custo: formData.centro_custo || null,
       valor_lancado: valorLancado,
       valor_depositado: parseMoney(formData.valor_depositado),
       observacao: formData.observacao || null,
@@ -77,7 +81,7 @@ export default function DepositosManuais() {
       toast.success('Lançamento adicionado');
     }
 
-    setFormData({ data: '', turno: '', valor_lancado: '', valor_depositado: '', observacao: '' });
+    setFormData({ data: '', turno: '', centro_custo: '', valor_lancado: '', valor_depositado: '', observacao: '' });
     setShowForm(false);
     loadDeposits();
   };
@@ -87,6 +91,7 @@ export default function DepositosManuais() {
     setFormData({
       data: d.data,
       turno: d.turno,
+      centro_custo: d.centro_custo || '',
       valor_lancado: d.valor_lancado.toString(),
       valor_depositado: d.valor_depositado?.toString() || '',
       observacao: d.observacao || '',
@@ -119,7 +124,7 @@ export default function DepositosManuais() {
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <h1 className="text-xl font-bold">Depósitos Manuais</h1>
-        <Button size="sm" onClick={() => { setShowForm(!showForm); setEditingId(null); setFormData({ data: '', turno: '', valor_lancado: '', valor_depositado: '', observacao: '' }); }}>
+        <Button size="sm" onClick={() => { setShowForm(!showForm); setEditingId(null); setFormData({ data: '', turno: '', centro_custo: '', valor_lancado: '', valor_depositado: '', observacao: '' }); }}>
           {showForm ? <><X className="w-4 h-4 mr-1" />Cancelar</> : <><Plus className="w-4 h-4 mr-1" />Novo Lançamento</>}
         </Button>
       </div>
@@ -127,7 +132,7 @@ export default function DepositosManuais() {
       {showForm && (
         <Card>
           <CardContent className="pt-4">
-            <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
               <div>
                 <label className="text-xs font-medium mb-1 block">Data</label>
                 <Input type="date" value={formData.data} onChange={e => setFormData({ ...formData, data: e.target.value })} required className="h-9" />
@@ -137,6 +142,13 @@ export default function DepositosManuais() {
                 <Select value={formData.turno} onValueChange={v => setFormData({ ...formData, turno: v })}>
                   <SelectTrigger className="h-9"><SelectValue placeholder="Turno" /></SelectTrigger>
                   <SelectContent>{TURNOS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs font-medium mb-1 block">Centro de Custo</label>
+                <Select value={formData.centro_custo} onValueChange={v => setFormData({ ...formData, centro_custo: v })}>
+                  <SelectTrigger className="h-9"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                  <SelectContent>{CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
@@ -171,6 +183,7 @@ export default function DepositosManuais() {
                 <TableRow>
                   <TableHead>Data</TableHead>
                   <TableHead>Turno</TableHead>
+                  <TableHead>Centro de Custo</TableHead>
                   <TableHead className="text-right">Valor Lançado</TableHead>
                   <TableHead className="text-right">Valor Depositado</TableHead>
                   <TableHead className="text-right">Saldo Pendente</TableHead>
@@ -183,6 +196,7 @@ export default function DepositosManuais() {
                   <TableRow key={d.id}>
                     <TableCell className="text-xs">{new Date(d.data + 'T00:00:00').toLocaleDateString('pt-BR')}</TableCell>
                     <TableCell className="text-xs">{d.turno}</TableCell>
+                    <TableCell className="text-xs">{d.centro_custo || '—'}</TableCell>
                     <TableCell className="text-right text-xs font-medium">{formatCurrency(d.valor_lancado)}</TableCell>
                     <TableCell className="text-right text-xs">{d.valor_depositado ? formatCurrency(d.valor_depositado) : '—'}</TableCell>
                     <TableCell className={`text-right text-xs font-bold ${

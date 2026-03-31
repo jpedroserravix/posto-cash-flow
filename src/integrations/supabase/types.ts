@@ -86,6 +86,7 @@ export type Database = {
       }
       depositos_brinks: {
         Row: {
+          centro_custo: string | null
           conciliado_banco_id: string | null
           created_at: string
           data_caixa: string | null
@@ -101,6 +102,7 @@ export type Database = {
           valor: number
         }
         Insert: {
+          centro_custo?: string | null
           conciliado_banco_id?: string | null
           created_at?: string
           data_caixa?: string | null
@@ -116,6 +118,7 @@ export type Database = {
           valor: number
         }
         Update: {
+          centro_custo?: string | null
           conciliado_banco_id?: string | null
           created_at?: string
           data_caixa?: string | null
@@ -149,6 +152,7 @@ export type Database = {
       }
       depositos_manuais: {
         Row: {
+          centro_custo: string | null
           created_at: string
           data: string
           id: string
@@ -159,6 +163,7 @@ export type Database = {
           valor_lancado: number
         }
         Insert: {
+          centro_custo?: string | null
           created_at?: string
           data: string
           id?: string
@@ -169,6 +174,7 @@ export type Database = {
           valor_lancado: number
         }
         Update: {
+          centro_custo?: string | null
           created_at?: string
           data?: string
           id?: string
@@ -211,6 +217,7 @@ export type Database = {
       }
       resumo_conferencia: {
         Row: {
+          centro_custo: string | null
           conferido: string
           created_at: string
           data: string
@@ -220,6 +227,7 @@ export type Database = {
           turno: string
         }
         Insert: {
+          centro_custo?: string | null
           conferido?: string
           created_at?: string
           data: string
@@ -229,6 +237,7 @@ export type Database = {
           turno: string
         }
         Update: {
+          centro_custo?: string | null
           conferido?: string
           created_at?: string
           data?: string

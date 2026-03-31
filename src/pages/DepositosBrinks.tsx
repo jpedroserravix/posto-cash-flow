@@ -38,6 +38,7 @@ interface BrinksRow {
   data_caixa: string;
   turno: string;
   observacao: string;
+  centro_custo: string;
 }
 
 interface DepositoCompleto {
@@ -50,8 +51,11 @@ interface DepositoCompleto {
   data_caixa: string;
   turno: string;
   observacao: string;
+  centro_custo: string;
   conciliado_banco_id: string | null;
 }
+
+const CENTROS_CUSTO = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO'];
 
 const TURNOS = ['TURNO 1', 'TURNO 2', 'TURNO 3'];
 
@@ -88,6 +92,7 @@ function parseCSV(text: string): BrinksRow[] {
       data_caixa: dataStr.split(' ')[0] || dataStr.substring(0, 10),
       turno: '',
       observacao: '',
+      centro_custo: '',
     };
   });
 }
@@ -131,6 +136,7 @@ function parseHTML(text: string): BrinksRow[] {
       data_caixa: dataStr.split(' ')[0] || dataStr.substring(0, 10),
       turno: '',
       observacao: '',
+      centro_custo: '',
     });
   }
   return result;
@@ -182,6 +188,7 @@ function parseXLSX(data: ArrayBuffer): BrinksRow[] {
       data_caixa: dataStr.split(' ')[0] || dataStr.substring(0, 10),
       turno: '',
       observacao: '',
+      centro_custo: '',
     };
   });
 }
@@ -229,7 +236,7 @@ export default function DepositosBrinks() {
     setLoading(true);
     const { data, error } = await supabase
       .from('depositos_brinks')
-      .select('id, data_deposito, moeda, valor, tipo, depositante, data_caixa, turno, observacao, conciliado_banco_id')
+      .select('id, data_deposito, moeda, valor, tipo, depositante, data_caixa, turno, observacao, conciliado_banco_id, centro_custo')
       .eq('posto_id', selectedPostoId)
       .order('data_deposito', { ascending: false });
     if (error) {
@@ -245,6 +252,7 @@ export default function DepositosBrinks() {
         data_caixa: d.data_caixa || '',
         turno: d.turno || '',
         observacao: d.observacao || '',
+        centro_custo: (d as any).centro_custo || '',
         conciliado_banco_id: d.conciliado_banco_id,
       })));
     }
@@ -491,6 +499,7 @@ export default function DepositosBrinks() {
       data_caixa: r.data_caixa ? parseDateOnlyBR(r.data_caixa) : null,
       turno: r.turno || null,
       observacao: r.observacao || null,
+      centro_custo: r.centro_custo || null,
     }));
 
     // Buscar depósitos existentes para evitar duplicatas
@@ -539,7 +548,7 @@ export default function DepositosBrinks() {
 
   const handleUpdateRow = async (dep: DepositoCompleto) => {
     const { error } = await supabase.from('depositos_brinks')
-      .update({ data_caixa: dep.data_caixa || null, turno: dep.turno || null, observacao: dep.observacao || null })
+      .update({ data_caixa: dep.data_caixa || null, turno: dep.turno || null, observacao: dep.observacao || null, centro_custo: dep.centro_custo || null })
       .eq('id', dep.id);
     if (error) {
       toast.error('Erro: ' + error.message);
@@ -603,6 +612,7 @@ export default function DepositosBrinks() {
                   <TableHead>Depositante</TableHead>
                   <TableHead>Data Caixa</TableHead>
                   <TableHead>Turno</TableHead>
+                  <TableHead>Centro de Custo</TableHead>
                   <TableHead>Observação</TableHead>
                 </TableRow>
               </TableHeader>
@@ -619,6 +629,12 @@ export default function DepositosBrinks() {
                       <Select value={row.turno} onValueChange={v => updateImportRow(i, 'turno', v)}>
                         <SelectTrigger className="h-8 text-xs w-28"><SelectValue placeholder="Turno" /></SelectTrigger>
                         <SelectContent>{TURNOS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      <Select value={row.centro_custo} onValueChange={v => updateImportRow(i, 'centro_custo', v)}>
+                        <SelectTrigger className="h-8 text-xs w-36"><SelectValue placeholder="Centro Custo" /></SelectTrigger>
+                        <SelectContent>{CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                       </Select>
                     </TableCell>
                     <TableCell>
@@ -758,6 +774,7 @@ export default function DepositosBrinks() {
                         <SortableHead label="Depositante" active={sortField === 'depositante'} dir={sortDir} onClick={() => toggleSort('depositante')} />
                         <SortableHead label="Data Caixa" active={sortField === 'data_caixa'} dir={sortDir} onClick={() => toggleSort('data_caixa')} />
                         <TableHead>Turno</TableHead>
+                        <TableHead>Centro de Custo</TableHead>
                         <TableHead>Observação</TableHead>
                         <TableHead></TableHead>
                       </TableRow>
@@ -804,6 +821,17 @@ export default function DepositosBrinks() {
                               >
                                 <SelectTrigger className="h-8 text-xs w-28"><SelectValue placeholder="Turno" /></SelectTrigger>
                                 <SelectContent>{TURNOS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell>
+                              <Select
+                                value={dep.centro_custo}
+                                onValueChange={v => {
+                                  setAllDepositos(prev => prev.map(d => d.id === dep.id ? { ...d, centro_custo: v } : d));
+                                }}
+                              >
+                                <SelectTrigger className="h-8 text-xs w-36"><SelectValue placeholder="Centro Custo" /></SelectTrigger>
+                                <SelectContent>{CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                               </Select>
                             </TableCell>
                             <TableCell>
