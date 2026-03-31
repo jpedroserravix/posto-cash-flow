@@ -15,10 +15,13 @@ interface ManualDeposit {
   id: string;
   data: string;
   turno: string;
+  centro_custo: string | null;
   valor_lancado: number;
   valor_depositado: number | null;
   observacao: string | null;
 }
+
+const CENTROS_CUSTO = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO'];
 
 export default function DepositosManuais() {
   const { selectedPostoId } = useAuth();
