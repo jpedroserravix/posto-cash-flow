@@ -598,7 +598,7 @@ export default function DepositosBrinks() {
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
+          <CardContent className="overflow-auto max-h-[calc(100vh-200px)]">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -704,7 +704,7 @@ export default function DepositosBrinks() {
               </p>
             ) : (
               <>
-                <div className="overflow-x-auto">
+                <div className="overflow-auto max-h-[calc(100vh-200px)]">
                   <Table>
                     <TableHeader>
                       <TableRow>
