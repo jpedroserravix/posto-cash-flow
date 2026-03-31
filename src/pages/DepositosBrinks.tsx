@@ -545,7 +545,7 @@ export default function DepositosBrinks() {
 
   const handleUpdateRow = async (dep: DepositoCompleto) => {
     const { error } = await supabase.from('depositos_brinks')
-      .update({ data_caixa: dep.data_caixa || null, turno: dep.turno || null, observacao: dep.observacao || null })
+      .update({ data_caixa: dep.data_caixa || null, turno: dep.turno || null, observacao: dep.observacao || null, centro_custo: dep.centro_custo || null })
       .eq('id', dep.id);
     if (error) {
       toast.error('Erro: ' + error.message);
