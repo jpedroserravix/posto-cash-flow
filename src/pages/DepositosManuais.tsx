@@ -6,9 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Save, X, FilterX } from 'lucide-react';
+import { Plus, Pencil, Trash2, Save, X, FilterX, Check, Landmark } from 'lucide-react';
 import { FilterableHead } from '@/components/FilterableHead';
+import { cn } from '@/lib/utils';
 
 const TURNOS = ['TURNO 1', 'TURNO 2', 'TURNO 3'];
 const CENTROS_CUSTO = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO'];
@@ -23,14 +26,26 @@ interface ManualDeposit {
   valor_lancado: number;
   valor_depositado: number | null;
   observacao: string | null;
+  conferido: string;
+  conciliado_banco_id: string | null;
+}
+
+interface ContaBancaria {
+  id: string;
+  banco: string;
+  agencia: string;
+  conta: string;
 }
 
 export default function DepositosManuais() {
-  const { selectedPostoId } = useAuth();
+  const { selectedPostoId, role } = useAuth();
   const [deposits, setDeposits] = useState<ManualDeposit[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({ data: '', turno: '', centro_custo: '', valor_lancado: '', valor_depositado: '', observacao: '' });
+  const [contas, setContas] = useState<ContaBancaria[]>([]);
+  const [concSelected, setConcSelected] = useState<Set<string>>(new Set());
+  const [concContaId, setConcContaId] = useState('');
 
   // Sort
   const [sortCol, setSortCol] = useState<string | null>(null);
@@ -41,9 +56,13 @@ export default function DepositosManuais() {
   const [filterTurno, setFilterTurno] = useState<Set<string>>(new Set());
   const [filterCentroCusto, setFilterCentroCusto] = useState<Set<string>>(new Set());
   const [filterObservacao, setFilterObservacao] = useState<Set<string>>(new Set());
+  const [filterStatus, setFilterStatus] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (selectedPostoId) loadDeposits();
+    if (selectedPostoId) {
+      loadDeposits();
+      loadContas();
+    }
   }, [selectedPostoId]);
 
   const loadDeposits = async () => {
@@ -55,6 +74,15 @@ export default function DepositosManuais() {
       .order('data', { ascending: true })
       .order('created_at', { ascending: true });
     setDeposits(data || []);
+  };
+
+  const loadContas = async () => {
+    if (!selectedPostoId) return;
+    const { data } = await supabase
+      .from('contas_bancarias')
+      .select('*')
+      .eq('posto_id', selectedPostoId);
+    setContas(data || []);
   };
 
   const parseMoney = (v: string) => {
@@ -73,6 +101,13 @@ export default function DepositosManuais() {
   const uniqueTurno = useMemo(() => [...new Set(deposits.map(d => d.turno))].sort(), [deposits]);
   const uniqueCentroCusto = useMemo(() => [...new Set(deposits.map(d => d.centro_custo || ''))].sort(), [deposits]);
   const uniqueObservacao = useMemo(() => [...new Set(deposits.map(d => d.observacao || ''))].sort(), [deposits]);
+  const uniqueStatus = useMemo(() => {
+    const statuses = new Set<string>();
+    deposits.forEach(d => {
+      statuses.add(d.conciliado_banco_id ? 'Conciliado' : d.conferido === 'OK' ? 'Conferido' : 'Pendente');
+    });
+    return [...statuses].sort();
+  }, [deposits]);
 
   const toggleSort = (col: string) => {
     if (sortCol !== col) { setSortCol(col); setSortDir('asc'); }
@@ -80,14 +115,18 @@ export default function DepositosManuais() {
     else { setSortCol(null); setSortDir(null); }
   };
 
-  const activeFilterCount = filterData.size + filterTurno.size + filterCentroCusto.size + filterObservacao.size;
+  const activeFilterCount = filterData.size + filterTurno.size + filterCentroCusto.size + filterObservacao.size + filterStatus.size;
 
   const clearAllFilters = () => {
     setFilterData(new Set());
     setFilterTurno(new Set());
     setFilterCentroCusto(new Set());
     setFilterObservacao(new Set());
+    setFilterStatus(new Set());
   };
+
+  const getStatus = (d: ManualDeposit) =>
+    d.conciliado_banco_id ? 'Conciliado' : d.conferido === 'OK' ? 'Conferido' : 'Pendente';
 
   // Filtered + sorted data
   const filteredData = useMemo(() => {
@@ -97,6 +136,7 @@ export default function DepositosManuais() {
     if (filterTurno.size > 0) result = result.filter(d => !filterTurno.has(d.turno));
     if (filterCentroCusto.size > 0) result = result.filter(d => !filterCentroCusto.has(d.centro_custo || ''));
     if (filterObservacao.size > 0) result = result.filter(d => !filterObservacao.has(d.observacao || ''));
+    if (filterStatus.size > 0) result = result.filter(d => !filterStatus.has(getStatus(d)));
 
     if (sortCol && sortDir) {
       result.sort((a, b) => {
@@ -108,6 +148,7 @@ export default function DepositosManuais() {
           case 'valor_lancado': va = a.valor_lancado; vb = b.valor_lancado; break;
           case 'valor_depositado': va = a.valor_depositado || 0; vb = b.valor_depositado || 0; break;
           case 'observacao': va = a.observacao || ''; vb = b.observacao || ''; break;
+          case 'status': va = getStatus(a); vb = getStatus(b); break;
           default: return 0;
         }
         if (va < vb) return sortDir === 'asc' ? -1 : 1;
@@ -117,7 +158,7 @@ export default function DepositosManuais() {
     }
 
     return result;
-  }, [deposits, filterData, filterTurno, filterCentroCusto, filterObservacao, sortCol, sortDir]);
+  }, [deposits, filterData, filterTurno, filterCentroCusto, filterObservacao, filterStatus, sortCol, sortDir]);
 
   // Running balance on filtered data
   let saldoAcumulado = 0;
@@ -179,9 +220,59 @@ export default function DepositosManuais() {
     else { toast.success('Excluído'); loadDeposits(); }
   };
 
+  const handleToggleConferido = async (d: ManualDeposit) => {
+    const newStatus = d.conferido === 'OK' ? 'PENDENTE' : 'OK';
+    const { error } = await supabase.from('depositos_manuais').update({ conferido: newStatus }).eq('id', d.id);
+    if (error) { toast.error('Erro: ' + error.message); return; }
+    toast.success(newStatus === 'OK' ? 'Marcado como conferido' : 'Marcado como pendente');
+    loadDeposits();
+  };
+
+  const toggleConcSelect = (id: string) => {
+    const next = new Set(concSelected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setConcSelected(next);
+  };
+
+  const handleConciliar = async () => {
+    if (concSelected.size === 0 || !concContaId) {
+      toast.error('Selecione depósitos e uma conta bancária');
+      return;
+    }
+    const ids = [...concSelected];
+    const { error } = await supabase
+      .from('depositos_manuais')
+      .update({ conciliado_banco_id: concContaId, conferido: 'OK' })
+      .in('id', ids);
+    if (error) { toast.error('Erro: ' + error.message); return; }
+    toast.success(`${ids.length} depósito(s) conciliado(s)`);
+    setConcSelected(new Set());
+    setConcContaId('');
+    loadDeposits();
+  };
+
+  const handleDesconciliar = async (id: string) => {
+    const { error } = await supabase.from('depositos_manuais').update({ conciliado_banco_id: null }).eq('id', id);
+    if (error) { toast.error('Erro: ' + error.message); return; }
+    toast.success('Conciliação removida');
+    loadDeposits();
+  };
+
+  const contaLabel = (c: ContaBancaria) => `${c.banco} - Ag ${c.agencia} / Cc ${c.conta}`;
+
+  const getContaName = (id: string | null) => {
+    if (!id) return null;
+    const c = contas.find(c => c.id === id);
+    return c ? contaLabel(c) : null;
+  };
+
   if (!selectedPostoId) {
     return <p className="text-muted-foreground text-center py-8">Selecione um posto para continuar.</p>;
   }
+
+  const pendingNonConciliados = filteredData.filter(d => !d.conciliado_banco_id);
+  const hasPendingSelected = concSelected.size > 0;
 
   return (
     <div className="space-y-4">
@@ -243,6 +334,26 @@ export default function DepositosManuais() {
         </Card>
       )}
 
+      {/* Conciliação bar */}
+      {role === 'admin' && hasPendingSelected && contas.length > 0 && (
+        <Card>
+          <CardContent className="pt-4 flex flex-wrap items-center gap-3">
+            <Landmark className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium">{concSelected.size} selecionado(s)</span>
+            <Select value={concContaId} onValueChange={setConcContaId}>
+              <SelectTrigger className="h-8 w-64 text-xs"><SelectValue placeholder="Conta bancária" /></SelectTrigger>
+              <SelectContent>{contas.map(c => <SelectItem key={c.id} value={c.id}>{contaLabel(c)}</SelectItem>)}</SelectContent>
+            </Select>
+            <Button size="sm" className="h-8" onClick={handleConciliar} disabled={!concContaId}>
+              <Check className="w-3 h-3 mr-1" />Conciliar
+            </Button>
+            <Button size="sm" variant="ghost" className="h-8" onClick={() => setConcSelected(new Set())}>
+              Cancelar
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardContent className="pt-4 overflow-x-auto">
           {depositsWithSaldo.length === 0 ? (
@@ -251,6 +362,8 @@ export default function DepositosManuais() {
             <Table>
               <TableHeader>
                 <tr>
+                  {role === 'admin' && <th className="w-8" />}
+                  <FilterableHead label="Status" sortActive={sortCol === 'status'} sortDir={sortCol === 'status' ? sortDir : null} onSort={() => toggleSort('status')} uniqueValues={uniqueStatus} selectedValues={filterStatus} onFilterChange={setFilterStatus} />
                   <FilterableHead label="Data" sortActive={sortCol === 'data'} sortDir={sortCol === 'data' ? sortDir : null} onSort={() => toggleSort('data')} uniqueValues={uniqueData} selectedValues={filterData} onFilterChange={setFilterData} />
                   <FilterableHead label="Turno" sortActive={sortCol === 'turno'} sortDir={sortCol === 'turno' ? sortDir : null} onSort={() => toggleSort('turno')} uniqueValues={uniqueTurno} selectedValues={filterTurno} onFilterChange={setFilterTurno} />
                   <FilterableHead label="Centro de Custo" sortActive={sortCol === 'centro_custo'} sortDir={sortCol === 'centro_custo' ? sortDir : null} onSort={() => toggleSort('centro_custo')} uniqueValues={uniqueCentroCusto} selectedValues={filterCentroCusto} onFilterChange={setFilterCentroCusto} />
@@ -262,27 +375,60 @@ export default function DepositosManuais() {
                 </tr>
               </TableHeader>
               <TableBody>
-                {depositsWithSaldo.map(d => (
-                  <TableRow key={d.id}>
-                    <TableCell className="text-xs">{formatDate(d.data)}</TableCell>
-                    <TableCell className="text-xs">{d.turno}</TableCell>
-                    <TableCell className="text-xs">{d.centro_custo || '—'}</TableCell>
-                    <TableCell className="text-right text-xs font-medium">{formatCurrency(d.valor_lancado)}</TableCell>
-                    <TableCell className="text-right text-xs">{d.valor_depositado ? formatCurrency(d.valor_depositado) : '—'}</TableCell>
-                    <TableCell className={`text-right text-xs font-bold ${
-                      d.saldo === 0 ? 'text-success' : d.saldo > 0 ? 'text-warning' : 'text-destructive'
-                    }`}>
-                      {formatCurrency(d.saldo)}
-                    </TableCell>
-                    <TableCell className="text-xs">{d.observacao || ''}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => handleEdit(d)}><Pencil className="w-3 h-3" /></Button>
-                        <Button size="sm" variant="ghost" onClick={() => handleDelete(d.id)}><Trash2 className="w-3 h-3" /></Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {depositsWithSaldo.map(d => {
+                  const isConciliado = !!d.conciliado_banco_id;
+                  const isConferido = d.conferido === 'OK';
+                  const isSelected = concSelected.has(d.id);
+                  return (
+                    <TableRow key={d.id} className={cn(
+                      isConciliado && 'bg-green-50 dark:bg-green-950/20',
+                      isSelected && !isConciliado && 'bg-accent/50'
+                    )}>
+                      {role === 'admin' && (
+                        <TableCell className="w-8">
+                          {!isConciliado && (
+                            <Checkbox checked={isSelected} onCheckedChange={() => toggleConcSelect(d.id)} />
+                          )}
+                        </TableCell>
+                      )}
+                      <TableCell>
+                        {isConciliado ? (
+                          <div className="space-y-0.5">
+                            <Badge variant="default" className="text-[10px] bg-green-600 hover:bg-green-700 cursor-pointer" onClick={() => role === 'admin' && handleDesconciliar(d.id)}>
+                              Conciliado
+                            </Badge>
+                            <p className="text-[9px] text-muted-foreground truncate max-w-[120px]">{getContaName(d.conciliado_banco_id)}</p>
+                          </div>
+                        ) : (
+                          <Badge
+                            variant={isConferido ? 'default' : 'secondary'}
+                            className={cn("text-[10px] cursor-pointer", isConferido && 'bg-blue-600 hover:bg-blue-700')}
+                            onClick={() => handleToggleConferido(d)}
+                          >
+                            {isConferido ? 'Conferido' : 'Pendente'}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs">{formatDate(d.data)}</TableCell>
+                      <TableCell className="text-xs">{d.turno}</TableCell>
+                      <TableCell className="text-xs">{d.centro_custo || '—'}</TableCell>
+                      <TableCell className="text-right text-xs font-medium">{formatCurrency(d.valor_lancado)}</TableCell>
+                      <TableCell className="text-right text-xs">{d.valor_depositado ? formatCurrency(d.valor_depositado) : '—'}</TableCell>
+                      <TableCell className={`text-right text-xs font-bold ${
+                        d.saldo === 0 ? 'text-success' : d.saldo > 0 ? 'text-warning' : 'text-destructive'
+                      }`}>
+                        {formatCurrency(d.saldo)}
+                      </TableCell>
+                      <TableCell className="text-xs">{d.observacao || ''}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => handleEdit(d)}><Pencil className="w-3 h-3" /></Button>
+                          <Button size="sm" variant="ghost" onClick={() => handleDelete(d.id)}><Trash2 className="w-3 h-3" /></Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
