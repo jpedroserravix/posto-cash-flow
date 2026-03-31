@@ -153,6 +153,8 @@ export type Database = {
       depositos_manuais: {
         Row: {
           centro_custo: string | null
+          conciliado_banco_id: string | null
+          conferido: string
           created_at: string
           data: string
           id: string
@@ -164,6 +166,8 @@ export type Database = {
         }
         Insert: {
           centro_custo?: string | null
+          conciliado_banco_id?: string | null
+          conferido?: string
           created_at?: string
           data: string
           id?: string
@@ -175,6 +179,8 @@ export type Database = {
         }
         Update: {
           centro_custo?: string | null
+          conciliado_banco_id?: string | null
+          conferido?: string
           created_at?: string
           data?: string
           id?: string
@@ -185,6 +191,13 @@ export type Database = {
           valor_lancado?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "depositos_manuais_conciliado_banco_id_fkey"
+            columns: ["conciliado_banco_id"]
+            isOneToOne: false
+            referencedRelation: "contas_bancarias"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "depositos_manuais_posto_id_fkey"
             columns: ["posto_id"]
