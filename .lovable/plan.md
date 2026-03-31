@@ -1,22 +1,50 @@
 
 
-# Tornar a Conciliação Bancária mais visível
+# Conciliação Bancária com Seleção de Depósitos e Cadastro de Bancos
 
-## Problema
+## Resumo
 
-A seção de Conciliação Bancária existe no código (linha 572 do `DepositosBrinks.tsx`), renderizada para admins, mas fica escondida no final da página, abaixo da seção de importação e do histórico. O usuário precisa rolar muito para encontrá-la.
+Substituir a conciliação atual (baseada em filtro de período) por um fluxo onde o admin seleciona depósitos individuais e os marca como "recebidos" em uma conta bancária cadastrada. Inclui também uma tela para cadastrar contas bancárias (banco, agência, conta).
 
-## Solução
+## O que será criado
 
-Adicionar "Conciliação" como uma terceira opção no seletor de modo de visualização (que já tem "Importar" e "Histórico"), para que o admin possa acessar a conciliação bancária clicando em uma aba dedicada, sem precisar rolar a página.
+### 1. Tabela `contas_bancarias` (nova)
+Armazena as contas bancárias do posto (ex: Banco Sicredi).
 
-## O que muda em `src/pages/DepositosBrinks.tsx`
+| Coluna | Tipo | Obs |
+|--------|------|-----|
+| id | uuid | PK |
+| posto_id | uuid | FK postos |
+| banco | text | Ex: "Sicredi" |
+| agencia | text | Ex: "0123" |
+| conta | text | Ex: "45678-9" |
+| created_at | timestamptz | default now() |
 
-1. **Adicionar modo "conciliacao" ao viewMode** -- o estado `viewMode` passa a aceitar `'import' | 'history' | 'conciliacao'`
+RLS: admin full access, funcionario pode ver do próprio posto.
 
-2. **Adicionar botão "Conciliação" na barra de modos** (próximo aos botões "Importar Arquivo" e "Histórico"), visível apenas para `role === 'admin'`
+### 2. Coluna `conciliado_banco_id` na tabela `depositos_brinks` (nova coluna)
+Quando o admin "recebe" um depósito, grava o ID da conta bancária nesse campo. Se NULL, o depósito ainda não foi conciliado.
 
-3. **Mover o Card de Conciliação Bancária** para dentro de `{viewMode === 'conciliacao' && role === 'admin' && (...)}`, em vez de ficar sempre visível no final da página
+### 3. Tela de Cadastro de Bancos
+Nova página `/bancos` (admin only) ou seção dentro de Postos, com formulário para adicionar/listar contas bancárias (banco, agência, conta) vinculadas ao posto selecionado.
 
-4. **Sem mudanças na lógica** -- a funcionalidade de busca por período, soma de depósitos e cálculo de diferença permanece idêntica
+### 4. Conciliação reformulada (aba "Conciliação" em Depósitos Brinks)
+- Lista depósitos **não conciliados** do posto com checkboxes para seleção
+- Dropdown para escolher a conta bancária de destino
+- Botão "Receber no banco" que marca os depósitos selecionados com o `conciliado_banco_id`
+- Exibe total dos selecionados, campo para digitar valor do extrato, e diferença com cores
+
+## Arquivos a editar/criar
+
+- **Migration SQL**: criar tabela `contas_bancarias` + adicionar coluna `conciliado_banco_id` em `depositos_brinks`
+- **`src/pages/ContasBancarias.tsx`** (novo): tela CRUD de contas bancárias (admin only)
+- **`src/pages/DepositosBrinks.tsx`**: refatorar aba Conciliação com checkboxes e seletor de banco
+- **`src/App.tsx`**: adicionar rota `/bancos`
+- **`src/components/AppLayout.tsx`**: adicionar link "Bancos" no menu (admin only)
+
+## Detalhes Técnicos
+
+- Query conciliação: `depositos_brinks` where `posto_id = X` and `conciliado_banco_id IS NULL`, ordenado por `data_caixa`
+- Ao "receber": `UPDATE depositos_brinks SET conciliado_banco_id = bancoId WHERE id IN (...)` 
+- Histórico de conciliados: filtrar por `conciliado_banco_id IS NOT NULL` com agrupamento por banco
 
