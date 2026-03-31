@@ -136,13 +136,27 @@ function parseHTML(text: string): BrinksRow[] {
   return result;
 }
 
+function formatExcelDate(val: any): string {
+  if (val instanceof Date) {
+    const d = val;
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    const hh = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    const ss = String(d.getSeconds()).padStart(2, '0');
+    return `${dd}/${mm}/${yyyy} ${hh}:${min}:${ss}`;
+  }
+  return (val || '').toString().trim();
+}
+
 function parseXLSX(data: ArrayBuffer): BrinksRow[] {
-  const workbook = XLSX.read(data, { type: 'array' });
+  const workbook = XLSX.read(data, { type: 'array', cellDates: true });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const jsonData = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, raw: false });
+  const jsonData = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, raw: true });
   if (jsonData.length < 2) return [];
 
-  const headers = (jsonData[0] as string[]).map(h => (h || '').toString().trim().toUpperCase());
+  const headers = (jsonData[0] as any[]).map(h => (h || '').toString().trim().toUpperCase());
   const dataIdx = headers.findIndex(h => h.includes('DATA') && h.includes('DEP'));
   const moedaIdx = headers.findIndex(h => h.includes('MOEDA'));
   const valorIdx = headers.findIndex(h => h.includes('VALOR'));
@@ -155,15 +169,16 @@ function parseXLSX(data: ArrayBuffer): BrinksRow[] {
   }
 
   return jsonData.slice(1).filter(row => row && row.length > 1).map(row => {
-    const cols = (row as string[]).map(c => (c || '').toString().trim());
-    const dataStr = cols[dataIdx] || '';
-    const valorStr = (cols[valorIdx] || '0').replace(/\./g, '').replace(',', '.');
+    const cols = row as any[];
+    const dataStr = formatExcelDate(cols[dataIdx]);
+    const valorRaw = (cols[valorIdx] || 0);
+    const valor = typeof valorRaw === 'number' ? valorRaw : parseFloat(valorRaw.toString().replace(/\./g, '').replace(',', '.')) || 0;
     return {
       data_deposito: dataStr,
-      moeda: cols[moedaIdx] || '',
-      valor: parseFloat(valorStr) || 0,
-      tipo: cols[tipoIdx] || '',
-      depositante: cols[depositanteIdx] || '',
+      moeda: (cols[moedaIdx] || '').toString().trim(),
+      valor,
+      tipo: (cols[tipoIdx] || '').toString().trim(),
+      depositante: (cols[depositanteIdx] || '').toString().trim(),
       data_caixa: dataStr.split(' ')[0] || dataStr.substring(0, 10),
       turno: '',
       observacao: '',
