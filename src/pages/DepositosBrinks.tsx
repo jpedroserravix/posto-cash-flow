@@ -136,6 +136,7 @@ function parseHTML(text: string): BrinksRow[] {
       data_caixa: dataStr.split(' ')[0] || dataStr.substring(0, 10),
       turno: '',
       observacao: '',
+      centro_custo: '',
     });
   }
   return result;
