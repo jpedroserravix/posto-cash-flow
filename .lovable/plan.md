@@ -1,41 +1,46 @@
 
 
-# Adicionar Coluna "Centro de Custo" nas 3 Telas + Resumo
+# Transformar Cabeçalhos da Tabela em Filtros Clicáveis
 
 ## Resumo
 
-Adicionar o campo "Centro de Custo" (opções: Pista, Conveniência, Troca de Óleo) nas tabelas `depositos_brinks`, `depositos_manuais` e `resumo_conferencia`, e atualizar as 3 telas de UI + Resumo Diário para agrupar por centro de custo.
+Ao clicar no cabeçalho "Data Depósito", "Depositante", "Turno", "Centro de Custo" etc., abrir um popover com as opções únicas daquela coluna para o usuário selecionar quais valores quer ver. O cabeçalho continua ordenável, mas agora também filtra.
 
-## 1. Migração de Banco de Dados
+## Mudanças em `src/pages/DepositosBrinks.tsx`
 
-Adicionar coluna `centro_custo` (text, nullable, default null) nas 3 tabelas:
+### 1. Criar componente `FilterableHead`
 
-```sql
-ALTER TABLE depositos_brinks ADD COLUMN centro_custo text;
-ALTER TABLE depositos_manuais ADD COLUMN centro_custo text;
-ALTER TABLE resumo_conferencia ADD COLUMN centro_custo text;
-```
+Substituir `SortableHead` por um componente mais completo que:
+- Exibe o nome da coluna + ícone de ordenação + indicador de filtro ativo (badge com contagem)
+- Ao clicar: alterna ordenação (comportamento atual)
+- Ao clicar num ícone de filtro (ou botão dedicado): abre um `Popover` com checkboxes listando os valores únicos da coluna
+- O usuário marca/desmarca quais valores quer visualizar
+- Inclui botões "Selecionar todos" e "Limpar"
 
-## 2. Depósitos Brinks (`src/pages/DepositosBrinks.tsx`)
+### 2. Novos states de filtro por coluna
 
-- Adicionar `centro_custo` nas interfaces `BrinksRow` e `DepositoCompleto`
-- Adicionar constante `CENTROS_CUSTO = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO']`
-- Na tabela principal: adicionar coluna com Select dropdown ao lado de Turno
-- No `handleUpdateRow`: incluir `centro_custo` no update
-- No `handleSave` (importação): incluir `centro_custo` no insert (default vazio)
+Substituir os states individuais (`filterDepositante`, `filterTurno`) por um estado mais genérico ou adicionar novos:
+- `filterDataDeposito: Set<string>` — datas únicas selecionadas
+- `filterDepositante: Set<string>` — depositantes selecionados
+- `filterTurno: Set<string>` — turnos selecionados
+- `filterCentroCusto: Set<string>` — centros de custo selecionados
+- `filterStatus: Set<string>` — status selecionados
 
-## 3. Depósitos Manuais (`src/pages/DepositosManuais.tsx`)
+Quando o Set está vazio, mostra tudo (sem filtro). Quando tem itens, mostra apenas os selecionados.
 
-- Adicionar `centro_custo` na interface `ManualDeposit`
-- No formulário: adicionar Select de Centro de Custo (entre Turno e Valor)
-- Incluir no `formData`, `handleSubmit`, `handleEdit`
-- Na tabela: adicionar coluna Centro de Custo
+### 3. Atualizar `filteredData` memo
 
-## 4. Resumo Diário (`src/pages/ResumoDiario.tsx`)
+Aplicar cada filtro de Set: se `filterX.size > 0`, filtrar `data = data.filter(d => filterX.has(d.campo))`.
 
-- Alterar agrupamento: a chave passa de `data|turno` para `data|turno|centro_custo`
-- Incluir `centro_custo` nos selects de brinks e manuais
-- Adicionar coluna "Centro de Custo" na tabela
-- No `handleSaveRow`: incluir `centro_custo` no insert/conferência
-- Interface `ResumoRow`: adicionar campo `centroCusto`
+### 4. Atualizar área de filtros existente
+
+Os filtros dropdown existentes (Status, Depositante, Turno) podem ser mantidos na área de filtros ou removidos, já que a funcionalidade agora estará nos cabeçalhos. O contador de filtros ativos e "Limpar filtros" continuam funcionando.
+
+### 5. Imports necessários
+
+Adicionar `Popover, PopoverContent, PopoverTrigger` e `Checkbox` (já importado).
+
+## Resultado
+
+Cada coluna da tabela terá um pequeno ícone de filtro. Ao clicar, aparece um popover com checkboxes dos valores disponíveis. O usuário seleciona apenas o que quer ver, similar ao filtro do Excel.
 
