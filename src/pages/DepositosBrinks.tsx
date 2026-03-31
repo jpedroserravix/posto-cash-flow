@@ -205,6 +205,7 @@ export default function DepositosBrinks() {
 
   // Conciliation state
   const [concSelected, setConcSelected] = useState<Set<string>>(new Set());
+  const [savedRows, setSavedRows] = useState<Set<string>>(new Set());
   const [concValorBanco, setConcValorBanco] = useState<string>('');
   const [concBancoId, setConcBancoId] = useState<string>('');
   const [contasBancarias, setContasBancarias] = useState<{ id: string; banco: string; agencia: string; conta: string }[]>([]);
