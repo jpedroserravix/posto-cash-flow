@@ -104,7 +104,7 @@ export default function DepositosManuais() {
   const uniqueStatus = useMemo(() => {
     const statuses = new Set<string>();
     deposits.forEach(d => {
-      statuses.add(d.conciliado_banco_id ? 'Conciliado' : d.conferido === 'OK' ? 'Conferido' : 'Pendente');
+      statuses.add(d.conciliado_banco_id ? 'Recebido' : '');
     });
     return [...statuses].sort();
   }, [deposits]);
