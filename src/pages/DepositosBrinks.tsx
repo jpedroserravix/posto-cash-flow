@@ -303,7 +303,7 @@ export default function DepositosBrinks() {
     }
 
     return data;
-  }, [allDepositos, filterDepositante, filterTipo, filterTurno, filterStatus, filterText, sortField, sortDir]);
+  }, [allDepositos, filterDepositante, filterTurno, filterStatus, filterText, sortField, sortDir]);
 
   const concTotalSelected = allDepositos
     .filter(d => concSelected.has(d.id))
