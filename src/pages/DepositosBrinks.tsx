@@ -734,11 +734,7 @@ export default function DepositosBrinks() {
                           )}>
                             {role === 'admin' && (
                               <TableCell>
-                                {!isConciliado ? (
-                                  <Checkbox checked={isSelected} onCheckedChange={() => toggleConcSelect(dep.id)} />
-                                ) : (
-                                  <CheckCircle className="w-4 h-4 text-green-600" />
-                                )}
+                                <Checkbox checked={isSelected} onCheckedChange={() => toggleConcSelect(dep.id)} />
                               </TableCell>
                             )}
                             <TableCell>
