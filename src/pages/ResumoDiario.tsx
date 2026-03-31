@@ -155,6 +155,7 @@ export default function ResumoDiario() {
                 <TableRow>
                   <TableHead>Data</TableHead>
                   <TableHead>Turno</TableHead>
+                  <TableHead>Centro de Custo</TableHead>
                   <TableHead className="text-right">Cofre Brinks</TableHead>
                   <TableHead className="text-right">Manual</TableHead>
                   <TableHead className="text-right">Total</TableHead>
