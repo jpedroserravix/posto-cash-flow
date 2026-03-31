@@ -13,6 +13,7 @@ import { Upload, Save, Search, CheckCircle, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
 import { FilterableHead } from '@/components/FilterableHead';
+import { HorizontalScrollSync } from '@/components/HorizontalScrollSync';
 
 type SortDir = 'asc' | 'desc' | null;
 
@@ -704,7 +705,7 @@ export default function DepositosBrinks() {
               </p>
             ) : (
               <>
-                <div className="overflow-auto max-h-[calc(100vh-200px)]">
+                <HorizontalScrollSync>
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -852,7 +853,7 @@ export default function DepositosBrinks() {
                       })}
                     </TableBody>
                   </Table>
-                </div>
+                </HorizontalScrollSync>
 
                 {/* Footer: total */}
                 <div className="flex items-center justify-between border-t pt-3">
