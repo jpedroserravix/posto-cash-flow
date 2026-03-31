@@ -201,7 +201,7 @@ export default function DepositosBrinks() {
 
   // Filter states - dropdown selection
   const [filterDepositante, setFilterDepositante] = useState<string>('all');
-  const [filterTipo, setFilterTipo] = useState<string>('all');
+  
   const [filterTurno, setFilterTurno] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterText, setFilterText] = useState('');
