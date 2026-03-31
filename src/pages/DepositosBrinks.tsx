@@ -504,7 +504,7 @@ export default function DepositosBrinks() {
 
   const totalFiltered = filteredData.reduce((sum, r) => sum + r.valor, 0);
 
-  const activeFilterCount = [filterDepositante, filterTipo, filterTurno, filterStatus].filter(f => f !== 'all').length;
+  const activeFilterCount = [filterDepositante, filterTurno, filterStatus].filter(f => f !== 'all').length;
 
   if (!selectedPostoId) {
     return <p className="text-muted-foreground text-center py-8">Selecione um posto para continuar.</p>;
