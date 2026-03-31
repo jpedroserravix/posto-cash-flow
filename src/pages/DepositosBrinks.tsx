@@ -9,24 +9,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Upload, Save, Search, CheckCircle, ArrowUp, ArrowDown, ArrowUpDown, Filter, Check } from 'lucide-react';
+import { Upload, Save, Search, CheckCircle, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
+import { FilterableHead } from '@/components/FilterableHead';
 
 type SortDir = 'asc' | 'desc' | null;
-
-function SortableHead({ label, active, dir, onClick, className }: { label: string; active: boolean; dir: SortDir; onClick: () => void; className?: string }) {
-  return (
-    <TableHead className={cn("cursor-pointer select-none hover:bg-muted/50", className)} onClick={onClick}>
-      <span className="inline-flex items-center gap-1">
-        {label}
-        {!active && <ArrowUpDown className="w-3 h-3 text-muted-foreground" />}
-        {active && dir === 'asc' && <ArrowUp className="w-3 h-3" />}
-        {active && dir === 'desc' && <ArrowDown className="w-3 h-3" />}
-      </span>
-    </TableHead>
-  );
-}
 
 interface BrinksRow {
   id?: string;
@@ -222,13 +210,13 @@ export default function DepositosBrinks() {
   const [sortField, setSortField] = useState<string | null>('data_deposito');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
-  // Filter states - dropdown selection
-  const [filterDepositante, setFilterDepositante] = useState<string>('all');
-  
-  const [filterTurno, setFilterTurno] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
+  // Filter states - Set-based (excluded values)
+  const [filterDataDeposito, setFilterDataDeposito] = useState<Set<string>>(new Set());
+  const [filterDepositante, setFilterDepositante] = useState<Set<string>>(new Set());
+  const [filterTurno, setFilterTurno] = useState<Set<string>>(new Set());
+  const [filterCentroCusto, setFilterCentroCusto] = useState<Set<string>>(new Set());
+  const [filterStatus, setFilterStatus] = useState<Set<string>>(new Set());
   const [filterText, setFilterText] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
 
   // Load all deposits
   const loadAllDepositos = useCallback(async () => {
@@ -276,10 +264,12 @@ export default function DepositosBrinks() {
     }
   }, [selectedPostoId, loadAllDepositos, loadContasBancarias]);
 
-  // Extract unique values for dropdown filters
+  // Extract unique values for filters
+  const uniqueDataDeposito = useMemo(() => [...new Set(allDepositos.map(d => new Date(d.data_deposito).toLocaleDateString('pt-BR')))].sort(), [allDepositos]);
   const uniqueDepositantes = useMemo(() => [...new Set(allDepositos.map(d => d.depositante).filter(Boolean))].sort(), [allDepositos]);
-  
   const uniqueTurnos = useMemo(() => [...new Set(allDepositos.map(d => d.turno).filter(Boolean))].sort(), [allDepositos]);
+  const uniqueCentrosCusto = useMemo(() => [...new Set(allDepositos.map(d => d.centro_custo).filter(Boolean))].sort(), [allDepositos]);
+  const uniqueStatus = useMemo(() => ['Pendente', 'Conciliado'], []);
 
   // Sort toggle
   const toggleSort = (field: string) => {
@@ -298,11 +288,16 @@ export default function DepositosBrinks() {
   const filteredData = useMemo(() => {
     let data = allDepositos;
 
-    if (filterDepositante !== 'all') data = data.filter(d => d.depositante === filterDepositante);
-    
-    if (filterTurno !== 'all') data = data.filter(d => d.turno === filterTurno);
-    if (filterStatus === 'pendente') data = data.filter(d => !d.conciliado_banco_id);
-    if (filterStatus === 'conciliado') data = data.filter(d => !!d.conciliado_banco_id);
+    if (filterDataDeposito.size > 0) data = data.filter(d => !filterDataDeposito.has(new Date(d.data_deposito).toLocaleDateString('pt-BR')));
+    if (filterDepositante.size > 0) data = data.filter(d => !filterDepositante.has(d.depositante));
+    if (filterTurno.size > 0) data = data.filter(d => !filterTurno.has(d.turno));
+    if (filterCentroCusto.size > 0) data = data.filter(d => !filterCentroCusto.has(d.centro_custo));
+    if (filterStatus.size > 0) {
+      data = data.filter(d => {
+        const label = d.conciliado_banco_id ? 'Conciliado' : 'Pendente';
+        return !filterStatus.has(label);
+      });
+    }
 
     if (filterText.trim()) {
       const q = filterText.toLowerCase();
@@ -327,7 +322,7 @@ export default function DepositosBrinks() {
     }
 
     return data;
-  }, [allDepositos, filterDepositante, filterTurno, filterStatus, filterText, sortField, sortDir]);
+  }, [allDepositos, filterDataDeposito, filterDepositante, filterTurno, filterCentroCusto, filterStatus, filterText, sortField, sortDir]);
 
   const concTotalSelected = allDepositos
     .filter(d => concSelected.has(d.id))
@@ -570,7 +565,7 @@ export default function DepositosBrinks() {
 
   const totalFiltered = filteredData.reduce((sum, r) => sum + r.valor, 0);
 
-  const activeFilterCount = [filterDepositante, filterTurno, filterStatus].filter(f => f !== 'all').length;
+  const activeFilterCount = [filterDataDeposito, filterDepositante, filterTurno, filterCentroCusto, filterStatus].filter(f => f.size > 0).length;
 
   if (!selectedPostoId) {
     return <p className="text-muted-foreground text-center py-8">Selecione um posto para continuar.</p>;
@@ -683,70 +678,26 @@ export default function DepositosBrinks() {
                 {loading && <span className="text-sm font-normal text-muted-foreground ml-2">Carregando...</span>}
               </CardTitle>
               <div className="flex items-center gap-2">
-                <Button variant={showFilters ? 'secondary' : 'outline'} size="sm" onClick={() => setShowFilters(!showFilters)}>
-                  <Filter className="w-4 h-4 mr-1" />
-                  Filtros
-                  {activeFilterCount > 0 && (
-                    <Badge variant="default" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-[10px]">
-                      {activeFilterCount}
-                    </Badge>
-                  )}
-                </Button>
+                {activeFilterCount > 0 && (
+                  <Button variant="ghost" size="sm" className="text-xs" onClick={() => {
+                    setFilterDataDeposito(new Set());
+                    setFilterDepositante(new Set());
+                    setFilterTurno(new Set());
+                    setFilterCentroCusto(new Set());
+                    setFilterStatus(new Set());
+                    setFilterText('');
+                  }}>
+                    Limpar filtros ({activeFilterCount})
+                  </Button>
+                )}
+                <div className="relative">
+                  <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input className="pl-7 h-8 text-xs w-44" placeholder="Buscar..." value={filterText} onChange={e => setFilterText(e.target.value)} />
+                </div>
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            {/* Filters area */}
-            {showFilters && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-3 bg-muted/50 rounded-lg">
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">Status</label>
-                  <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="pendente">Pendentes</SelectItem>
-                      <SelectItem value="conciliado">Conciliados</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">Depositante</label>
-                  <Select value={filterDepositante} onValueChange={setFilterDepositante}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      {uniqueDepositantes.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">Turno</label>
-                  <Select value={filterTurno} onValueChange={setFilterTurno}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      {uniqueTurnos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">Busca livre</label>
-                  <div className="relative">
-                    <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />
-                    <Input className="pl-7 h-8 text-xs" placeholder="Buscar..." value={filterText} onChange={e => setFilterText(e.target.value)} />
-                  </div>
-                </div>
-                {activeFilterCount > 0 && (
-                  <div className="sm:col-span-2 lg:col-span-4 flex justify-end">
-                    <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setFilterDepositante('all'); setFilterTurno('all'); setFilterStatus('all'); setFilterText(''); }}>
-                      Limpar filtros
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-
             {allDepositos.length === 0 && !loading ? (
               <p className="text-muted-foreground text-center py-6 text-sm">
                 Nenhum depósito importado ainda. Use o botão "Importar Arquivo" acima.
@@ -768,13 +719,60 @@ export default function DepositosBrinks() {
                             />
                           </TableHead>
                         )}
-                        <TableHead className="w-20">Status</TableHead>
-                        <SortableHead label="Data Depósito" active={sortField === 'data_deposito'} dir={sortDir} onClick={() => toggleSort('data_deposito')} />
-                        <SortableHead label="Valor" active={sortField === 'valor'} dir={sortDir} onClick={() => toggleSort('valor')} className="text-right" />
-                        <SortableHead label="Depositante" active={sortField === 'depositante'} dir={sortDir} onClick={() => toggleSort('depositante')} />
-                        <SortableHead label="Data Caixa" active={sortField === 'data_caixa'} dir={sortDir} onClick={() => toggleSort('data_caixa')} />
-                        <TableHead>Turno</TableHead>
-                        <TableHead>Centro de Custo</TableHead>
+                        <FilterableHead
+                          label="Status"
+                          sortActive={false} sortDir={null} onSort={() => {}}
+                          uniqueValues={uniqueStatus}
+                          selectedValues={filterStatus}
+                          onFilterChange={setFilterStatus}
+                        />
+                        <FilterableHead
+                          label="Data Depósito"
+                          sortActive={sortField === 'data_deposito'} sortDir={sortDir}
+                          onSort={() => toggleSort('data_deposito')}
+                          uniqueValues={uniqueDataDeposito}
+                          selectedValues={filterDataDeposito}
+                          onFilterChange={setFilterDataDeposito}
+                        />
+                        <FilterableHead
+                          label="Valor"
+                          sortActive={sortField === 'valor'} sortDir={sortDir}
+                          onSort={() => toggleSort('valor')}
+                          uniqueValues={[]}
+                          selectedValues={new Set()}
+                          onFilterChange={() => {}}
+                          className="text-right"
+                        />
+                        <FilterableHead
+                          label="Depositante"
+                          sortActive={sortField === 'depositante'} sortDir={sortDir}
+                          onSort={() => toggleSort('depositante')}
+                          uniqueValues={uniqueDepositantes}
+                          selectedValues={filterDepositante}
+                          onFilterChange={setFilterDepositante}
+                        />
+                        <FilterableHead
+                          label="Data Caixa"
+                          sortActive={sortField === 'data_caixa'} sortDir={sortDir}
+                          onSort={() => toggleSort('data_caixa')}
+                          uniqueValues={[]}
+                          selectedValues={new Set()}
+                          onFilterChange={() => {}}
+                        />
+                        <FilterableHead
+                          label="Turno"
+                          sortActive={false} sortDir={null} onSort={() => {}}
+                          uniqueValues={uniqueTurnos}
+                          selectedValues={filterTurno}
+                          onFilterChange={setFilterTurno}
+                        />
+                        <FilterableHead
+                          label="Centro de Custo"
+                          sortActive={false} sortDir={null} onSort={() => {}}
+                          uniqueValues={uniqueCentrosCusto}
+                          selectedValues={filterCentroCusto}
+                          onFilterChange={setFilterCentroCusto}
+                        />
                         <TableHead>Observação</TableHead>
                         <TableHead></TableHead>
                       </TableRow>
