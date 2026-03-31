@@ -477,14 +477,44 @@ export default function DepositosBrinks() {
       observacao: r.observacao || null,
     }));
 
-    const { error } = await supabase.from('depositos_brinks').insert(inserts);
+    // Buscar depósitos existentes para evitar duplicatas
+    const { data: existingData, error: fetchError } = await supabase
+      .from('depositos_brinks')
+      .select('data_deposito, valor, depositante')
+      .eq('posto_id', selectedPostoId);
+
+    if (fetchError) {
+      toast.error('Erro ao verificar duplicatas: ' + fetchError.message);
+      setSaving(false);
+      return;
+    }
+
+    const existingKeys = new Set(
+      (existingData || []).map(d => `${d.data_deposito}|${d.valor}|${d.depositante}`)
+    );
+
+    const novosInserts = inserts.filter(
+      r => !existingKeys.has(`${r.data_deposito}|${r.valor}|${r.depositante}`)
+    );
+
+    if (novosInserts.length === 0) {
+      toast.info('Todos os depósitos já existem no banco. Nenhum novo registro importado.');
+      setSaving(false);
+      return;
+    }
+
+    const { error } = await supabase.from('depositos_brinks').insert(novosInserts);
     if (error) {
       toast.error('Erro ao salvar: ' + error.message);
       setSaving(false);
       return;
     }
 
-    toast.success('Depósitos salvos com sucesso!');
+    const ignorados = inserts.length - novosInserts.length;
+    const msg = ignorados > 0
+      ? `${novosInserts.length} depósitos salvos, ${ignorados} ignorados (já existiam).`
+      : `${novosInserts.length} depósitos salvos com sucesso!`;
+    toast.success(msg);
     setImportRows([]);
     setIsImporting(false);
     loadAllDepositos();
