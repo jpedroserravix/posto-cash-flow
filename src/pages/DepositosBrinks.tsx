@@ -750,7 +750,7 @@ export default function DepositosBrinks() {
                             <TableCell>
                               <Input
                                 type="date"
-                                className="h-8 text-xs w-32"
+                                className="h-8 text-xs w-40"
                                 value={dep.data_caixa}
                                 onChange={e => {
                                   setAllDepositos(prev => prev.map(d => d.id === dep.id ? { ...d, data_caixa: e.target.value } : d));
