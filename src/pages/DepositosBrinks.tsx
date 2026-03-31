@@ -697,9 +697,7 @@ export default function DepositosBrinks() {
                         )}
                         <TableHead className="w-20">Status</TableHead>
                         <SortableHead label="Data Depósito" active={sortField === 'data_deposito'} dir={sortDir} onClick={() => toggleSort('data_deposito')} />
-                        <SortableHead label="Moeda" active={sortField === 'moeda'} dir={sortDir} onClick={() => toggleSort('moeda')} />
                         <SortableHead label="Valor" active={sortField === 'valor'} dir={sortDir} onClick={() => toggleSort('valor')} className="text-right" />
-                        <SortableHead label="Tipo" active={sortField === 'tipo'} dir={sortDir} onClick={() => toggleSort('tipo')} />
                         <SortableHead label="Depositante" active={sortField === 'depositante'} dir={sortDir} onClick={() => toggleSort('depositante')} />
                         <SortableHead label="Data Caixa" active={sortField === 'data_caixa'} dir={sortDir} onClick={() => toggleSort('data_caixa')} />
                         <TableHead>Turno</TableHead>
