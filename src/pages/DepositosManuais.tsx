@@ -30,7 +30,7 @@ export default function DepositosManuais() {
   const [showForm, setShowForm] = useState(false);
 
   // Form state
-  const [formData, setFormData] = useState({ data: '', turno: '', valor_lancado: '', valor_depositado: '', observacao: '' });
+  const [formData, setFormData] = useState({ data: '', turno: '', centro_custo: '', valor_lancado: '', valor_depositado: '', observacao: '' });
 
   useEffect(() => {
     if (selectedPostoId) loadDeposits();
