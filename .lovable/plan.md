@@ -1,35 +1,34 @@
 
 
-# Adicionar Filtros e Ordenação nos Cabeçalhos das Tabelas
+# Permitir Depósito Manual com Valor Lançado Zero
 
-## Resumo
+## Problema
 
-Adicionar filtros clicáveis nos cabeçalhos das tabelas de Depósitos Brinks (Histórico e Conciliação), permitindo ordenar por coluna (Data Depósito, Valor, Tipo, etc.) e filtrar por texto/data.
+Na linha 57 de `DepositosManuais.tsx`, a validação `if (!valorLancado)` bloqueia o valor zero porque em JavaScript `!0` é `true`. Isso impede lançamentos com valor R$ 0,00.
 
-## O que será implementado
+## Solução
 
-### 1. Ordenação por coluna (sort)
-- Clicar no cabeçalho alterna entre ascendente ↑, descendente ↓ e sem ordenação
-- Ícone de seta no cabeçalho indica a direção atual
-- Funciona nas tabelas do **Histórico** e da **Conciliação**
-- Colunas ordenáveis: Data Depósito, Valor, Data Caixa, Tipo, Depositante
+Alterar a validação para checar apenas se o campo está vazio ou se não é um número válido, em vez de tratar zero como inválido.
 
-### 2. Filtros por texto
-- Barra de busca acima da tabela do Histórico para filtrar por depositante, tipo ou observação
-- Na Conciliação, filtro por depositante ou data caixa para encontrar depósitos específicos
+### Mudança em `src/pages/DepositosManuais.tsx`
 
-### 3. Lógica client-side
-- Toda a filtragem e ordenação é feita nos arrays `savedRows` e `concDepositos` já carregados em memória, sem novas queries ao banco
-- Estado: `sortField`, `sortDir`, `filterText`
+**Linha 56-57** — trocar:
+```typescript
+const valorLancado = parseMoney(formData.valor_lancado);
+if (!valorLancado) { toast.error('Informe o valor lançado'); return; }
+```
+por:
+```typescript
+const valorLancado = parseMoney(formData.valor_lancado);
+if (valorLancado === null) { toast.error('Informe o valor lançado'); return; }
+```
 
-## Arquivo a editar
-
-- `src/pages/DepositosBrinks.tsx`
-
-## Mudanças específicas
-
-1. **Novos estados**: `sortField`, `sortDirection` (para cada tabela), `filterText`
-2. **Componente de cabeçalho clicável**: `TableHead` com `onClick` que alterna a ordenação e exibe ícone `ArrowUpDown` / `ArrowUp` / `ArrowDown` do lucide-react
-3. **Lógica de sort/filter**: `useMemo` que aplica filtro de texto e ordenação sobre `savedRows` (histórico) e `concDepositos` (conciliação), gerando arrays derivados para renderização
-4. **Campo de busca**: `Input` com ícone `Search` acima de cada tabela para filtrar por texto livre
+Também ajustar `parseMoney` (linha 47-49) para retornar `null` quando a string está vazia e `0` quando o valor é zero:
+```typescript
+const parseMoney = (v: string) => {
+  if (!v.trim()) return null;
+  const n = parseFloat(v.replace(/\./g, '').replace(',', '.'));
+  return isNaN(n) ? null : n;
+};
+```
 
