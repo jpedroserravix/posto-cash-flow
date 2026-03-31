@@ -10,6 +10,7 @@ import DepositosManuais from "./pages/DepositosManuais";
 import ResumoDiario from "./pages/ResumoDiario";
 import Postos from "./pages/Postos";
 import Usuarios from "./pages/Usuarios";
+import ContasBancarias from "./pages/ContasBancarias";
 import AppLayout from "./components/AppLayout";
 import NotFound from "./pages/NotFound";
 
