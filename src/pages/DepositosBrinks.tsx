@@ -666,7 +666,7 @@ export default function DepositosBrinks() {
                 </div>
                 {activeFilterCount > 0 && (
                   <div className="sm:col-span-2 lg:col-span-4 flex justify-end">
-                    <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setFilterDepositante('all'); setFilterTipo('all'); setFilterTurno('all'); setFilterStatus('all'); setFilterText(''); }}>
+                    <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setFilterDepositante('all'); setFilterTurno('all'); setFilterStatus('all'); setFilterText(''); }}>
                       Limpar filtros
                     </Button>
                   </div>
