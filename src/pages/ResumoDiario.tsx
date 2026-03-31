@@ -37,15 +37,15 @@ export default function ResumoDiario() {
     // Get brinks deposits grouped by data_caixa + turno
     const { data: brinks } = await supabase
       .from('depositos_brinks')
-      .select('data_caixa, turno, valor')
+      .select('data_caixa, turno, valor, centro_custo')
       .eq('posto_id', selectedPostoId)
       .not('data_caixa', 'is', null)
       .not('turno', 'is', null);
 
-    // Get manual deposits grouped by data + turno
+    // Get manual deposits grouped by data + turno + centro_custo
     const { data: manuais } = await supabase
       .from('depositos_manuais')
-      .select('data, turno, valor_lancado')
+      .select('data, turno, valor_lancado, centro_custo')
       .eq('posto_id', selectedPostoId);
 
     // Get existing conference records
