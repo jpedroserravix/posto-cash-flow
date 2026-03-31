@@ -345,7 +345,7 @@ export default function DepositosManuais() {
               <SelectContent>{contas.map(c => <SelectItem key={c.id} value={c.id}>{contaLabel(c)}</SelectItem>)}</SelectContent>
             </Select>
             <Button size="sm" className="h-8" onClick={handleConciliar} disabled={!concContaId}>
-              <Check className="w-3 h-3 mr-1" />Conciliar
+              <Check className="w-3 h-3 mr-1" />Conciliar Valor Depositado
             </Button>
             <Button size="sm" variant="ghost" className="h-8" onClick={() => setConcSelected(new Set())}>
               Cancelar
