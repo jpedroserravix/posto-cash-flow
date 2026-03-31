@@ -161,11 +161,13 @@ export default function DepositosBrinks() {
   const [historyLotes, setHistoryLotes] = useState<string[]>([]);
   const [selectedLote, setSelectedLote] = useState<string>('');
   const [duplicatesRemoved, setDuplicatesRemoved] = useState(0);
-  const [concDataInicial, setConcDataInicial] = useState<Date | undefined>();
-  const [concDataFinal, setConcDataFinal] = useState<Date | undefined>();
-  const [concTotalBrinks, setConcTotalBrinks] = useState<number>(0);
+  const [concDepositos, setConcDepositos] = useState<{ id: string; data_deposito: string; data_caixa: string; valor: number; tipo: string; depositante: string }[]>([]);
+  const [concSelected, setConcSelected] = useState<Set<string>>(new Set());
   const [concValorBanco, setConcValorBanco] = useState<string>('');
   const [concLoading, setConcLoading] = useState(false);
+  const [concBancoId, setConcBancoId] = useState<string>('');
+  const [contasBancarias, setContasBancarias] = useState<{ id: string; banco: string; agencia: string; conta: string }[]>([]);
+  const [concSaving, setConcSaving] = useState(false);
 
   // Load history
   useEffect(() => {
