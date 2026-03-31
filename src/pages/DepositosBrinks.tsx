@@ -38,6 +38,7 @@ interface BrinksRow {
   data_caixa: string;
   turno: string;
   observacao: string;
+  centro_custo: string;
 }
 
 interface DepositoCompleto {
