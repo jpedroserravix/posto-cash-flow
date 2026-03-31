@@ -132,7 +132,7 @@ export default function DepositosManuais() {
       {showForm && (
         <Card>
           <CardContent className="pt-4">
-            <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
               <div>
                 <label className="text-xs font-medium mb-1 block">Data</label>
                 <Input type="date" value={formData.data} onChange={e => setFormData({ ...formData, data: e.target.value })} required className="h-9" />
@@ -142,6 +142,13 @@ export default function DepositosManuais() {
                 <Select value={formData.turno} onValueChange={v => setFormData({ ...formData, turno: v })}>
                   <SelectTrigger className="h-9"><SelectValue placeholder="Turno" /></SelectTrigger>
                   <SelectContent>{TURNOS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs font-medium mb-1 block">Centro de Custo</label>
+                <Select value={formData.centro_custo} onValueChange={v => setFormData({ ...formData, centro_custo: v })}>
+                  <SelectTrigger className="h-9"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                  <SelectContent>{CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
