@@ -336,24 +336,31 @@ export default function DepositosManuais() {
       )}
 
       {/* Conciliação bar */}
-      {role === 'admin' && hasPendingSelected && contas.length > 0 && (
-        <Card>
-          <CardContent className="pt-4 flex flex-wrap items-center gap-3">
-            <Landmark className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm font-medium">{concSelected.size} selecionado(s)</span>
-            <Select value={concContaId} onValueChange={setConcContaId}>
-              <SelectTrigger className="h-8 w-64 text-xs"><SelectValue placeholder="Conta bancária" /></SelectTrigger>
-              <SelectContent>{contas.map(c => <SelectItem key={c.id} value={c.id}>{contaLabel(c)}</SelectItem>)}</SelectContent>
-            </Select>
-            <Button size="sm" className="h-8" onClick={handleConciliar} disabled={!concContaId}>
-              <Check className="w-3 h-3 mr-1" />Conciliar Valor Depositado
-            </Button>
-            <Button size="sm" variant="ghost" className="h-8" onClick={() => setConcSelected(new Set())}>
-              Cancelar
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+      {role === 'admin' && hasPendingSelected && contas.length > 0 && (() => {
+        const selectedDeposits = deposits.filter(d => concSelected.has(d.id));
+        const somaLancado = selectedDeposits.reduce((acc, d) => acc + d.valor_lancado, 0);
+        const somaDepositado = selectedDeposits.reduce((acc, d) => acc + (d.valor_depositado || 0), 0);
+        return (
+          <Card>
+            <CardContent className="pt-4 flex flex-wrap items-center gap-3">
+              <Landmark className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-medium">{concSelected.size} selecionado(s)</span>
+              <Badge variant="secondary" className="text-xs">Lançado: {formatCurrency(somaLancado)}</Badge>
+              <Badge variant="secondary" className="text-xs">Depositado: {formatCurrency(somaDepositado)}</Badge>
+              <Select value={concContaId} onValueChange={setConcContaId}>
+                <SelectTrigger className="h-8 w-64 text-xs"><SelectValue placeholder="Conta bancária" /></SelectTrigger>
+                <SelectContent>{contas.map(c => <SelectItem key={c.id} value={c.id}>{contaLabel(c)}</SelectItem>)}</SelectContent>
+              </Select>
+              <Button size="sm" className="h-8" onClick={handleConciliar} disabled={!concContaId}>
+                <Check className="w-3 h-3 mr-1" />Conciliar Valor Depositado
+              </Button>
+              <Button size="sm" variant="ghost" className="h-8" onClick={() => setConcSelected(new Set())}>
+                Cancelar
+              </Button>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       <Card>
         <CardContent className="pt-4">
