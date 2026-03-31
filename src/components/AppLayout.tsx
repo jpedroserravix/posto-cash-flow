@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Fuel, LogOut, FileSpreadsheet, PenLine, BarChart3, Building2, Users } from 'lucide-react';
+import { Fuel, LogOut, FileSpreadsheet, PenLine, BarChart3, Building2, Users, Landmark } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
