@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -10,11 +10,26 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { Upload, Save, CalendarIcon, Search, CheckCircle } from 'lucide-react';
+import { Upload, Save, CalendarIcon, Search, CheckCircle, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
+
+type SortDir = 'asc' | 'desc' | null;
+
+function SortableHead({ label, active, dir, onClick, className }: { label: string; active: boolean; dir: SortDir; onClick: () => void; className?: string }) {
+  return (
+    <TableHead className={cn("cursor-pointer select-none hover:bg-muted/50", className)} onClick={onClick}>
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {!active && <ArrowUpDown className="w-3 h-3 text-muted-foreground" />}
+        {active && dir === 'asc' && <ArrowUp className="w-3 h-3" />}
+        {active && dir === 'desc' && <ArrowDown className="w-3 h-3" />}
+      </span>
+    </TableHead>
+  );
+}
 
 interface BrinksRow {
   id?: string;
@@ -169,6 +184,16 @@ export default function DepositosBrinks() {
   const [contasBancarias, setContasBancarias] = useState<{ id: string; banco: string; agencia: string; conta: string }[]>([]);
   const [concSaving, setConcSaving] = useState(false);
 
+  // Sort & filter states for history
+  const [histSortField, setHistSortField] = useState<string | null>(null);
+  const [histSortDir, setHistSortDir] = useState<SortDir>(null);
+  const [histFilter, setHistFilter] = useState('');
+
+  // Sort & filter states for conciliação
+  const [concSortField, setConcSortField] = useState<string | null>(null);
+  const [concSortDir, setConcSortDir] = useState<SortDir>(null);
+  const [concFilter, setConcFilter] = useState('');
+
   // Load history
   useEffect(() => {
     if (!selectedPostoId) return;
@@ -254,6 +279,71 @@ export default function DepositosBrinks() {
       loadContasBancarias();
     }
   }, [viewMode, selectedPostoId, loadConcDepositos, loadContasBancarias]);
+
+  // Sort toggle helper
+  const toggleSort = (
+    field: string,
+    currentField: string | null,
+    currentDir: SortDir,
+    setField: (f: string | null) => void,
+    setDir: (d: SortDir) => void
+  ) => {
+    if (currentField !== field) {
+      setField(field);
+      setDir('asc');
+    } else if (currentDir === 'asc') {
+      setDir('desc');
+    } else {
+      setField(null);
+      setDir(null);
+    }
+  };
+
+  // Generic sort function
+  const sortData = <T extends Record<string, any>>(data: T[], field: string | null, dir: SortDir): T[] => {
+    if (!field || !dir) return data;
+    return [...data].sort((a, b) => {
+      const va = a[field];
+      const vb = b[field];
+      if (typeof va === 'number' && typeof vb === 'number') {
+        return dir === 'asc' ? va - vb : vb - va;
+      }
+      const sa = String(va || '').toLowerCase();
+      const sb = String(vb || '').toLowerCase();
+      return dir === 'asc' ? sa.localeCompare(sb) : sb.localeCompare(sa);
+    });
+  };
+
+  // Filtered & sorted history
+  const filteredHistory = useMemo(() => {
+    let data = savedRows;
+    if (histFilter.trim()) {
+      const q = histFilter.toLowerCase();
+      data = data.filter(r =>
+        r.depositante.toLowerCase().includes(q) ||
+        r.tipo.toLowerCase().includes(q) ||
+        r.observacao.toLowerCase().includes(q) ||
+        r.data_deposito.toLowerCase().includes(q) ||
+        r.moeda.toLowerCase().includes(q)
+      );
+    }
+    return sortData(data, histSortField, histSortDir);
+  }, [savedRows, histFilter, histSortField, histSortDir]);
+
+  // Filtered & sorted conciliação
+  const filteredConc = useMemo(() => {
+    let data = concDepositos;
+    if (concFilter.trim()) {
+      const q = concFilter.toLowerCase();
+      data = data.filter(r =>
+        r.depositante.toLowerCase().includes(q) ||
+        r.tipo.toLowerCase().includes(q) ||
+        r.data_caixa.toLowerCase().includes(q) ||
+        r.data_deposito.toLowerCase().includes(q)
+      );
+    }
+    return sortData(data, concSortField, concSortDir);
+  }, [concDepositos, concFilter, concSortField, concSortDir]);
 
   const concTotalSelected = concDepositos
     .filter(d => concSelected.has(d.id))
@@ -576,23 +666,36 @@ export default function DepositosBrinks() {
               </p>
             ) : (
               <>
+                <div className="mb-3">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      className="pl-9 h-9 text-sm"
+                      placeholder="Filtrar por depositante, tipo, observação..."
+                      value={histFilter}
+                      onChange={e => setHistFilter(e.target.value)}
+                    />
+                  </div>
+                </div>
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Data Depósito</TableHead>
-                        <TableHead>Moeda</TableHead>
-                        <TableHead className="text-right">Valor</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Depositante</TableHead>
-                        <TableHead>Data Caixa</TableHead>
+                        <SortableHead label="Data Depósito" active={histSortField === 'data_deposito'} dir={histSortDir} onClick={() => toggleSort('data_deposito', histSortField, histSortDir, setHistSortField, setHistSortDir)} />
+                        <SortableHead label="Moeda" active={histSortField === 'moeda'} dir={histSortDir} onClick={() => toggleSort('moeda', histSortField, histSortDir, setHistSortField, setHistSortDir)} />
+                        <SortableHead label="Valor" active={histSortField === 'valor'} dir={histSortDir} onClick={() => toggleSort('valor', histSortField, histSortDir, setHistSortField, setHistSortDir)} className="text-right" />
+                        <SortableHead label="Tipo" active={histSortField === 'tipo'} dir={histSortDir} onClick={() => toggleSort('tipo', histSortField, histSortDir, setHistSortField, setHistSortDir)} />
+                        <SortableHead label="Depositante" active={histSortField === 'depositante'} dir={histSortDir} onClick={() => toggleSort('depositante', histSortField, histSortDir, setHistSortField, setHistSortDir)} />
+                        <SortableHead label="Data Caixa" active={histSortField === 'data_caixa'} dir={histSortDir} onClick={() => toggleSort('data_caixa', histSortField, histSortDir, setHistSortField, setHistSortDir)} />
                         <TableHead>Turno</TableHead>
                         <TableHead>Observação</TableHead>
                         <TableHead></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {savedRows.map((row, i) => (
+                      {filteredHistory.map((row, i) => {
+                        const origIdx = savedRows.indexOf(row);
+                        return (
                         <TableRow key={row.id || i}>
                           <TableCell className="text-xs whitespace-nowrap">{new Date(row.data_deposito).toLocaleString('pt-BR')}</TableCell>
                           <TableCell className="text-xs">{row.moeda}</TableCell>
@@ -606,7 +709,7 @@ export default function DepositosBrinks() {
                               value={row.data_caixa}
                               onChange={e => {
                                 const updated = [...savedRows];
-                                updated[i] = { ...updated[i], data_caixa: e.target.value };
+                                updated[origIdx] = { ...updated[origIdx], data_caixa: e.target.value };
                                 setSavedRows(updated);
                               }}
                             />
@@ -616,7 +719,7 @@ export default function DepositosBrinks() {
                               value={row.turno}
                               onValueChange={v => {
                                 const updated = [...savedRows];
-                                updated[i] = { ...updated[i], turno: v };
+                                updated[origIdx] = { ...updated[origIdx], turno: v };
                                 setSavedRows(updated);
                               }}
                             >
@@ -634,19 +737,20 @@ export default function DepositosBrinks() {
                               value={row.observacao}
                               onChange={e => {
                                 const updated = [...savedRows];
-                                updated[i] = { ...updated[i], observacao: e.target.value };
+                                updated[origIdx] = { ...updated[origIdx], observacao: e.target.value };
                                 setSavedRows(updated);
                               }}
                               placeholder="Obs"
                             />
                           </TableCell>
                           <TableCell>
-                            <Button size="sm" variant="ghost" onClick={() => handleUpdateRow(savedRows[i])}>
+                            <Button size="sm" variant="ghost" onClick={() => handleUpdateRow(savedRows[origIdx])}>
                               <Save className="w-3 h-3" />
                             </Button>
                           </TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
@@ -694,25 +798,42 @@ export default function DepositosBrinks() {
               <p className="text-muted-foreground text-center py-6 text-sm">Todos os depósitos já foram conciliados.</p>
             ) : (
               <>
+                <div className="mb-3">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      className="pl-9 h-9 text-sm"
+                      placeholder="Filtrar por depositante, tipo, data..."
+                      value={concFilter}
+                      onChange={e => setConcFilter(e.target.value)}
+                    />
+                  </div>
+                </div>
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-10">
                           <Checkbox
-                            checked={concSelected.size === concDepositos.length && concDepositos.length > 0}
-                            onCheckedChange={toggleSelectAll}
+                            checked={concSelected.size === filteredConc.length && filteredConc.length > 0}
+                            onCheckedChange={() => {
+                              if (concSelected.size === filteredConc.length) {
+                                setConcSelected(new Set());
+                              } else {
+                                setConcSelected(new Set(filteredConc.map(d => d.id)));
+                              }
+                            }}
                           />
                         </TableHead>
-                        <TableHead>Data Caixa</TableHead>
-                        <TableHead>Data Depósito</TableHead>
-                        <TableHead className="text-right">Valor</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Depositante</TableHead>
+                        <SortableHead label="Data Caixa" active={concSortField === 'data_caixa'} dir={concSortDir} onClick={() => toggleSort('data_caixa', concSortField, concSortDir, setConcSortField, setConcSortDir)} />
+                        <SortableHead label="Data Depósito" active={concSortField === 'data_deposito'} dir={concSortDir} onClick={() => toggleSort('data_deposito', concSortField, concSortDir, setConcSortField, setConcSortDir)} />
+                        <SortableHead label="Valor" active={concSortField === 'valor'} dir={concSortDir} onClick={() => toggleSort('valor', concSortField, concSortDir, setConcSortField, setConcSortDir)} className="text-right" />
+                        <SortableHead label="Tipo" active={concSortField === 'tipo'} dir={concSortDir} onClick={() => toggleSort('tipo', concSortField, concSortDir, setConcSortField, setConcSortDir)} />
+                        <SortableHead label="Depositante" active={concSortField === 'depositante'} dir={concSortDir} onClick={() => toggleSort('depositante', concSortField, concSortDir, setConcSortField, setConcSortDir)} />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {concDepositos.map(dep => (
+                      {filteredConc.map(dep => (
                         <TableRow key={dep.id} className={concSelected.has(dep.id) ? 'bg-accent/50' : ''}>
                           <TableCell>
                             <Checkbox
