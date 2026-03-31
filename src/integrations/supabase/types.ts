@@ -49,8 +49,44 @@ export type Database = {
           },
         ]
       }
+      contas_bancarias: {
+        Row: {
+          agencia: string
+          banco: string
+          conta: string
+          created_at: string
+          id: string
+          posto_id: string
+        }
+        Insert: {
+          agencia: string
+          banco: string
+          conta: string
+          created_at?: string
+          id?: string
+          posto_id: string
+        }
+        Update: {
+          agencia?: string
+          banco?: string
+          conta?: string
+          created_at?: string
+          id?: string
+          posto_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contas_bancarias_posto_id_fkey"
+            columns: ["posto_id"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       depositos_brinks: {
         Row: {
+          conciliado_banco_id: string | null
           created_at: string
           data_caixa: string | null
           data_deposito: string
@@ -65,6 +101,7 @@ export type Database = {
           valor: number
         }
         Insert: {
+          conciliado_banco_id?: string | null
           created_at?: string
           data_caixa?: string | null
           data_deposito: string
@@ -79,6 +116,7 @@ export type Database = {
           valor: number
         }
         Update: {
+          conciliado_banco_id?: string | null
           created_at?: string
           data_caixa?: string | null
           data_deposito?: string
@@ -93,6 +131,13 @@ export type Database = {
           valor?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "depositos_brinks_conciliado_banco_id_fkey"
+            columns: ["conciliado_banco_id"]
+            isOneToOne: false
+            referencedRelation: "contas_bancarias"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "depositos_brinks_posto_id_fkey"
             columns: ["posto_id"]
