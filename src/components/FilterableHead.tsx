@@ -113,6 +113,7 @@ export function FilterableHead({
             </div>
           </PopoverContent>
         </Popover>
+        )}
       </div>
     </TableHead>
   );
