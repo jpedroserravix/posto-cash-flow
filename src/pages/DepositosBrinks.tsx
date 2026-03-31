@@ -553,9 +553,7 @@ export default function DepositosBrinks() {
                 {importRows.map((row, i) => (
                   <TableRow key={i}>
                     <TableCell className="text-xs whitespace-nowrap">{row.data_deposito}</TableCell>
-                    <TableCell className="text-xs">{row.moeda}</TableCell>
                     <TableCell className="text-right text-xs font-medium">{formatCurrency(row.valor)}</TableCell>
-                    <TableCell className="text-xs">{row.tipo}</TableCell>
                     <TableCell className="text-xs">{row.depositante}</TableCell>
                     <TableCell>
                       <Input type="date" className="h-8 text-xs w-40" value={row.data_caixa} onChange={e => updateImportRow(i, 'data_caixa', e.target.value)} />
