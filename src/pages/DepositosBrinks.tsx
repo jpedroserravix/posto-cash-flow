@@ -541,8 +541,19 @@ export default function DepositosBrinks() {
     const { error } = await supabase.from('depositos_brinks')
       .update({ data_caixa: dep.data_caixa || null, turno: dep.turno || null, observacao: dep.observacao || null })
       .eq('id', dep.id);
-    if (error) toast.error('Erro: ' + error.message);
-    else toast.success('Atualizado');
+    if (error) {
+      toast.error('Erro: ' + error.message);
+    } else {
+      toast.success('Atualizado');
+      setSavedRows(prev => new Set(prev).add(dep.id));
+      setTimeout(() => {
+        setSavedRows(prev => {
+          const next = new Set(prev);
+          next.delete(dep.id);
+          return next;
+        });
+      }, 3000);
+    }
   };
 
   const formatCurrency = (v: number) =>
