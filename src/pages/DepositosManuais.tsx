@@ -374,6 +374,14 @@ export default function DepositosManuais() {
               <Button size="sm" variant="ghost" className="h-8" onClick={() => setConcSelected(new Set())}>
                 Cancelar
               </Button>
+              <div className="w-px h-6 bg-border mx-1" />
+              <Select value={bulkCentroCusto} onValueChange={setBulkCentroCusto}>
+                <SelectTrigger className="h-8 w-48 text-xs"><SelectValue placeholder="Centro de Custo" /></SelectTrigger>
+                <SelectContent>{CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+              </Select>
+              <Button size="sm" className="h-8" onClick={handleBulkCentroCusto} disabled={!bulkCentroCusto}>
+                Aplicar Centro de Custo
+              </Button>
             </CardContent>
           </Card>
         );
