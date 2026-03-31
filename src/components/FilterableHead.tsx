@@ -61,17 +61,18 @@ export function FilterableHead({
           {sortActive && sortDir === 'asc' && <ArrowUp className="w-3 h-3" />}
           {sortActive && sortDir === 'desc' && <ArrowDown className="w-3 h-3" />}
         </span>
-        <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setSearch(''); }}>
-          <PopoverTrigger asChild>
-            <button className="relative p-1 rounded hover:bg-muted/80" onClick={e => e.stopPropagation()}>
-              <Filter className={cn("w-3 h-3", filterCount > 0 ? 'text-primary' : 'text-muted-foreground')} />
-              {filterCount > 0 && (
-                <Badge variant="default" className="absolute -top-1.5 -right-1.5 h-3.5 min-w-[14px] p-0 flex items-center justify-center text-[8px] leading-none">
-                  {filterCount}
-                </Badge>
-              )}
-            </button>
-          </PopoverTrigger>
+        {uniqueValues.length > 0 && (
+          <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setSearch(''); }}>
+            <PopoverTrigger asChild>
+              <button className="relative p-1 rounded hover:bg-muted/80" onClick={e => e.stopPropagation()}>
+                <Filter className={cn("w-3 h-3", filterCount > 0 ? 'text-primary' : 'text-muted-foreground')} />
+                {filterCount > 0 && (
+                  <Badge variant="default" className="absolute -top-1.5 -right-1.5 h-3.5 min-w-[14px] p-0 flex items-center justify-center text-[8px] leading-none">
+                    {filterCount}
+                  </Badge>
+                )}
+              </button>
+            </PopoverTrigger>
           <PopoverContent className="w-56 p-2" align="start" onClick={e => e.stopPropagation()}>
             <div className="space-y-2">
               <div className="relative">
