@@ -818,7 +818,7 @@ export default function DepositosBrinks() {
                             </TableCell>
                             <TableCell>
                               <Button size="sm" variant="ghost" onClick={() => handleUpdateRow(dep)}>
-                                <Save className="w-3 h-3" />
+                                {savedRows.has(dep.id) ? <Check className="w-3 h-3 text-green-600" /> : <Save className="w-3 h-3" />}
                               </Button>
                             </TableCell>
                           </TableRow>
