@@ -771,6 +771,7 @@ export default function DepositosBrinks() {
                         <SortableHead label="Depositante" active={sortField === 'depositante'} dir={sortDir} onClick={() => toggleSort('depositante')} />
                         <SortableHead label="Data Caixa" active={sortField === 'data_caixa'} dir={sortDir} onClick={() => toggleSort('data_caixa')} />
                         <TableHead>Turno</TableHead>
+                        <TableHead>Centro de Custo</TableHead>
                         <TableHead>Observação</TableHead>
                         <TableHead></TableHead>
                       </TableRow>
