@@ -120,6 +120,7 @@ export default function ResumoDiario() {
           posto_id: selectedPostoId,
           data: row.data,
           turno: row.turno,
+          centro_custo: row.centroCusto || null,
           conferido: row.conferido,
           observacao: row.observacao || null,
         });
