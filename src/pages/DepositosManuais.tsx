@@ -104,7 +104,7 @@ export default function DepositosManuais() {
   const uniqueStatus = useMemo(() => {
     const statuses = new Set<string>();
     deposits.forEach(d => {
-      statuses.add(d.conciliado_banco_id ? 'Conciliado' : d.conferido === 'OK' ? 'Conferido' : 'Pendente');
+      statuses.add(d.conciliado_banco_id ? 'Recebido' : '');
     });
     return [...statuses].sort();
   }, [deposits]);
@@ -126,7 +126,7 @@ export default function DepositosManuais() {
   };
 
   const getStatus = (d: ManualDeposit) =>
-    d.conciliado_banco_id ? 'Conciliado' : d.conferido === 'OK' ? 'Conferido' : 'Pendente';
+    d.conciliado_banco_id ? 'Recebido' : '';
 
   // Filtered + sorted data
   const filteredData = useMemo(() => {
@@ -345,7 +345,7 @@ export default function DepositosManuais() {
               <SelectContent>{contas.map(c => <SelectItem key={c.id} value={c.id}>{contaLabel(c)}</SelectItem>)}</SelectContent>
             </Select>
             <Button size="sm" className="h-8" onClick={handleConciliar} disabled={!concContaId}>
-              <Check className="w-3 h-3 mr-1" />Conciliar
+              <Check className="w-3 h-3 mr-1" />Conciliar Valor Depositado
             </Button>
             <Button size="sm" variant="ghost" className="h-8" onClick={() => setConcSelected(new Set())}>
               Cancelar
@@ -395,18 +395,12 @@ export default function DepositosManuais() {
                         {isConciliado ? (
                           <div className="space-y-0.5">
                             <Badge variant="default" className="text-[10px] bg-green-600 hover:bg-green-700 cursor-pointer" onClick={() => role === 'admin' && handleDesconciliar(d.id)}>
-                              Conciliado
+                              Recebido
                             </Badge>
                             <p className="text-[9px] text-muted-foreground truncate max-w-[120px]">{getContaName(d.conciliado_banco_id)}</p>
                           </div>
                         ) : (
-                          <Badge
-                            variant={isConferido ? 'default' : 'secondary'}
-                            className={cn("text-[10px] cursor-pointer", isConferido && 'bg-blue-600 hover:bg-blue-700')}
-                            onClick={() => handleToggleConferido(d)}
-                          >
-                            {isConferido ? 'Conferido' : 'Pendente'}
-                          </Badge>
+                          <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </TableCell>
                       <TableCell className="text-xs">{formatDate(d.data)}</TableCell>
