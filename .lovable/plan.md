@@ -1,50 +1,35 @@
 
 
-# Conciliação Bancária com Seleção de Depósitos e Cadastro de Bancos
+# Adicionar Filtros e Ordenação nos Cabeçalhos das Tabelas
 
 ## Resumo
 
-Substituir a conciliação atual (baseada em filtro de período) por um fluxo onde o admin seleciona depósitos individuais e os marca como "recebidos" em uma conta bancária cadastrada. Inclui também uma tela para cadastrar contas bancárias (banco, agência, conta).
+Adicionar filtros clicáveis nos cabeçalhos das tabelas de Depósitos Brinks (Histórico e Conciliação), permitindo ordenar por coluna (Data Depósito, Valor, Tipo, etc.) e filtrar por texto/data.
 
-## O que será criado
+## O que será implementado
 
-### 1. Tabela `contas_bancarias` (nova)
-Armazena as contas bancárias do posto (ex: Banco Sicredi).
+### 1. Ordenação por coluna (sort)
+- Clicar no cabeçalho alterna entre ascendente ↑, descendente ↓ e sem ordenação
+- Ícone de seta no cabeçalho indica a direção atual
+- Funciona nas tabelas do **Histórico** e da **Conciliação**
+- Colunas ordenáveis: Data Depósito, Valor, Data Caixa, Tipo, Depositante
 
-| Coluna | Tipo | Obs |
-|--------|------|-----|
-| id | uuid | PK |
-| posto_id | uuid | FK postos |
-| banco | text | Ex: "Sicredi" |
-| agencia | text | Ex: "0123" |
-| conta | text | Ex: "45678-9" |
-| created_at | timestamptz | default now() |
+### 2. Filtros por texto
+- Barra de busca acima da tabela do Histórico para filtrar por depositante, tipo ou observação
+- Na Conciliação, filtro por depositante ou data caixa para encontrar depósitos específicos
 
-RLS: admin full access, funcionario pode ver do próprio posto.
+### 3. Lógica client-side
+- Toda a filtragem e ordenação é feita nos arrays `savedRows` e `concDepositos` já carregados em memória, sem novas queries ao banco
+- Estado: `sortField`, `sortDir`, `filterText`
 
-### 2. Coluna `conciliado_banco_id` na tabela `depositos_brinks` (nova coluna)
-Quando o admin "recebe" um depósito, grava o ID da conta bancária nesse campo. Se NULL, o depósito ainda não foi conciliado.
+## Arquivo a editar
 
-### 3. Tela de Cadastro de Bancos
-Nova página `/bancos` (admin only) ou seção dentro de Postos, com formulário para adicionar/listar contas bancárias (banco, agência, conta) vinculadas ao posto selecionado.
+- `src/pages/DepositosBrinks.tsx`
 
-### 4. Conciliação reformulada (aba "Conciliação" em Depósitos Brinks)
-- Lista depósitos **não conciliados** do posto com checkboxes para seleção
-- Dropdown para escolher a conta bancária de destino
-- Botão "Receber no banco" que marca os depósitos selecionados com o `conciliado_banco_id`
-- Exibe total dos selecionados, campo para digitar valor do extrato, e diferença com cores
+## Mudanças específicas
 
-## Arquivos a editar/criar
-
-- **Migration SQL**: criar tabela `contas_bancarias` + adicionar coluna `conciliado_banco_id` em `depositos_brinks`
-- **`src/pages/ContasBancarias.tsx`** (novo): tela CRUD de contas bancárias (admin only)
-- **`src/pages/DepositosBrinks.tsx`**: refatorar aba Conciliação com checkboxes e seletor de banco
-- **`src/App.tsx`**: adicionar rota `/bancos`
-- **`src/components/AppLayout.tsx`**: adicionar link "Bancos" no menu (admin only)
-
-## Detalhes Técnicos
-
-- Query conciliação: `depositos_brinks` where `posto_id = X` and `conciliado_banco_id IS NULL`, ordenado por `data_caixa`
-- Ao "receber": `UPDATE depositos_brinks SET conciliado_banco_id = bancoId WHERE id IN (...)` 
-- Histórico de conciliados: filtrar por `conciliado_banco_id IS NOT NULL` com agrupamento por banco
+1. **Novos estados**: `sortField`, `sortDirection` (para cada tabela), `filterText`
+2. **Componente de cabeçalho clicável**: `TableHead` com `onClick` que alterna a ordenação e exibe ícone `ArrowUpDown` / `ArrowUp` / `ArrowDown` do lucide-react
+3. **Lógica de sort/filter**: `useMemo` que aplica filtro de texto e ordenação sobre `savedRows` (histórico) e `concDepositos` (conciliação), gerando arrays derivados para renderização
+4. **Campo de busca**: `Input` com ícone `Search` acima de cada tabela para filtrar por texto livre
 
