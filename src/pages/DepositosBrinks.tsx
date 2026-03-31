@@ -625,7 +625,7 @@ export default function DepositosBrinks() {
           <CardContent className="space-y-3">
             {/* Filters area */}
             {showFilters && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 p-3 bg-muted/50 rounded-lg">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-3 bg-muted/50 rounded-lg">
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground">Status</label>
                   <Select value={filterStatus} onValueChange={setFilterStatus}>
