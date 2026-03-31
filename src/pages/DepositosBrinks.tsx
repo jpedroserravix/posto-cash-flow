@@ -51,8 +51,11 @@ interface DepositoCompleto {
   data_caixa: string;
   turno: string;
   observacao: string;
+  centro_custo: string;
   conciliado_banco_id: string | null;
 }
+
+const CENTROS_CUSTO = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO'];
 
 const TURNOS = ['TURNO 1', 'TURNO 2', 'TURNO 3'];
 
