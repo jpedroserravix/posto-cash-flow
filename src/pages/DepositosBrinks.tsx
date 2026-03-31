@@ -768,8 +768,9 @@ export default function DepositosBrinks() {
                         const isSelected = concSelected.has(dep.id);
                         return (
                           <TableRow key={dep.id} className={cn(
-                            isConciliado && 'bg-green-50 dark:bg-green-950/20',
-                            isSelected && !isConciliado && 'bg-accent/50'
+                            savedRows.has(dep.id) && 'bg-green-100 dark:bg-green-900/30 transition-colors',
+                            isConciliado && !savedRows.has(dep.id) && 'bg-green-50 dark:bg-green-950/20',
+                            isSelected && !isConciliado && !savedRows.has(dep.id) && 'bg-accent/50'
                           )}>
                             {role === 'admin' && (
                               <TableCell>
