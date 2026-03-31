@@ -280,6 +280,71 @@ export default function DepositosBrinks() {
     }
   }, [viewMode, selectedPostoId, loadConcDepositos, loadContasBancarias]);
 
+  // Sort toggle helper
+  const toggleSort = (
+    field: string,
+    currentField: string | null,
+    currentDir: SortDir,
+    setField: (f: string | null) => void,
+    setDir: (d: SortDir) => void
+  ) => {
+    if (currentField !== field) {
+      setField(field);
+      setDir('asc');
+    } else if (currentDir === 'asc') {
+      setDir('desc');
+    } else {
+      setField(null);
+      setDir(null);
+    }
+  };
+
+  // Generic sort function
+  const sortData = <T extends Record<string, any>>(data: T[], field: string | null, dir: SortDir): T[] => {
+    if (!field || !dir) return data;
+    return [...data].sort((a, b) => {
+      const va = a[field];
+      const vb = b[field];
+      if (typeof va === 'number' && typeof vb === 'number') {
+        return dir === 'asc' ? va - vb : vb - va;
+      }
+      const sa = String(va || '').toLowerCase();
+      const sb = String(vb || '').toLowerCase();
+      return dir === 'asc' ? sa.localeCompare(sb) : sb.localeCompare(sa);
+    });
+  };
+
+  // Filtered & sorted history
+  const filteredHistory = useMemo(() => {
+    let data = savedRows;
+    if (histFilter.trim()) {
+      const q = histFilter.toLowerCase();
+      data = data.filter(r =>
+        r.depositante.toLowerCase().includes(q) ||
+        r.tipo.toLowerCase().includes(q) ||
+        r.observacao.toLowerCase().includes(q) ||
+        r.data_deposito.toLowerCase().includes(q) ||
+        r.moeda.toLowerCase().includes(q)
+      );
+    }
+    return sortData(data, histSortField, histSortDir);
+  }, [savedRows, histFilter, histSortField, histSortDir]);
+
+  // Filtered & sorted conciliação
+  const filteredConc = useMemo(() => {
+    let data = concDepositos;
+    if (concFilter.trim()) {
+      const q = concFilter.toLowerCase();
+      data = data.filter(r =>
+        r.depositante.toLowerCase().includes(q) ||
+        r.tipo.toLowerCase().includes(q) ||
+        r.data_caixa.toLowerCase().includes(q) ||
+        r.data_deposito.toLowerCase().includes(q)
+      );
+    }
+    return sortData(data, concSortField, concSortDir);
+  }, [concDepositos, concFilter, concSortField, concSortDir]);
+
   const concTotalSelected = concDepositos
     .filter(d => concSelected.has(d.id))
     .reduce((sum, d) => sum + Number(d.valor), 0);
