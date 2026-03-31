@@ -64,6 +64,7 @@ export default function DepositosManuais() {
       posto_id: selectedPostoId,
       data: formData.data,
       turno: formData.turno,
+      centro_custo: formData.centro_custo || null,
       valor_lancado: valorLancado,
       valor_depositado: parseMoney(formData.valor_depositado),
       observacao: formData.observacao || null,
