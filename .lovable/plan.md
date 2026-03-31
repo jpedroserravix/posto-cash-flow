@@ -1,31 +1,19 @@
 
 
-# Adicionar FilterableHead na Tela de Depósitos Manuais
+# Corrigir Constraint Única na Tabela resumo_conferencia
 
-## Resumo
+## Problema
 
-Aplicar o mesmo sistema de filtros clicáveis (FilterableHead) que já existe na tela de Depósitos Brinks na tela de Depósitos Manuais, permitindo filtrar por Data, Turno, Centro de Custo e Observação.
+A tabela `resumo_conferencia` tem uma constraint única em `(posto_id, data, turno)`, mas agora que adicionamos `centro_custo`, podem existir múltiplas linhas com mesmo posto/data/turno mas centros de custo diferentes. Ao salvar, o insert falha com erro de chave duplicada.
 
-## Mudanças em `src/pages/DepositosManuais.tsx`
+## Solução
 
-### 1. Novos states e imports
-- Importar `FilterableHead`, `useMemo`
-- Adicionar states de ordenação: `sortCol`, `sortDir`
-- Adicionar states de filtro por coluna: `filterData`, `filterTurno`, `filterCentroCusto`, `filterObservacao` (todos `Set<string>`)
+### 1. Migração SQL
 
-### 2. Lógica de filtragem e ordenação (useMemo)
-- Criar `filteredData` memo que:
-  - Filtra pelos Sets ativos (exclui valores no Set)
-  - Ordena pela coluna/direção selecionada
-- Calcular `depositsWithSaldo` a partir do `filteredData` (não mais do `deposits` direto)
+- Remover a constraint antiga: `DROP CONSTRAINT resumo_conferencia_posto_id_data_turno_key`
+- Criar nova constraint incluindo `centro_custo`: `UNIQUE (posto_id, data, turno, centro_custo)`
 
-### 3. Valores únicos por coluna (useMemo)
-- Extrair valores únicos de cada coluna filtrável dos dados completos (`deposits`)
+### 2. Atualizar `handleSaveRow` em `ResumoDiario.tsx`
 
-### 4. Substituir TableHead por FilterableHead
-- Trocar os `<TableHead>` de Data, Turno, Centro de Custo e Observação pelo componente `<FilterableHead>` com sort + filtro
-- Manter Valor Lançado, Valor Depositado e Saldo Pendente como TableHead simples (sem filtro textual, apenas ordenável)
-
-### 5. Botão "Limpar filtros"
-- Exibir botão quando houver filtros ativos, resetando todos os Sets
+O código já envia `centro_custo` no insert, então após a migração deve funcionar. Mas vou verificar se o match no `loadResumo` também está correto para vincular o `resumoId` considerando `centro_custo`.
 
