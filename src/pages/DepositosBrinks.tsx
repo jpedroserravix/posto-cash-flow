@@ -663,82 +663,114 @@ export default function DepositosBrinks() {
         </Card>
       )}
 
-      {/* Conciliação Bancária - Admin only */}
       {viewMode === 'conciliacao' && role === 'admin' && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Conciliação Bancária</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex flex-col sm:flex-row gap-3">
+            {/* Seletor de conta bancária */}
+            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
               <div className="flex flex-col gap-1">
-                <span className="text-sm font-medium">Data Inicial</span>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn("w-[180px] justify-start text-left font-normal", !concDataInicial && "text-muted-foreground")}>
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {concDataInicial ? format(concDataInicial, 'dd/MM/yyyy') : 'Selecionar'}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar mode="single" selected={concDataInicial} onSelect={setConcDataInicial} locale={ptBR} className="p-3 pointer-events-auto" />
-                  </PopoverContent>
-                </Popover>
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-sm font-medium">Data Final</span>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn("w-[180px] justify-start text-left font-normal", !concDataFinal && "text-muted-foreground")}>
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {concDataFinal ? format(concDataFinal, 'dd/MM/yyyy') : 'Selecionar'}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar mode="single" selected={concDataFinal} onSelect={setConcDataFinal} locale={ptBR} className="p-3 pointer-events-auto" />
-                  </PopoverContent>
-                </Popover>
-              </div>
-              <div className="flex items-end">
-                <Button onClick={buscarConciliacao} disabled={!concDataInicial || !concDataFinal || concLoading} size="sm">
-                  <Search className="w-4 h-4 mr-1" />
-                  {concLoading ? 'Buscando...' : 'Buscar'}
-                </Button>
+                <span className="text-sm font-medium">Conta bancária</span>
+                <Select value={concBancoId} onValueChange={setConcBancoId}>
+                  <SelectTrigger className="w-[280px] h-9 text-sm">
+                    <SelectValue placeholder="Selecionar conta" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {contasBancarias.map(c => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.banco} — Ag {c.agencia} / Cc {c.conta}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
-            {concTotalBrinks > 0 && (
-              <div className="space-y-3 border-t pt-4">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold">Total Brinks no período (excluindo OUTRO):</span>
-                  <span className="font-bold text-lg">{formatCurrency(concTotalBrinks)}</span>
+            {concLoading ? (
+              <p className="text-muted-foreground text-center py-6 text-sm">Carregando...</p>
+            ) : concDepositos.length === 0 ? (
+              <p className="text-muted-foreground text-center py-6 text-sm">Todos os depósitos já foram conciliados.</p>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-10">
+                          <Checkbox
+                            checked={concSelected.size === concDepositos.length && concDepositos.length > 0}
+                            onCheckedChange={toggleSelectAll}
+                          />
+                        </TableHead>
+                        <TableHead>Data Caixa</TableHead>
+                        <TableHead>Data Depósito</TableHead>
+                        <TableHead className="text-right">Valor</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Depositante</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {concDepositos.map(dep => (
+                        <TableRow key={dep.id} className={concSelected.has(dep.id) ? 'bg-accent/50' : ''}>
+                          <TableCell>
+                            <Checkbox
+                              checked={concSelected.has(dep.id)}
+                              onCheckedChange={() => toggleConcSelect(dep.id)}
+                            />
+                          </TableCell>
+                          <TableCell className="text-xs">{dep.data_caixa}</TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">{new Date(dep.data_deposito).toLocaleString('pt-BR')}</TableCell>
+                          <TableCell className="text-right text-xs font-medium">{formatCurrency(dep.valor)}</TableCell>
+                          <TableCell className="text-xs">{dep.tipo}</TableCell>
+                          <TableCell className="text-xs">{dep.depositante}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
-                <div className="flex items-center gap-3 justify-between">
-                  <span className="font-semibold">Valor creditado no banco (R$):</span>
-                  <Input
-                    className="h-9 w-48 text-right"
-                    value={concValorBanco}
-                    onChange={e => setConcValorBanco(e.target.value)}
-                    placeholder="0,00"
-                  />
+
+                <div className="space-y-3 border-t pt-4">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold">Total selecionado ({concSelected.size} depósitos):</span>
+                    <span className="font-bold text-lg">{formatCurrency(concTotalSelected)}</span>
+                  </div>
+                  <div className="flex items-center gap-3 justify-between">
+                    <span className="font-semibold">Valor creditado no banco (R$):</span>
+                    <Input
+                      className="h-9 w-48 text-right"
+                      value={concValorBanco}
+                      onChange={e => setConcValorBanco(e.target.value)}
+                      placeholder="0,00"
+                    />
+                  </div>
+                  {(() => {
+                    const vBanco = parseFloat(concValorBanco.replace(/\./g, '').replace(',', '.')) || 0;
+                    const diff = concTotalSelected - vBanco;
+                    const hasInput = concValorBanco.trim() !== '';
+                    if (!hasInput) return null;
+                    return (
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold">Diferença:</span>
+                        <span className={cn("font-bold text-lg",
+                          diff === 0 ? 'text-green-600' : diff > 0 ? 'text-yellow-600' : 'text-destructive'
+                        )}>
+                          {formatCurrency(diff)}
+                        </span>
+                      </div>
+                    );
+                  })()}
+                  <Button
+                    onClick={handleReceberBanco}
+                    disabled={concSaving || concSelected.size === 0 || !concBancoId}
+                    className="w-full sm:w-auto"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-1" />
+                    {concSaving ? 'Salvando...' : 'Receber no banco'}
+                  </Button>
                 </div>
-                {(() => {
-                  const vBanco = parseFloat(concValorBanco.replace(/\./g, '').replace(',', '.')) || 0;
-                  const diff = concTotalBrinks - vBanco;
-                  const hasInput = concValorBanco.trim() !== '';
-                  if (!hasInput) return null;
-                  return (
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold">Diferença:</span>
-                      <span className={cn("font-bold text-lg",
-                        diff === 0 ? 'text-green-600' : diff > 0 ? 'text-yellow-600' : 'text-red-600'
-                      )}>
-                        {formatCurrency(diff)}
-                      </span>
-                    </div>
-                  );
-                })()}
-              </div>
+              </>
             )}
           </CardContent>
         </Card>
