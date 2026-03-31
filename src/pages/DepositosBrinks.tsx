@@ -6,13 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Upload, Save, CalendarIcon, Search, CheckCircle, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { Upload, Save, Search, CheckCircle, ArrowUp, ArrowDown, ArrowUpDown, Filter } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
 
@@ -41,6 +38,19 @@ interface BrinksRow {
   data_caixa: string;
   turno: string;
   observacao: string;
+}
+
+interface DepositoCompleto {
+  id: string;
+  data_deposito: string;
+  moeda: string;
+  valor: number;
+  tipo: string;
+  depositante: string;
+  data_caixa: string;
+  turno: string;
+  observacao: string;
+  conciliado_banco_id: string | null;
 }
 
 const TURNOS = ['TURNO 1', 'TURNO 2', 'TURNO 3'];
@@ -167,100 +177,62 @@ function rowKey(r: { data_deposito: string; valor: number; depositante: string; 
 
 export default function DepositosBrinks() {
   const { selectedPostoId, role } = useAuth();
-  const [rows, setRows] = useState<BrinksRow[]>([]);
-  const [savedRows, setSavedRows] = useState<BrinksRow[]>([]);
+  const [importRows, setImportRows] = useState<BrinksRow[]>([]);
   const [loteId, setLoteId] = useState<string>('');
   const [valorBanco, setValorBanco] = useState<string>('');
   const [saving, setSaving] = useState(false);
-  const [viewMode, setViewMode] = useState<'import' | 'history' | 'conciliacao'>('history');
-  const [historyLotes, setHistoryLotes] = useState<string[]>([]);
-  const [selectedLote, setSelectedLote] = useState<string>('');
+  const [isImporting, setIsImporting] = useState(false);
   const [duplicatesRemoved, setDuplicatesRemoved] = useState(0);
-  const [concDepositos, setConcDepositos] = useState<{ id: string; data_deposito: string; data_caixa: string; valor: number; tipo: string; depositante: string }[]>([]);
+
+  // All deposits for the posto
+  const [allDepositos, setAllDepositos] = useState<DepositoCompleto[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Conciliation state
   const [concSelected, setConcSelected] = useState<Set<string>>(new Set());
   const [concValorBanco, setConcValorBanco] = useState<string>('');
-  const [concLoading, setConcLoading] = useState(false);
   const [concBancoId, setConcBancoId] = useState<string>('');
   const [contasBancarias, setContasBancarias] = useState<{ id: string; banco: string; agencia: string; conta: string }[]>([]);
   const [concSaving, setConcSaving] = useState(false);
 
-  // Sort & filter states for history
-  const [histSortField, setHistSortField] = useState<string | null>(null);
-  const [histSortDir, setHistSortDir] = useState<SortDir>(null);
-  const [histFilter, setHistFilter] = useState('');
+  // Sort state
+  const [sortField, setSortField] = useState<string | null>('data_deposito');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
 
-  // Sort & filter states for conciliação
-  const [concSortField, setConcSortField] = useState<string | null>(null);
-  const [concSortDir, setConcSortDir] = useState<SortDir>(null);
-  const [concFilter, setConcFilter] = useState('');
+  // Filter states - dropdown selection
+  const [filterDepositante, setFilterDepositante] = useState<string>('all');
+  const [filterTipo, setFilterTipo] = useState<string>('all');
+  const [filterTurno, setFilterTurno] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterText, setFilterText] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
 
-  // Load history
-  useEffect(() => {
+  // Load all deposits
+  const loadAllDepositos = useCallback(async () => {
     if (!selectedPostoId) return;
-    loadHistory();
-  }, [selectedPostoId]);
-
-  const loadHistory = async () => {
-    if (!selectedPostoId) return;
-    const { data } = await supabase
-      .from('depositos_brinks')
-      .select('lote_id')
-      .eq('posto_id', selectedPostoId)
-      .order('created_at', { ascending: false });
-    
-    const lotes = [...new Set(data?.map(d => d.lote_id) || [])];
-    setHistoryLotes(lotes);
-    if (lotes.length > 0 && !selectedLote) {
-      setSelectedLote(lotes[0]);
-      loadLote(lotes[0]);
-    }
-  };
-
-  const loadLote = async (lId: string) => {
-    if (!selectedPostoId) return;
-    const { data } = await supabase
-      .from('depositos_brinks')
-      .select('*')
-      .eq('posto_id', selectedPostoId)
-      .eq('lote_id', lId)
-      .order('data_deposito', { ascending: true });
-    
-    setSavedRows(data?.map(d => ({
-      id: d.id,
-      data_deposito: d.data_deposito,
-      moeda: d.moeda,
-      valor: d.valor,
-      tipo: d.tipo,
-      depositante: d.depositante,
-      data_caixa: d.data_caixa || '',
-      turno: d.turno || '',
-      observacao: d.observacao || '',
-    })) || []);
-
-  };
-
-  const loadConcDepositos = useCallback(async () => {
-    if (!selectedPostoId) return;
-    setConcLoading(true);
+    setLoading(true);
     const { data, error } = await supabase
       .from('depositos_brinks')
-      .select('id, data_deposito, data_caixa, valor, tipo, depositante')
+      .select('id, data_deposito, moeda, valor, tipo, depositante, data_caixa, turno, observacao, conciliado_banco_id')
       .eq('posto_id', selectedPostoId)
-      .is('conciliado_banco_id', null)
-      .order('data_caixa', { ascending: true });
+      .order('data_deposito', { ascending: false });
     if (error) {
-      toast.error('Erro ao buscar depósitos: ' + error.message);
+      toast.error('Erro ao carregar depósitos: ' + error.message);
     } else {
-      setConcDepositos((data || []).map(d => ({
+      setAllDepositos((data || []).map(d => ({
         id: d.id,
         data_deposito: d.data_deposito,
-        data_caixa: d.data_caixa || '',
+        moeda: d.moeda,
         valor: d.valor,
         tipo: d.tipo,
         depositante: d.depositante,
+        data_caixa: d.data_caixa || '',
+        turno: d.turno || '',
+        observacao: d.observacao || '',
+        conciliado_banco_id: d.conciliado_banco_id,
       })));
     }
-    setConcLoading(false);
+    setLoading(false);
   }, [selectedPostoId]);
 
   const loadContasBancarias = useCallback(async () => {
@@ -274,51 +246,42 @@ export default function DepositosBrinks() {
   }, [selectedPostoId]);
 
   useEffect(() => {
-    if (viewMode === 'conciliacao' && selectedPostoId) {
-      loadConcDepositos();
+    if (selectedPostoId) {
+      loadAllDepositos();
       loadContasBancarias();
     }
-  }, [viewMode, selectedPostoId, loadConcDepositos, loadContasBancarias]);
+  }, [selectedPostoId, loadAllDepositos, loadContasBancarias]);
 
-  // Sort toggle helper
-  const toggleSort = (
-    field: string,
-    currentField: string | null,
-    currentDir: SortDir,
-    setField: (f: string | null) => void,
-    setDir: (d: SortDir) => void
-  ) => {
-    if (currentField !== field) {
-      setField(field);
-      setDir('asc');
-    } else if (currentDir === 'asc') {
-      setDir('desc');
+  // Extract unique values for dropdown filters
+  const uniqueDepositantes = useMemo(() => [...new Set(allDepositos.map(d => d.depositante).filter(Boolean))].sort(), [allDepositos]);
+  const uniqueTipos = useMemo(() => [...new Set(allDepositos.map(d => d.tipo).filter(Boolean))].sort(), [allDepositos]);
+  const uniqueTurnos = useMemo(() => [...new Set(allDepositos.map(d => d.turno).filter(Boolean))].sort(), [allDepositos]);
+
+  // Sort toggle
+  const toggleSort = (field: string) => {
+    if (sortField !== field) {
+      setSortField(field);
+      setSortDir('asc');
+    } else if (sortDir === 'asc') {
+      setSortDir('desc');
     } else {
-      setField(null);
-      setDir(null);
+      setSortField(null);
+      setSortDir(null);
     }
   };
 
-  // Generic sort function
-  const sortData = <T extends Record<string, any>>(data: T[], field: string | null, dir: SortDir): T[] => {
-    if (!field || !dir) return data;
-    return [...data].sort((a, b) => {
-      const va = a[field];
-      const vb = b[field];
-      if (typeof va === 'number' && typeof vb === 'number') {
-        return dir === 'asc' ? va - vb : vb - va;
-      }
-      const sa = String(va || '').toLowerCase();
-      const sb = String(vb || '').toLowerCase();
-      return dir === 'asc' ? sa.localeCompare(sb) : sb.localeCompare(sa);
-    });
-  };
+  // Filtered & sorted data
+  const filteredData = useMemo(() => {
+    let data = allDepositos;
 
-  // Filtered & sorted history
-  const filteredHistory = useMemo(() => {
-    let data = savedRows;
-    if (histFilter.trim()) {
-      const q = histFilter.toLowerCase();
+    if (filterDepositante !== 'all') data = data.filter(d => d.depositante === filterDepositante);
+    if (filterTipo !== 'all') data = data.filter(d => d.tipo === filterTipo);
+    if (filterTurno !== 'all') data = data.filter(d => d.turno === filterTurno);
+    if (filterStatus === 'pendente') data = data.filter(d => !d.conciliado_banco_id);
+    if (filterStatus === 'conciliado') data = data.filter(d => !!d.conciliado_banco_id);
+
+    if (filterText.trim()) {
+      const q = filterText.toLowerCase();
       data = data.filter(r =>
         r.depositante.toLowerCase().includes(q) ||
         r.tipo.toLowerCase().includes(q) ||
@@ -327,25 +290,24 @@ export default function DepositosBrinks() {
         r.moeda.toLowerCase().includes(q)
       );
     }
-    return sortData(data, histSortField, histSortDir);
-  }, [savedRows, histFilter, histSortField, histSortDir]);
 
-  // Filtered & sorted conciliação
-  const filteredConc = useMemo(() => {
-    let data = concDepositos;
-    if (concFilter.trim()) {
-      const q = concFilter.toLowerCase();
-      data = data.filter(r =>
-        r.depositante.toLowerCase().includes(q) ||
-        r.tipo.toLowerCase().includes(q) ||
-        r.data_caixa.toLowerCase().includes(q) ||
-        r.data_deposito.toLowerCase().includes(q)
-      );
+    if (sortField && sortDir) {
+      data = [...data].sort((a, b) => {
+        const va = (a as any)[sortField];
+        const vb = (b as any)[sortField];
+        if (typeof va === 'number' && typeof vb === 'number') {
+          return sortDir === 'asc' ? va - vb : vb - va;
+        }
+        const sa = String(va || '').toLowerCase();
+        const sb = String(vb || '').toLowerCase();
+        return sortDir === 'asc' ? sa.localeCompare(sb) : sb.localeCompare(sa);
+      });
     }
-    return sortData(data, concSortField, concSortDir);
-  }, [concDepositos, concFilter, concSortField, concSortDir]);
 
-  const concTotalSelected = concDepositos
+    return data;
+  }, [allDepositos, filterDepositante, filterTipo, filterTurno, filterStatus, filterText, sortField, sortDir]);
+
+  const concTotalSelected = allDepositos
     .filter(d => concSelected.has(d.id))
     .reduce((sum, d) => sum + Number(d.valor), 0);
 
@@ -357,23 +319,27 @@ export default function DepositosBrinks() {
     });
   };
 
-  const toggleSelectAll = () => {
-    if (concSelected.size === concDepositos.length) {
-      setConcSelected(new Set());
+  const selectAllFiltered = () => {
+    const pendingIds = filteredData.filter(d => !d.conciliado_banco_id).map(d => d.id);
+    const allSelected = pendingIds.every(id => concSelected.has(id));
+    if (allSelected) {
+      setConcSelected(prev => {
+        const next = new Set(prev);
+        pendingIds.forEach(id => next.delete(id));
+        return next;
+      });
     } else {
-      setConcSelected(new Set(concDepositos.map(d => d.id)));
+      setConcSelected(prev => {
+        const next = new Set(prev);
+        pendingIds.forEach(id => next.add(id));
+        return next;
+      });
     }
   };
 
   const handleReceberBanco = async () => {
-    if (concSelected.size === 0) {
-      toast.error('Selecione ao menos um depósito');
-      return;
-    }
-    if (!concBancoId) {
-      toast.error('Selecione uma conta bancária');
-      return;
-    }
+    if (concSelected.size === 0) { toast.error('Selecione ao menos um depósito'); return; }
+    if (!concBancoId) { toast.error('Selecione uma conta bancária'); return; }
     setConcSaving(true);
     const ids = Array.from(concSelected);
     const { error } = await supabase
@@ -386,7 +352,7 @@ export default function DepositosBrinks() {
       toast.success(`${ids.length} depósito(s) conciliado(s)`);
       setConcSelected(new Set());
       setConcValorBanco('');
-      loadConcDepositos();
+      loadAllDepositos();
     }
     setConcSaving(false);
   };
@@ -413,7 +379,6 @@ export default function DepositosBrinks() {
       return;
     }
 
-    // Remove duplicates against existing saved data
     const { data: existing } = await supabase
       .from('depositos_brinks')
       .select('data_deposito, valor, depositante, tipo')
@@ -429,9 +394,9 @@ export default function DepositosBrinks() {
       return;
     }
 
-    setRows(uniqueRows);
+    setImportRows(uniqueRows);
     setLoteId(crypto.randomUUID());
-    setViewMode('import');
+    setIsImporting(true);
 
     if (dupsCount > 0) {
       toast.success(`${uniqueRows.length} registros novos importados. ${dupsCount} duplicados ignorados.`);
@@ -440,18 +405,15 @@ export default function DepositosBrinks() {
     }
   };
 
-  const updateRow = (index: number, field: keyof BrinksRow, value: string) => {
-    setRows(prev => prev.map((r, i) => i === index ? { ...r, [field]: value } : r));
+  const updateImportRow = (index: number, field: keyof BrinksRow, value: string) => {
+    setImportRows(prev => prev.map((r, i) => i === index ? { ...r, [field]: value } : r));
   };
 
-  const totalBrinks = rows.reduce((sum, r) => sum + r.valor, 0);
+  const totalBrinks = importRows.reduce((sum, r) => sum + r.valor, 0);
   const valorBancoNum = parseFloat(valorBanco.replace(/\./g, '').replace(',', '.')) || 0;
   const diferenca = totalBrinks - valorBancoNum;
 
-  const savedTotal = savedRows.reduce((sum, r) => sum + r.valor, 0);
-
   const parseDateBR = (dateStr: string): string => {
-    // Convert "DD/MM/YYYY HH:MM:SS" or "DD/MM/YYYY" to ISO format
     const parts = dateStr.trim().split(' ');
     const datePart = parts[0];
     const timePart = parts[1] || '00:00:00';
@@ -459,11 +421,10 @@ export default function DepositosBrinks() {
     if (day && month && year && year.length === 4) {
       return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timePart}`;
     }
-    return dateStr; // Return as-is if already in a valid format
+    return dateStr;
   };
 
   const parseDateOnlyBR = (dateStr: string): string => {
-    // Convert "DD/MM/YYYY" to "YYYY-MM-DD"
     const [day, month, year] = dateStr.trim().split('/');
     if (day && month && year && year.length === 4) {
       return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
@@ -475,7 +436,7 @@ export default function DepositosBrinks() {
     if (!selectedPostoId || !loteId) return;
     setSaving(true);
 
-    const inserts = rows.map(r => ({
+    const inserts = importRows.map(r => ({
       posto_id: selectedPostoId,
       lote_id: loteId,
       data_deposito: parseDateBR(r.data_deposito),
@@ -495,26 +456,27 @@ export default function DepositosBrinks() {
       return;
     }
 
-
     toast.success('Depósitos salvos com sucesso!');
-    setRows([]);
-    setViewMode('history');
-    loadHistory();
+    setImportRows([]);
+    setIsImporting(false);
+    loadAllDepositos();
     setSaving(false);
   };
 
-  const handleUpdateRow = async (row: BrinksRow) => {
-    if (!row.id) return;
+  const handleUpdateRow = async (dep: DepositoCompleto) => {
     const { error } = await supabase.from('depositos_brinks')
-      .update({ data_caixa: row.data_caixa || null, turno: row.turno || null, observacao: row.observacao || null })
-      .eq('id', row.id);
+      .update({ data_caixa: dep.data_caixa || null, turno: dep.turno || null, observacao: dep.observacao || null })
+      .eq('id', dep.id);
     if (error) toast.error('Erro: ' + error.message);
     else toast.success('Atualizado');
   };
 
-
   const formatCurrency = (v: number) =>
     v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+  const totalFiltered = filteredData.reduce((sum, r) => sum + r.valor, 0);
+
+  const activeFilterCount = [filterDepositante, filterTipo, filterTurno, filterStatus].filter(f => f !== 'all').length;
 
   if (!selectedPostoId) {
     return <p className="text-muted-foreground text-center py-8">Selecione um posto para continuar.</p>;
@@ -531,18 +493,15 @@ export default function DepositosBrinks() {
               <span><Upload className="w-4 h-4 mr-1" />Importar Arquivo</span>
             </Button>
           </label>
-          <Button variant={viewMode === 'history' ? 'secondary' : 'outline'} size="sm" onClick={() => setViewMode('history')}>Histórico</Button>
-          {role === 'admin' && (
-            <Button variant={viewMode === 'conciliacao' ? 'secondary' : 'outline'} size="sm" onClick={() => setViewMode('conciliacao')}>Conciliação</Button>
-          )}
         </div>
       </div>
 
-      {viewMode === 'import' && rows.length > 0 && (
+      {/* Import view */}
+      {isImporting && importRows.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Importação — {rows.length} registros
+              Importação — {importRows.length} registros
               {duplicatesRemoved > 0 && (
                 <span className="text-sm font-normal text-muted-foreground ml-2">
                   ({duplicatesRemoved} duplicados ignorados)
@@ -565,7 +524,7 @@ export default function DepositosBrinks() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((row, i) => (
+                {importRows.map((row, i) => (
                   <TableRow key={i}>
                     <TableCell className="text-xs whitespace-nowrap">{row.data_deposito}</TableCell>
                     <TableCell className="text-xs">{row.moeda}</TableCell>
@@ -573,65 +532,41 @@ export default function DepositosBrinks() {
                     <TableCell className="text-xs">{row.tipo}</TableCell>
                     <TableCell className="text-xs">{row.depositante}</TableCell>
                     <TableCell>
-                      <Input
-                        type="date"
-                        className="h-8 text-xs w-32"
-                        value={row.data_caixa}
-                        onChange={e => updateRow(i, 'data_caixa', e.target.value)}
-                      />
+                      <Input type="date" className="h-8 text-xs w-32" value={row.data_caixa} onChange={e => updateImportRow(i, 'data_caixa', e.target.value)} />
                     </TableCell>
                     <TableCell>
-                      <Select value={row.turno} onValueChange={v => updateRow(i, 'turno', v)}>
-                        <SelectTrigger className="h-8 text-xs w-28">
-                          <SelectValue placeholder="Turno" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {TURNOS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                        </SelectContent>
+                      <Select value={row.turno} onValueChange={v => updateImportRow(i, 'turno', v)}>
+                        <SelectTrigger className="h-8 text-xs w-28"><SelectValue placeholder="Turno" /></SelectTrigger>
+                        <SelectContent>{TURNOS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                       </Select>
                     </TableCell>
                     <TableCell>
-                      <Input
-                        className="h-8 text-xs w-32"
-                        value={row.observacao}
-                        onChange={e => updateRow(i, 'observacao', e.target.value)}
-                        placeholder="Observação"
-                      />
+                      <Input className="h-8 text-xs w-32" value={row.observacao} onChange={e => updateImportRow(i, 'observacao', e.target.value)} placeholder="Observação" />
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
 
-            {/* Footer with totals */}
             <div className="mt-4 space-y-3 border-t pt-4">
               <div className="flex items-center justify-between">
                 <span className="font-semibold">Total Brinks:</span>
                 <span className="font-bold text-lg">{formatCurrency(totalBrinks)}</span>
               </div>
-
               {role === 'admin' && (
                 <>
                   <div className="flex items-center gap-3 justify-between">
                     <span className="font-semibold">Valor recebido no banco:</span>
-                    <Input
-                      className="h-9 w-48 text-right"
-                      value={valorBanco}
-                      onChange={e => setValorBanco(e.target.value)}
-                      placeholder="0,00"
-                    />
+                    <Input className="h-9 w-48 text-right" value={valorBanco} onChange={e => setValorBanco(e.target.value)} placeholder="0,00" />
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="font-semibold">Diferença:</span>
-                    <span className={`font-bold text-lg ${
-                      diferenca === 0 ? 'text-success' : diferenca > 0 ? 'text-warning' : 'text-destructive'
-                    }`}>
+                    <span className={`font-bold text-lg ${diferenca === 0 ? 'text-green-600' : diferenca > 0 ? 'text-yellow-600' : 'text-destructive'}`}>
                       {formatCurrency(diferenca)}
                     </span>
                   </div>
                 </>
               )}
-
               <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto">
                 <Save className="w-4 h-4 mr-1" />
                 {saving ? 'Salvando...' : 'Salvar Depósitos'}
@@ -641,255 +576,244 @@ export default function DepositosBrinks() {
         </Card>
       )}
 
-      {/* History */}
-      {viewMode === 'history' && (
+      {/* Unified deposits table */}
+      {!isImporting && (
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2">
-            <CardTitle className="text-base">Histórico de Importações</CardTitle>
-            {historyLotes.length > 0 && (
-              <Select value={selectedLote} onValueChange={v => { setSelectedLote(v); loadLote(v); }}>
-                <SelectTrigger className="w-48 h-9 text-xs">
-                  <SelectValue placeholder="Selecionar lote" />
-                </SelectTrigger>
-                <SelectContent>
-                  {historyLotes.map((l, i) => (
-                    <SelectItem key={l} value={l}>Lote {i + 1}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+          <CardHeader className="pb-3">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+              <CardTitle className="text-base">
+                Todos os Depósitos
+                {loading && <span className="text-sm font-normal text-muted-foreground ml-2">Carregando...</span>}
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                <Button variant={showFilters ? 'secondary' : 'outline'} size="sm" onClick={() => setShowFilters(!showFilters)}>
+                  <Filter className="w-4 h-4 mr-1" />
+                  Filtros
+                  {activeFilterCount > 0 && (
+                    <Badge variant="default" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-[10px]">
+                      {activeFilterCount}
+                    </Badge>
+                  )}
+                </Button>
+              </div>
+            </div>
           </CardHeader>
-          <CardContent>
-            {savedRows.length === 0 ? (
+          <CardContent className="space-y-3">
+            {/* Filters area */}
+            {showFilters && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 p-3 bg-muted/50 rounded-lg">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Status</label>
+                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="pendente">Pendentes</SelectItem>
+                      <SelectItem value="conciliado">Conciliados</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Depositante</label>
+                  <Select value={filterDepositante} onValueChange={setFilterDepositante}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      {uniqueDepositantes.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Tipo</label>
+                  <Select value={filterTipo} onValueChange={setFilterTipo}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      {uniqueTipos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Turno</label>
+                  <Select value={filterTurno} onValueChange={setFilterTurno}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      {uniqueTurnos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Busca livre</label>
+                  <div className="relative">
+                    <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input className="pl-7 h-8 text-xs" placeholder="Buscar..." value={filterText} onChange={e => setFilterText(e.target.value)} />
+                  </div>
+                </div>
+                {activeFilterCount > 0 && (
+                  <div className="sm:col-span-2 lg:col-span-5 flex justify-end">
+                    <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setFilterDepositante('all'); setFilterTipo('all'); setFilterTurno('all'); setFilterStatus('all'); setFilterText(''); }}>
+                      Limpar filtros
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {allDepositos.length === 0 && !loading ? (
               <p className="text-muted-foreground text-center py-6 text-sm">
                 Nenhum depósito importado ainda. Use o botão "Importar Arquivo" acima.
               </p>
             ) : (
               <>
-                <div className="mb-3">
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      className="pl-9 h-9 text-sm"
-                      placeholder="Filtrar por depositante, tipo, observação..."
-                      value={histFilter}
-                      onChange={e => setHistFilter(e.target.value)}
-                    />
-                  </div>
-                </div>
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <SortableHead label="Data Depósito" active={histSortField === 'data_deposito'} dir={histSortDir} onClick={() => toggleSort('data_deposito', histSortField, histSortDir, setHistSortField, setHistSortDir)} />
-                        <SortableHead label="Moeda" active={histSortField === 'moeda'} dir={histSortDir} onClick={() => toggleSort('moeda', histSortField, histSortDir, setHistSortField, setHistSortDir)} />
-                        <SortableHead label="Valor" active={histSortField === 'valor'} dir={histSortDir} onClick={() => toggleSort('valor', histSortField, histSortDir, setHistSortField, setHistSortDir)} className="text-right" />
-                        <SortableHead label="Tipo" active={histSortField === 'tipo'} dir={histSortDir} onClick={() => toggleSort('tipo', histSortField, histSortDir, setHistSortField, setHistSortDir)} />
-                        <SortableHead label="Depositante" active={histSortField === 'depositante'} dir={histSortDir} onClick={() => toggleSort('depositante', histSortField, histSortDir, setHistSortField, setHistSortDir)} />
-                        <SortableHead label="Data Caixa" active={histSortField === 'data_caixa'} dir={histSortDir} onClick={() => toggleSort('data_caixa', histSortField, histSortDir, setHistSortField, setHistSortDir)} />
+                        {role === 'admin' && (
+                          <TableHead className="w-10">
+                            <Checkbox
+                              checked={(() => {
+                                const pendingIds = filteredData.filter(d => !d.conciliado_banco_id).map(d => d.id);
+                                return pendingIds.length > 0 && pendingIds.every(id => concSelected.has(id));
+                              })()}
+                              onCheckedChange={selectAllFiltered}
+                            />
+                          </TableHead>
+                        )}
+                        <TableHead className="w-20">Status</TableHead>
+                        <SortableHead label="Data Depósito" active={sortField === 'data_deposito'} dir={sortDir} onClick={() => toggleSort('data_deposito')} />
+                        <SortableHead label="Moeda" active={sortField === 'moeda'} dir={sortDir} onClick={() => toggleSort('moeda')} />
+                        <SortableHead label="Valor" active={sortField === 'valor'} dir={sortDir} onClick={() => toggleSort('valor')} className="text-right" />
+                        <SortableHead label="Tipo" active={sortField === 'tipo'} dir={sortDir} onClick={() => toggleSort('tipo')} />
+                        <SortableHead label="Depositante" active={sortField === 'depositante'} dir={sortDir} onClick={() => toggleSort('depositante')} />
+                        <SortableHead label="Data Caixa" active={sortField === 'data_caixa'} dir={sortDir} onClick={() => toggleSort('data_caixa')} />
                         <TableHead>Turno</TableHead>
                         <TableHead>Observação</TableHead>
                         <TableHead></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredHistory.map((row, i) => {
-                        const origIdx = savedRows.indexOf(row);
+                      {filteredData.map(dep => {
+                        const isConciliado = !!dep.conciliado_banco_id;
+                        const isSelected = concSelected.has(dep.id);
                         return (
-                        <TableRow key={row.id || i}>
-                          <TableCell className="text-xs whitespace-nowrap">{new Date(row.data_deposito).toLocaleString('pt-BR')}</TableCell>
-                          <TableCell className="text-xs">{row.moeda}</TableCell>
-                          <TableCell className="text-right text-xs font-medium">{formatCurrency(row.valor)}</TableCell>
-                          <TableCell className="text-xs">{row.tipo}</TableCell>
-                          <TableCell className="text-xs">{row.depositante}</TableCell>
-                          <TableCell>
-                            <Input
-                              type="date"
-                              className="h-8 text-xs w-32"
-                              value={row.data_caixa}
-                              onChange={e => {
-                                const updated = [...savedRows];
-                                updated[origIdx] = { ...updated[origIdx], data_caixa: e.target.value };
-                                setSavedRows(updated);
-                              }}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Select
-                              value={row.turno}
-                              onValueChange={v => {
-                                const updated = [...savedRows];
-                                updated[origIdx] = { ...updated[origIdx], turno: v };
-                                setSavedRows(updated);
-                              }}
-                            >
-                              <SelectTrigger className="h-8 text-xs w-28">
-                                <SelectValue placeholder="Turno" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {TURNOS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              className="h-8 text-xs w-32"
-                              value={row.observacao}
-                              onChange={e => {
-                                const updated = [...savedRows];
-                                updated[origIdx] = { ...updated[origIdx], observacao: e.target.value };
-                                setSavedRows(updated);
-                              }}
-                              placeholder="Obs"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Button size="sm" variant="ghost" onClick={() => handleUpdateRow(savedRows[origIdx])}>
-                              <Save className="w-3 h-3" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
+                          <TableRow key={dep.id} className={cn(
+                            isConciliado && 'bg-green-50 dark:bg-green-950/20',
+                            isSelected && !isConciliado && 'bg-accent/50'
+                          )}>
+                            {role === 'admin' && (
+                              <TableCell>
+                                {!isConciliado ? (
+                                  <Checkbox checked={isSelected} onCheckedChange={() => toggleConcSelect(dep.id)} />
+                                ) : (
+                                  <CheckCircle className="w-4 h-4 text-green-600" />
+                                )}
+                              </TableCell>
+                            )}
+                            <TableCell>
+                              <Badge variant={isConciliado ? 'default' : 'secondary'} className={cn("text-[10px]", isConciliado && 'bg-green-600 hover:bg-green-700')}>
+                                {isConciliado ? 'Conciliado' : 'Pendente'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-xs whitespace-nowrap">{new Date(dep.data_deposito).toLocaleString('pt-BR')}</TableCell>
+                            <TableCell className="text-xs">{dep.moeda}</TableCell>
+                            <TableCell className="text-right text-xs font-medium">{formatCurrency(dep.valor)}</TableCell>
+                            <TableCell className="text-xs">{dep.tipo}</TableCell>
+                            <TableCell className="text-xs">{dep.depositante}</TableCell>
+                            <TableCell>
+                              <Input
+                                type="date"
+                                className="h-8 text-xs w-32"
+                                value={dep.data_caixa}
+                                onChange={e => {
+                                  setAllDepositos(prev => prev.map(d => d.id === dep.id ? { ...d, data_caixa: e.target.value } : d));
+                                }}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Select
+                                value={dep.turno}
+                                onValueChange={v => {
+                                  setAllDepositos(prev => prev.map(d => d.id === dep.id ? { ...d, turno: v } : d));
+                                }}
+                              >
+                                <SelectTrigger className="h-8 text-xs w-28"><SelectValue placeholder="Turno" /></SelectTrigger>
+                                <SelectContent>{TURNOS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                className="h-8 text-xs w-32"
+                                value={dep.observacao}
+                                onChange={e => {
+                                  setAllDepositos(prev => prev.map(d => d.id === dep.id ? { ...d, observacao: e.target.value } : d));
+                                }}
+                                placeholder="Obs"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Button size="sm" variant="ghost" onClick={() => handleUpdateRow(dep)}>
+                                <Save className="w-3 h-3" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
                         );
                       })}
                     </TableBody>
                   </Table>
                 </div>
 
-                <div className="mt-4 border-t pt-4">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold">Total do lote:</span>
-                    <span className="font-bold text-lg">{formatCurrency(savedTotal)}</span>
-                  </div>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {viewMode === 'conciliacao' && role === 'admin' && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Conciliação Bancária</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Seletor de conta bancária */}
-            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
-              <div className="flex flex-col gap-1">
-                <span className="text-sm font-medium">Conta bancária</span>
-                <Select value={concBancoId} onValueChange={setConcBancoId}>
-                  <SelectTrigger className="w-[280px] h-9 text-sm">
-                    <SelectValue placeholder="Selecionar conta" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {contasBancarias.map(c => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.banco} — Ag {c.agencia} / Cc {c.conta}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {concLoading ? (
-              <p className="text-muted-foreground text-center py-6 text-sm">Carregando...</p>
-            ) : concDepositos.length === 0 ? (
-              <p className="text-muted-foreground text-center py-6 text-sm">Todos os depósitos já foram conciliados.</p>
-            ) : (
-              <>
-                <div className="mb-3">
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      className="pl-9 h-9 text-sm"
-                      placeholder="Filtrar por depositante, tipo, data..."
-                      value={concFilter}
-                      onChange={e => setConcFilter(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-10">
-                          <Checkbox
-                            checked={concSelected.size === filteredConc.length && filteredConc.length > 0}
-                            onCheckedChange={() => {
-                              if (concSelected.size === filteredConc.length) {
-                                setConcSelected(new Set());
-                              } else {
-                                setConcSelected(new Set(filteredConc.map(d => d.id)));
-                              }
-                            }}
-                          />
-                        </TableHead>
-                        <SortableHead label="Data Caixa" active={concSortField === 'data_caixa'} dir={concSortDir} onClick={() => toggleSort('data_caixa', concSortField, concSortDir, setConcSortField, setConcSortDir)} />
-                        <SortableHead label="Data Depósito" active={concSortField === 'data_deposito'} dir={concSortDir} onClick={() => toggleSort('data_deposito', concSortField, concSortDir, setConcSortField, setConcSortDir)} />
-                        <SortableHead label="Valor" active={concSortField === 'valor'} dir={concSortDir} onClick={() => toggleSort('valor', concSortField, concSortDir, setConcSortField, setConcSortDir)} className="text-right" />
-                        <SortableHead label="Tipo" active={concSortField === 'tipo'} dir={concSortDir} onClick={() => toggleSort('tipo', concSortField, concSortDir, setConcSortField, setConcSortDir)} />
-                        <SortableHead label="Depositante" active={concSortField === 'depositante'} dir={concSortDir} onClick={() => toggleSort('depositante', concSortField, concSortDir, setConcSortField, setConcSortDir)} />
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredConc.map(dep => (
-                        <TableRow key={dep.id} className={concSelected.has(dep.id) ? 'bg-accent/50' : ''}>
-                          <TableCell>
-                            <Checkbox
-                              checked={concSelected.has(dep.id)}
-                              onCheckedChange={() => toggleConcSelect(dep.id)}
-                            />
-                          </TableCell>
-                          <TableCell className="text-xs">{dep.data_caixa}</TableCell>
-                          <TableCell className="text-xs whitespace-nowrap">{new Date(dep.data_deposito).toLocaleString('pt-BR')}</TableCell>
-                          <TableCell className="text-right text-xs font-medium">{formatCurrency(dep.valor)}</TableCell>
-                          <TableCell className="text-xs">{dep.tipo}</TableCell>
-                          <TableCell className="text-xs">{dep.depositante}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-
+                {/* Footer: total + conciliation controls */}
                 <div className="space-y-3 border-t pt-4">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold">Total selecionado ({concSelected.size} depósitos):</span>
-                    <span className="font-bold text-lg">{formatCurrency(concTotalSelected)}</span>
+                    <span className="font-semibold text-sm">{filteredData.length} depósitos — Total:</span>
+                    <span className="font-bold text-lg">{formatCurrency(totalFiltered)}</span>
                   </div>
-                  <div className="flex items-center gap-3 justify-between">
-                    <span className="font-semibold">Valor creditado no banco (R$):</span>
-                    <Input
-                      className="h-9 w-48 text-right"
-                      value={concValorBanco}
-                      onChange={e => setConcValorBanco(e.target.value)}
-                      placeholder="0,00"
-                    />
-                  </div>
-                  {(() => {
-                    const vBanco = parseFloat(concValorBanco.replace(/\./g, '').replace(',', '.')) || 0;
-                    const diff = concTotalSelected - vBanco;
-                    const hasInput = concValorBanco.trim() !== '';
-                    if (!hasInput) return null;
-                    return (
+
+                  {role === 'admin' && concSelected.size > 0 && (
+                    <div className="space-y-3 p-3 bg-muted/50 rounded-lg">
                       <div className="flex items-center justify-between">
-                        <span className="font-semibold">Diferença:</span>
-                        <span className={cn("font-bold text-lg",
-                          diff === 0 ? 'text-green-600' : diff > 0 ? 'text-yellow-600' : 'text-destructive'
-                        )}>
-                          {formatCurrency(diff)}
-                        </span>
+                        <span className="font-semibold text-sm">Total selecionado ({concSelected.size} depósitos):</span>
+                        <span className="font-bold text-lg">{formatCurrency(concTotalSelected)}</span>
                       </div>
-                    );
-                  })()}
-                  <Button
-                    onClick={handleReceberBanco}
-                    disabled={concSaving || concSelected.size === 0 || !concBancoId}
-                    className="w-full sm:w-auto"
-                  >
-                    <CheckCircle className="w-4 h-4 mr-1" />
-                    {concSaving ? 'Salvando...' : 'Receber no banco'}
-                  </Button>
+                      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs font-medium">Conta bancária</span>
+                          <Select value={concBancoId} onValueChange={setConcBancoId}>
+                            <SelectTrigger className="w-[280px] h-9 text-sm"><SelectValue placeholder="Selecionar conta" /></SelectTrigger>
+                            <SelectContent>
+                              {contasBancarias.map(c => (
+                                <SelectItem key={c.id} value={c.id}>{c.banco} — Ag {c.agencia} / Cc {c.conta}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs font-medium">Valor creditado no banco (R$)</span>
+                          <Input className="h-9 w-48 text-right" value={concValorBanco} onChange={e => setConcValorBanco(e.target.value)} placeholder="0,00" />
+                        </div>
+                        <Button onClick={handleReceberBanco} disabled={concSaving || concSelected.size === 0 || !concBancoId} className="h-9">
+                          <CheckCircle className="w-4 h-4 mr-1" />
+                          {concSaving ? 'Salvando...' : 'Receber no banco'}
+                        </Button>
+                      </div>
+                      {(() => {
+                        const vBanco = parseFloat(concValorBanco.replace(/\./g, '').replace(',', '.')) || 0;
+                        const diff = concTotalSelected - vBanco;
+                        const hasInput = concValorBanco.trim() !== '';
+                        if (!hasInput) return null;
+                        return (
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-sm">Diferença:</span>
+                            <span className={cn("font-bold text-lg", diff === 0 ? 'text-green-600' : diff > 0 ? 'text-yellow-600' : 'text-destructive')}>
+                              {formatCurrency(diff)}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               </>
             )}
