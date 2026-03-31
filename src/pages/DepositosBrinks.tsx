@@ -542,9 +542,7 @@ export default function DepositosBrinks() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Data Depósito</TableHead>
-                  <TableHead>Moeda</TableHead>
                   <TableHead className="text-right">Valor</TableHead>
-                  <TableHead>Tipo</TableHead>
                   <TableHead>Depositante</TableHead>
                   <TableHead>Data Caixa</TableHead>
                   <TableHead>Turno</TableHead>
