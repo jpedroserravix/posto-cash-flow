@@ -496,6 +496,7 @@ export default function DepositosBrinks() {
       data_caixa: r.data_caixa ? parseDateOnlyBR(r.data_caixa) : null,
       turno: r.turno || null,
       observacao: r.observacao || null,
+      centro_custo: r.centro_custo || null,
     }));
 
     // Buscar depósitos existentes para evitar duplicatas
