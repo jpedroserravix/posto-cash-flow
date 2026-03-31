@@ -45,8 +45,9 @@ export default function DepositosManuais() {
   };
 
   const parseMoney = (v: string) => {
-    if (!v) return null;
-    return parseFloat(v.replace(/\./g, '').replace(',', '.')) || 0;
+    if (!v.trim()) return null;
+    const n = parseFloat(v.replace(/\./g, '').replace(',', '.'));
+    return isNaN(n) ? null : n;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
