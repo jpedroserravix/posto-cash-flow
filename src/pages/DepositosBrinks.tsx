@@ -214,25 +214,91 @@ export default function DepositosBrinks() {
 
   };
 
-  const buscarConciliacao = async () => {
-    if (!selectedPostoId || !concDataInicial || !concDataFinal) return;
+  const loadConcDepositos = useCallback(async () => {
+    if (!selectedPostoId) return;
     setConcLoading(true);
-    const dataIni = format(concDataInicial, 'yyyy-MM-dd');
-    const dataFim = format(concDataFinal, 'yyyy-MM-dd');
     const { data, error } = await supabase
       .from('depositos_brinks')
-      .select('valor, tipo')
+      .select('id, data_deposito, data_caixa, valor, tipo, depositante')
       .eq('posto_id', selectedPostoId)
-      .gte('data_deposito', dataIni)
-      .lte('data_deposito', dataFim + 'T23:59:59')
-      .neq('tipo', 'OUTRO');
+      .is('conciliado_banco_id', null)
+      .order('data_caixa', { ascending: true });
     if (error) {
       toast.error('Erro ao buscar depósitos: ' + error.message);
     } else {
-      const total = (data || []).reduce((sum, r) => sum + Number(r.valor), 0);
-      setConcTotalBrinks(total);
+      setConcDepositos((data || []).map(d => ({
+        id: d.id,
+        data_deposito: d.data_deposito,
+        data_caixa: d.data_caixa || '',
+        valor: d.valor,
+        tipo: d.tipo,
+        depositante: d.depositante,
+      })));
     }
     setConcLoading(false);
+  }, [selectedPostoId]);
+
+  const loadContasBancarias = useCallback(async () => {
+    if (!selectedPostoId) return;
+    const { data } = await supabase
+      .from('contas_bancarias')
+      .select('id, banco, agencia, conta')
+      .eq('posto_id', selectedPostoId)
+      .order('banco');
+    setContasBancarias((data as { id: string; banco: string; agencia: string; conta: string }[]) || []);
+  }, [selectedPostoId]);
+
+  useEffect(() => {
+    if (viewMode === 'conciliacao' && selectedPostoId) {
+      loadConcDepositos();
+      loadContasBancarias();
+    }
+  }, [viewMode, selectedPostoId, loadConcDepositos, loadContasBancarias]);
+
+  const concTotalSelected = concDepositos
+    .filter(d => concSelected.has(d.id))
+    .reduce((sum, d) => sum + Number(d.valor), 0);
+
+  const toggleConcSelect = (id: string) => {
+    setConcSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (concSelected.size === concDepositos.length) {
+      setConcSelected(new Set());
+    } else {
+      setConcSelected(new Set(concDepositos.map(d => d.id)));
+    }
+  };
+
+  const handleReceberBanco = async () => {
+    if (concSelected.size === 0) {
+      toast.error('Selecione ao menos um depósito');
+      return;
+    }
+    if (!concBancoId) {
+      toast.error('Selecione uma conta bancária');
+      return;
+    }
+    setConcSaving(true);
+    const ids = Array.from(concSelected);
+    const { error } = await supabase
+      .from('depositos_brinks')
+      .update({ conciliado_banco_id: concBancoId })
+      .in('id', ids);
+    if (error) {
+      toast.error('Erro ao conciliar: ' + error.message);
+    } else {
+      toast.success(`${ids.length} depósito(s) conciliado(s)`);
+      setConcSelected(new Set());
+      setConcValorBanco('');
+      loadConcDepositos();
+    }
+    setConcSaving(false);
   };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
