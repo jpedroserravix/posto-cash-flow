@@ -666,23 +666,36 @@ export default function DepositosBrinks() {
               </p>
             ) : (
               <>
+                <div className="mb-3">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      className="pl-9 h-9 text-sm"
+                      placeholder="Filtrar por depositante, tipo, observação..."
+                      value={histFilter}
+                      onChange={e => setHistFilter(e.target.value)}
+                    />
+                  </div>
+                </div>
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Data Depósito</TableHead>
-                        <TableHead>Moeda</TableHead>
-                        <TableHead className="text-right">Valor</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Depositante</TableHead>
-                        <TableHead>Data Caixa</TableHead>
+                        <SortableHead label="Data Depósito" active={histSortField === 'data_deposito'} dir={histSortDir} onClick={() => toggleSort('data_deposito', histSortField, histSortDir, setHistSortField, setHistSortDir)} />
+                        <SortableHead label="Moeda" active={histSortField === 'moeda'} dir={histSortDir} onClick={() => toggleSort('moeda', histSortField, histSortDir, setHistSortField, setHistSortDir)} />
+                        <SortableHead label="Valor" active={histSortField === 'valor'} dir={histSortDir} onClick={() => toggleSort('valor', histSortField, histSortDir, setHistSortField, setHistSortDir)} className="text-right" />
+                        <SortableHead label="Tipo" active={histSortField === 'tipo'} dir={histSortDir} onClick={() => toggleSort('tipo', histSortField, histSortDir, setHistSortField, setHistSortDir)} />
+                        <SortableHead label="Depositante" active={histSortField === 'depositante'} dir={histSortDir} onClick={() => toggleSort('depositante', histSortField, histSortDir, setHistSortField, setHistSortDir)} />
+                        <SortableHead label="Data Caixa" active={histSortField === 'data_caixa'} dir={histSortDir} onClick={() => toggleSort('data_caixa', histSortField, histSortDir, setHistSortField, setHistSortDir)} />
                         <TableHead>Turno</TableHead>
                         <TableHead>Observação</TableHead>
                         <TableHead></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {savedRows.map((row, i) => (
+                      {filteredHistory.map((row, i) => {
+                        const origIdx = savedRows.indexOf(row);
+                        return (
                         <TableRow key={row.id || i}>
                           <TableCell className="text-xs whitespace-nowrap">{new Date(row.data_deposito).toLocaleString('pt-BR')}</TableCell>
                           <TableCell className="text-xs">{row.moeda}</TableCell>
@@ -696,7 +709,7 @@ export default function DepositosBrinks() {
                               value={row.data_caixa}
                               onChange={e => {
                                 const updated = [...savedRows];
-                                updated[i] = { ...updated[i], data_caixa: e.target.value };
+                                updated[origIdx] = { ...updated[origIdx], data_caixa: e.target.value };
                                 setSavedRows(updated);
                               }}
                             />
@@ -706,7 +719,7 @@ export default function DepositosBrinks() {
                               value={row.turno}
                               onValueChange={v => {
                                 const updated = [...savedRows];
-                                updated[i] = { ...updated[i], turno: v };
+                                updated[origIdx] = { ...updated[origIdx], turno: v };
                                 setSavedRows(updated);
                               }}
                             >
@@ -724,19 +737,20 @@ export default function DepositosBrinks() {
                               value={row.observacao}
                               onChange={e => {
                                 const updated = [...savedRows];
-                                updated[i] = { ...updated[i], observacao: e.target.value };
+                                updated[origIdx] = { ...updated[origIdx], observacao: e.target.value };
                                 setSavedRows(updated);
                               }}
                               placeholder="Obs"
                             />
                           </TableCell>
                           <TableCell>
-                            <Button size="sm" variant="ghost" onClick={() => handleUpdateRow(savedRows[i])}>
+                            <Button size="sm" variant="ghost" onClick={() => handleUpdateRow(savedRows[origIdx])}>
                               <Save className="w-3 h-3" />
                             </Button>
                           </TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
