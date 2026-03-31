@@ -821,6 +821,17 @@ export default function DepositosBrinks() {
                               </Select>
                             </TableCell>
                             <TableCell>
+                              <Select
+                                value={dep.centro_custo}
+                                onValueChange={v => {
+                                  setAllDepositos(prev => prev.map(d => d.id === dep.id ? { ...d, centro_custo: v } : d));
+                                }}
+                              >
+                                <SelectTrigger className="h-8 text-xs w-36"><SelectValue placeholder="Centro Custo" /></SelectTrigger>
+                                <SelectContent>{CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell>
                               <Input
                                 className="h-8 text-xs w-32"
                                 value={dep.observacao}

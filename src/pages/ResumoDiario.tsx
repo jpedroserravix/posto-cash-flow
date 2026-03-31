@@ -166,9 +166,10 @@ export default function ResumoDiario() {
               </TableHeader>
               <TableBody>
                 {rows.map((row, i) => (
-                  <TableRow key={`${row.data}-${row.turno}`}>
+                  <TableRow key={`${row.data}-${row.turno}-${row.centroCusto}`}>
                     <TableCell className="text-xs">{new Date(row.data + 'T00:00:00').toLocaleDateString('pt-BR')}</TableCell>
                     <TableCell className="text-xs">{row.turno}</TableCell>
+                    <TableCell className="text-xs">{row.centroCusto || '—'}</TableCell>
                     <TableCell className="text-right text-xs font-medium">{formatCurrency(row.cofreBrinks)}</TableCell>
                     <TableCell className="text-right text-xs font-medium">{formatCurrency(row.manual)}</TableCell>
                     <TableCell className="text-right text-xs font-bold">{formatCurrency(row.total)}</TableCell>

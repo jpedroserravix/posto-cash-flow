@@ -196,6 +196,7 @@ export default function DepositosManuais() {
                   <TableRow key={d.id}>
                     <TableCell className="text-xs">{new Date(d.data + 'T00:00:00').toLocaleDateString('pt-BR')}</TableCell>
                     <TableCell className="text-xs">{d.turno}</TableCell>
+                    <TableCell className="text-xs">{d.centro_custo || '—'}</TableCell>
                     <TableCell className="text-right text-xs font-medium">{formatCurrency(d.valor_lancado)}</TableCell>
                     <TableCell className="text-right text-xs">{d.valor_depositado ? formatCurrency(d.valor_depositado) : '—'}</TableCell>
                     <TableCell className={`text-right text-xs font-bold ${
