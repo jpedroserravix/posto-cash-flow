@@ -101,7 +101,7 @@ export default function ResumoDiario() {
           resumoId: val.resumoId,
         };
       })
-      .sort((a, b) => b.data.localeCompare(a.data) || a.turno.localeCompare(b.turno));
+      .sort((a, b) => b.data.localeCompare(a.data) || a.turno.localeCompare(b.turno) || a.centroCusto.localeCompare(b.centroCusto));
 
     setRows(result);
   };
