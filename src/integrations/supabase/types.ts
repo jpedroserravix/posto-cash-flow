@@ -237,7 +237,7 @@ export type Database = {
           id: string
           observacao: string | null
           posto_id: string
-          turno: string
+          turno: string | null
         }
         Insert: {
           centro_custo?: string | null
@@ -247,7 +247,7 @@ export type Database = {
           id?: string
           observacao?: string | null
           posto_id: string
-          turno: string
+          turno?: string | null
         }
         Update: {
           centro_custo?: string | null
@@ -257,7 +257,7 @@ export type Database = {
           id?: string
           observacao?: string | null
           posto_id?: string
-          turno?: string
+          turno?: string | null
         }
         Relationships: [
           {
