@@ -1,19 +1,22 @@
 
 
-# Aumentar Campo de Data Caixa
+# Remover Colunas "Moeda" e "Tipo" da Tela de Depósitos Brinks
 
-## Problema
+## Resumo
 
-O campo `<Input type="date">` da coluna "Data Caixa" tem largura fixa de `w-32` (128px), que é pequeno demais para exibir a data completa e o ícone do calendário nativo do navegador.
+Remover as colunas "Moeda" e "Tipo" de todas as tabelas e filtros na página de Depósitos Brinks. Os campos continuam sendo importados e salvos no banco, mas não são exibidos na interface.
 
-## Solução
+## Arquivo: `src/pages/DepositosBrinks.tsx`
 
-Aumentar a largura do campo de data em ambos os locais onde aparece:
+### Mudanças
 
-### Mudanças em `src/pages/DepositosBrinks.tsx`
+1. **Tabela de importação (preview)**: remover `<TableHead>Moeda</TableHead>`, `<TableHead>Tipo</TableHead>` e as `<TableCell>` correspondentes (`row.moeda`, `row.tipo`)
 
-1. **Linha 565** (tabela de importação): trocar `w-32` por `w-40`
-2. **Linha 753** (tabela principal): trocar `w-32` por `w-40`
+2. **Filtros dropdown**: remover o bloco do filtro "Tipo" (`filterTipo` Select) e o `uniqueTipos` memo. Remover o state `filterTipo` e sua lógica de filtragem
 
-Isso muda de 128px para 160px, dando espaço suficiente para a data e o ícone do calendário.
+3. **Tabela principal**: remover `<SortableHead label="Moeda" .../>`, `<SortableHead label="Tipo" .../>` e as `<TableCell>` de `dep.moeda` e `dep.tipo`
+
+4. **Busca textual**: remover `r.tipo` e `r.moeda` do filtro de texto livre
+
+Os dados continuam sendo importados do arquivo e salvos no banco normalmente — apenas a exibição na UI é removida.
 
