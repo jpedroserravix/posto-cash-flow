@@ -54,19 +54,21 @@ export default function ResumoDiario() {
       .select('*')
       .eq('posto_id', selectedPostoId);
 
-    // Group
+    // Group by data|turno|centro_custo
     const map = new Map<string, { brinks: number; manual: number; conferido: string; observacao: string; resumoId?: string }>();
 
     brinks?.forEach(b => {
       if (!b.data_caixa || !b.turno) return;
-      const key = `${b.data_caixa}|${b.turno}`;
+      const cc = (b as any).centro_custo || 'SEM CENTRO';
+      const key = `${b.data_caixa}|${b.turno}|${cc}`;
       const existing = map.get(key) || { brinks: 0, manual: 0, conferido: 'PENDENTE', observacao: '', resumoId: undefined };
       existing.brinks += b.valor;
       map.set(key, existing);
     });
 
     manuais?.forEach(m => {
-      const key = `${m.data}|${m.turno}`;
+      const cc = (m as any).centro_custo || 'SEM CENTRO';
+      const key = `${m.data}|${m.turno}|${cc}`;
       const existing = map.get(key) || { brinks: 0, manual: 0, conferido: 'PENDENTE', observacao: '', resumoId: undefined };
       existing.manual += m.valor_lancado;
       map.set(key, existing);
@@ -74,7 +76,8 @@ export default function ResumoDiario() {
 
     // Merge conference data
     conferencias?.forEach(c => {
-      const key = `${c.data}|${c.turno}`;
+      const cc = (c as any).centro_custo || 'SEM CENTRO';
+      const key = `${c.data}|${c.turno}|${cc}`;
       const existing = map.get(key);
       if (existing) {
         existing.conferido = c.conferido;
@@ -85,10 +88,11 @@ export default function ResumoDiario() {
 
     const result: ResumoRow[] = Array.from(map.entries())
       .map(([key, val]) => {
-        const [data, turno] = key.split('|');
+        const [data, turno, centroCusto] = key.split('|');
         return {
           data,
           turno,
+          centroCusto: centroCusto || '',
           cofreBrinks: val.brinks,
           manual: val.manual,
           total: val.brinks + val.manual,
