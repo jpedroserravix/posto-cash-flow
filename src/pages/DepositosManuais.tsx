@@ -55,7 +55,7 @@ export default function DepositosManuais() {
     if (!selectedPostoId) return;
 
     const valorLancado = parseMoney(formData.valor_lancado);
-    if (!valorLancado) { toast.error('Informe o valor lançado'); return; }
+    if (valorLancado === null) { toast.error('Informe o valor lançado'); return; }
 
     const record = {
       posto_id: selectedPostoId,
