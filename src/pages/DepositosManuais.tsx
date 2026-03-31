@@ -395,18 +395,12 @@ export default function DepositosManuais() {
                         {isConciliado ? (
                           <div className="space-y-0.5">
                             <Badge variant="default" className="text-[10px] bg-green-600 hover:bg-green-700 cursor-pointer" onClick={() => role === 'admin' && handleDesconciliar(d.id)}>
-                              Conciliado
+                              Recebido
                             </Badge>
                             <p className="text-[9px] text-muted-foreground truncate max-w-[120px]">{getContaName(d.conciliado_banco_id)}</p>
                           </div>
                         ) : (
-                          <Badge
-                            variant={isConferido ? 'default' : 'secondary'}
-                            className={cn("text-[10px] cursor-pointer", isConferido && 'bg-blue-600 hover:bg-blue-700')}
-                            onClick={() => handleToggleConferido(d)}
-                          >
-                            {isConferido ? 'Conferido' : 'Pendente'}
-                          </Badge>
+                          <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </TableCell>
                       <TableCell className="text-xs">{formatDate(d.data)}</TableCell>
