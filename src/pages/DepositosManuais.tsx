@@ -47,6 +47,7 @@ export default function DepositosManuais() {
   const [contas, setContas] = useState<ContaBancaria[]>([]);
   const [concSelected, setConcSelected] = useState<Set<string>>(new Set());
   const [concContaId, setConcContaId] = useState('');
+  const [bulkCentroCusto, setBulkCentroCusto] = useState('');
 
   // Sort
   const [sortCol, setSortCol] = useState<string | null>(null);
@@ -260,6 +261,22 @@ export default function DepositosManuais() {
     loadDeposits();
   };
 
+  const handleBulkCentroCusto = async () => {
+    if (concSelected.size === 0 || !bulkCentroCusto) {
+      toast.error('Selecione depósitos e um centro de custo');
+      return;
+    }
+    const ids = [...concSelected];
+    const { error } = await supabase
+      .from('depositos_manuais')
+      .update({ centro_custo: bulkCentroCusto })
+      .in('id', ids);
+    if (error) { toast.error('Erro: ' + error.message); return; }
+    toast.success(`Centro de custo aplicado em ${ids.length} depósito(s)`);
+    setBulkCentroCusto('');
+    loadDeposits();
+  };
+
   const contaLabel = (c: ContaBancaria) => `${c.banco} - Ag ${c.agencia} / Cc ${c.conta}`;
 
   const getContaName = (id: string | null) => {
@@ -356,6 +373,14 @@ export default function DepositosManuais() {
               </Button>
               <Button size="sm" variant="ghost" className="h-8" onClick={() => setConcSelected(new Set())}>
                 Cancelar
+              </Button>
+              <div className="w-px h-6 bg-border mx-1" />
+              <Select value={bulkCentroCusto} onValueChange={setBulkCentroCusto}>
+                <SelectTrigger className="h-8 w-48 text-xs"><SelectValue placeholder="Centro de Custo" /></SelectTrigger>
+                <SelectContent>{CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+              </Select>
+              <Button size="sm" className="h-8" onClick={handleBulkCentroCusto} disabled={!bulkCentroCusto}>
+                Aplicar Centro de Custo
               </Button>
             </CardContent>
           </Card>
