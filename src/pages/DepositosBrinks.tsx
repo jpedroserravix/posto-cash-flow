@@ -562,7 +562,7 @@ export default function DepositosBrinks() {
                     <TableCell className="text-xs">{row.tipo}</TableCell>
                     <TableCell className="text-xs">{row.depositante}</TableCell>
                     <TableCell>
-                      <Input type="date" className="h-8 text-xs w-32" value={row.data_caixa} onChange={e => updateImportRow(i, 'data_caixa', e.target.value)} />
+                      <Input type="date" className="h-8 text-xs w-40" value={row.data_caixa} onChange={e => updateImportRow(i, 'data_caixa', e.target.value)} />
                     </TableCell>
                     <TableCell>
                       <Select value={row.turno} onValueChange={v => updateImportRow(i, 'turno', v)}>
