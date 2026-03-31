@@ -1,20 +1,23 @@
 
 
-# Aplicar Centro de Custo em Massa nos Depósitos Manuais
+# Corrigir Visibilidade do "Aplicar Centro de Custo"
 
-## Resumo
+## Problema
 
-Adicionar na barra de conciliação (que aparece quando há itens selecionados) um seletor de Centro de Custo com um botão "Aplicar", permitindo definir o centro de custo para todos os depósitos selecionados de uma vez.
+A barra com o "Aplicar Centro de Custo" só aparece quando **as 3 condições são verdadeiras**:
+1. Usuário é admin
+2. Há itens selecionados (checkbox)
+3. **Existem contas bancárias cadastradas** (`contas.length > 0`)
 
-## Como vai funcionar
+Se não há contas bancárias, a barra inteira (incluindo o Centro de Custo em massa) fica invisível.
 
-1. Quando houver itens selecionados via checkbox, além das opções de conciliação já existentes, aparece um **Select de Centro de Custo** + botão **"Aplicar Centro de Custo"**
-2. Ao clicar, faz `UPDATE` em todos os IDs selecionados com o centro de custo escolhido
-3. Recarrega os dados e limpa a seleção
+## Solução
 
-## Mudanças em `src/pages/DepositosManuais.tsx`
+Separar a lógica: a barra de conciliação bancária continua exigindo `contas.length > 0`, mas a seção de Centro de Custo em massa deve aparecer **sempre que houver itens selecionados** (para admin).
 
-1. **Novo estado** `bulkCentroCusto` para o valor selecionado no select de aplicação em massa
-2. **Nova função** `handleBulkCentroCusto` — faz `supabase.from('depositos_manuais').update({ centro_custo }).in('id', [...concSelected])`
-3. **Na barra de conciliação** (linhas 338-363) — adicionar uma seção com o Select de `CENTROS_CUSTO` e o botão "Aplicar Centro de Custo", separada visualmente da parte de conciliação bancária por um `Separator`
+### Mudança em `src/pages/DepositosManuais.tsx`
+
+Alterar a condição da linha 356 para remover `contas.length > 0` do requisito geral, e aplicar essa restrição apenas à parte de conciliação bancária (Select de conta + botão Conciliar). A seção de Centro de Custo ficará visível independentemente de haver contas cadastradas.
+
+Concretamente: dividir o bloco em duas partes condicionais dentro do mesmo Card — a parte de conciliação bancária aparece só com contas, a parte de centro de custo aparece sempre com seleção.
 
