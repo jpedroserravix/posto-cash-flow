@@ -91,6 +91,7 @@ export default function DepositosManuais() {
     setFormData({
       data: d.data,
       turno: d.turno,
+      centro_custo: d.centro_custo || '',
       valor_lancado: d.valor_lancado.toString(),
       valor_depositado: d.valor_depositado?.toString() || '',
       observacao: d.observacao || '',
