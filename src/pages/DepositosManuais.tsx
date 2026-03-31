@@ -355,7 +355,7 @@ export default function DepositosManuais() {
       )}
 
       <Card>
-        <CardContent className="pt-4 overflow-x-auto">
+        <CardContent className="pt-4 overflow-auto max-h-[calc(100vh-200px)]">
           {depositsWithSaldo.length === 0 ? (
             <p className="text-muted-foreground text-center py-6 text-sm">Nenhum lançamento manual ainda.</p>
           ) : (
