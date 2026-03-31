@@ -1,46 +1,32 @@
 
 
-# Unificar Histórico e Conciliação + Filtros Avançados
+# Desconciliar Depósitos + Barra de Seleção Fixa
 
 ## Resumo
 
-Eliminar a separação entre "Histórico" e "Conciliação". Tudo fica em uma única tabela com checkboxes para selecionar depósitos e conciliar. Os filtros passam a ter dropdowns para escolher valores específicos (ex: selecionar um depositante específico, um tipo específico), além da ordenação já existente.
+Duas melhorias: (1) permitir desfazer conciliação de depósitos já conciliados, e (2) mover o resumo de seleção/conciliação para uma barra fixa (sticky) no topo ou rodapé da tela, sempre visível ao rolar.
 
 ## O que muda
 
-### 1. Remover abas separadas
-- Eliminar o `viewMode` de `'history' | 'conciliacao'` — só manter `'import'` vs a tela principal
-- Remover botões "Histórico" e "Conciliação" da barra de ações
-- A tela principal mostra **todos os depósitos do posto** (não mais por lote), com uma coluna indicando status (conciliado ou pendente)
+### 1. Desconciliar depósitos
+- Na coluna de checkbox, depósitos conciliados passam a ter checkbox também (em vez de apenas o ícone de check)
+- Ao selecionar depósitos conciliados, aparece botão "Desconciliar" que faz `UPDATE depositos_brinks SET conciliado_banco_id = NULL WHERE id IN (...)`
+- Separar visualmente: "X pendentes selecionados" e "Y conciliados selecionados"
 
-### 2. Tabela unificada com checkboxes
-- Todos os depósitos aparecem na mesma tabela, com checkbox na primeira coluna (admin only)
-- Depósitos já conciliados ficam com visual diferente (ex: fundo verde claro, ícone de check)
-- Filtro rápido para mostrar: "Todos", "Pendentes", "Conciliados"
-- Seletor de conta bancária + botão "Receber no banco" ficam no rodapé da tabela, junto com total selecionado e campo de valor do extrato
-
-### 3. Filtros avançados por valor específico
-Substituir o campo de texto livre por filtros dropdown para cada coluna:
-- **Depositante**: dropdown com valores únicos encontrados nos dados
-- **Tipo**: dropdown com valores únicos
-- **Turno**: dropdown com os turnos existentes
-- **Status**: Todos / Pendentes / Conciliados
-- Manter a busca por texto como opção adicional
-- Manter a ordenação clicável nos cabeçalhos
-
-### 4. Carregar todos os depósitos do posto
-- Em vez de carregar por lote, carregar todos os depósitos do posto selecionado (com paginação se necessário)
-- Incluir coluna `conciliado_banco_id` no select para saber o status
+### 2. Barra de seleção fixa (sticky)
+- Quando há depósitos selecionados, exibir uma barra fixa no rodapé da tela (`fixed bottom-0`) com:
+  - Quantidade e total selecionado
+  - Seletor de conta bancária + campo valor banco + botões "Receber" / "Desconciliar"
+- Remove a seção de conciliação do final da tabela (que fica escondida ao rolar)
 
 ## Arquivo a editar
 
-- `src/pages/DepositosBrinks.tsx` — refatoração da seção de visualização
+- `src/pages/DepositosBrinks.tsx`
 
 ## Mudanças técnicas
 
-1. **Query única**: `SELECT * FROM depositos_brinks WHERE posto_id = X ORDER BY data_deposito DESC` (sem filtro por lote)
-2. **Estados de filtro**: `filterDepositante`, `filterTipo`, `filterTurno`, `filterStatus` (cada um string ou `'all'`)
-3. **Dropdowns de filtro**: Extrair valores únicos dos dados com `[...new Set(data.map(d => d.depositante))]`
-4. **Checkbox + conciliação**: Mesmo fluxo atual de `concSelected`, `handleReceberBanco`, mas integrado na tabela única
-5. **Indicador visual**: Coluna "Status" mostrando "Pendente" / "Conciliado" com badge colorido
+1. **Checkbox em conciliados**: remover a condição `!isConciliado` que mostra apenas ícone; mostrar checkbox para todos, com indicador visual de que já está conciliado
+2. **Separar seleção**: calcular `selectedPendentes` e `selectedConciliados` a partir de `concSelected`
+3. **Botão desconciliar**: `supabase.from('depositos_brinks').update({ conciliado_banco_id: null }).in('id', ids)`
+4. **Barra sticky**: `div` com `fixed bottom-0 left-0 right-0 z-50 bg-background border-t shadow-lg p-3` que aparece condicionalmente quando `concSelected.size > 0`
 
