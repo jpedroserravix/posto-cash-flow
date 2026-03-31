@@ -47,6 +47,7 @@ export default function DepositosManuais() {
   const [contas, setContas] = useState<ContaBancaria[]>([]);
   const [concSelected, setConcSelected] = useState<Set<string>>(new Set());
   const [concContaId, setConcContaId] = useState('');
+  const [bulkCentroCusto, setBulkCentroCusto] = useState('');
 
   // Sort
   const [sortCol, setSortCol] = useState<string | null>(null);
