@@ -320,21 +320,51 @@ export default function DepositosBrinks() {
   };
 
   const selectAllFiltered = () => {
-    const pendingIds = filteredData.filter(d => !d.conciliado_banco_id).map(d => d.id);
-    const allSelected = pendingIds.every(id => concSelected.has(id));
+    const visibleIds = filteredData.map(d => d.id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every(id => concSelected.has(id));
     if (allSelected) {
       setConcSelected(prev => {
         const next = new Set(prev);
-        pendingIds.forEach(id => next.delete(id));
+        visibleIds.forEach(id => next.delete(id));
         return next;
       });
     } else {
       setConcSelected(prev => {
         const next = new Set(prev);
-        pendingIds.forEach(id => next.add(id));
+        visibleIds.forEach(id => next.add(id));
         return next;
       });
     }
+  };
+
+  // Separate selected into pendentes vs conciliados
+  const selectedPendentes = useMemo(() =>
+    allDepositos.filter(d => concSelected.has(d.id) && !d.conciliado_banco_id),
+    [allDepositos, concSelected]
+  );
+  const selectedConciliados = useMemo(() =>
+    allDepositos.filter(d => concSelected.has(d.id) && !!d.conciliado_banco_id),
+    [allDepositos, concSelected]
+  );
+  const totalSelectedPendentes = selectedPendentes.reduce((s, d) => s + Number(d.valor), 0);
+  const totalSelectedConciliados = selectedConciliados.reduce((s, d) => s + Number(d.valor), 0);
+
+  const handleDesconciliar = async () => {
+    if (selectedConciliados.length === 0) return;
+    setConcSaving(true);
+    const ids = selectedConciliados.map(d => d.id);
+    const { error } = await supabase
+      .from('depositos_brinks')
+      .update({ conciliado_banco_id: null })
+      .in('id', ids);
+    if (error) {
+      toast.error('Erro ao desconciliar: ' + error.message);
+    } else {
+      toast.success(`${ids.length} depósito(s) desconciliado(s)`);
+      setConcSelected(new Set());
+      loadAllDepositos();
+    }
+    setConcSaving(false);
   };
 
   const handleReceberBanco = async () => {
@@ -674,8 +704,8 @@ export default function DepositosBrinks() {
                           <TableHead className="w-10">
                             <Checkbox
                               checked={(() => {
-                                const pendingIds = filteredData.filter(d => !d.conciliado_banco_id).map(d => d.id);
-                                return pendingIds.length > 0 && pendingIds.every(id => concSelected.has(id));
+                                const visibleIds = filteredData.map(d => d.id);
+                                return visibleIds.length > 0 && visibleIds.every(id => concSelected.has(id));
                               })()}
                               onCheckedChange={selectAllFiltered}
                             />
@@ -704,11 +734,7 @@ export default function DepositosBrinks() {
                           )}>
                             {role === 'admin' && (
                               <TableCell>
-                                {!isConciliado ? (
-                                  <Checkbox checked={isSelected} onCheckedChange={() => toggleConcSelect(dep.id)} />
-                                ) : (
-                                  <CheckCircle className="w-4 h-4 text-green-600" />
-                                )}
+                                <Checkbox checked={isSelected} onCheckedChange={() => toggleConcSelect(dep.id)} />
                               </TableCell>
                             )}
                             <TableCell>
@@ -764,61 +790,90 @@ export default function DepositosBrinks() {
                   </Table>
                 </div>
 
-                {/* Footer: total + conciliation controls */}
-                <div className="space-y-3 border-t pt-4">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-sm">{filteredData.length} depósitos — Total:</span>
-                    <span className="font-bold text-lg">{formatCurrency(totalFiltered)}</span>
-                  </div>
-
-                  {role === 'admin' && concSelected.size > 0 && (
-                    <div className="space-y-3 p-3 bg-muted/50 rounded-lg">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-sm">Total selecionado ({concSelected.size} depósitos):</span>
-                        <span className="font-bold text-lg">{formatCurrency(concTotalSelected)}</span>
-                      </div>
-                      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-xs font-medium">Conta bancária</span>
-                          <Select value={concBancoId} onValueChange={setConcBancoId}>
-                            <SelectTrigger className="w-[280px] h-9 text-sm"><SelectValue placeholder="Selecionar conta" /></SelectTrigger>
-                            <SelectContent>
-                              {contasBancarias.map(c => (
-                                <SelectItem key={c.id} value={c.id}>{c.banco} — Ag {c.agencia} / Cc {c.conta}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <span className="text-xs font-medium">Valor creditado no banco (R$)</span>
-                          <Input className="h-9 w-48 text-right" value={concValorBanco} onChange={e => setConcValorBanco(e.target.value)} placeholder="0,00" />
-                        </div>
-                        <Button onClick={handleReceberBanco} disabled={concSaving || concSelected.size === 0 || !concBancoId} className="h-9">
-                          <CheckCircle className="w-4 h-4 mr-1" />
-                          {concSaving ? 'Salvando...' : 'Receber no banco'}
-                        </Button>
-                      </div>
-                      {(() => {
-                        const vBanco = parseFloat(concValorBanco.replace(/\./g, '').replace(',', '.')) || 0;
-                        const diff = concTotalSelected - vBanco;
-                        const hasInput = concValorBanco.trim() !== '';
-                        if (!hasInput) return null;
-                        return (
-                          <div className="flex items-center justify-between">
-                            <span className="font-semibold text-sm">Diferença:</span>
-                            <span className={cn("font-bold text-lg", diff === 0 ? 'text-green-600' : diff > 0 ? 'text-yellow-600' : 'text-destructive')}>
-                              {formatCurrency(diff)}
-                            </span>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  )}
+                {/* Footer: total */}
+                <div className="flex items-center justify-between border-t pt-3">
+                  <span className="font-semibold text-sm">{filteredData.length} depósitos — Total:</span>
+                  <span className="font-bold text-lg">{formatCurrency(totalFiltered)}</span>
                 </div>
               </>
             )}
           </CardContent>
         </Card>
+      )}
+
+      {/* Sticky bottom bar when items selected */}
+      {role === 'admin' && concSelected.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t shadow-[0_-4px_20px_rgba(0,0,0,0.15)] p-4">
+          <div className="max-w-screen-xl mx-auto space-y-3">
+            <div className="flex flex-wrap items-center gap-4 justify-between">
+              <div className="flex flex-wrap items-center gap-4">
+                {selectedPendentes.length > 0 && (
+                  <span className="text-sm">
+                    <Badge variant="secondary" className="mr-1">{selectedPendentes.length}</Badge>
+                    pendente(s): <strong>{formatCurrency(totalSelectedPendentes)}</strong>
+                  </span>
+                )}
+                {selectedConciliados.length > 0 && (
+                  <span className="text-sm">
+                    <Badge variant="default" className="mr-1 bg-green-600 hover:bg-green-700">{selectedConciliados.length}</Badge>
+                    conciliado(s): <strong>{formatCurrency(totalSelectedConciliados)}</strong>
+                  </span>
+                )}
+              </div>
+              <span className="font-bold text-lg">
+                Total: {formatCurrency(concTotalSelected)}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap gap-3 items-end">
+              {selectedPendentes.length > 0 && (
+                <>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs font-medium">Conta bancária</span>
+                    <Select value={concBancoId} onValueChange={setConcBancoId}>
+                      <SelectTrigger className="w-[280px] h-9 text-sm"><SelectValue placeholder="Selecionar conta" /></SelectTrigger>
+                      <SelectContent>
+                        {contasBancarias.map(c => (
+                          <SelectItem key={c.id} value={c.id}>{c.banco} — Ag {c.agencia} / Cc {c.conta}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs font-medium">Valor creditado (R$)</span>
+                    <Input className="h-9 w-48 text-right" value={concValorBanco} onChange={e => setConcValorBanco(e.target.value)} placeholder="0,00" />
+                  </div>
+                  <Button onClick={handleReceberBanco} disabled={concSaving || !concBancoId} className="h-9">
+                    <CheckCircle className="w-4 h-4 mr-1" />
+                    {concSaving ? 'Salvando...' : 'Receber no banco'}
+                  </Button>
+                </>
+              )}
+              {selectedConciliados.length > 0 && (
+                <Button variant="destructive" onClick={handleDesconciliar} disabled={concSaving} className="h-9">
+                  {concSaving ? 'Processando...' : `Desconciliar (${selectedConciliados.length})`}
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={() => setConcSelected(new Set())} className="h-9">
+                Limpar seleção
+              </Button>
+            </div>
+
+            {(() => {
+              const vBanco = parseFloat(concValorBanco.replace(/\./g, '').replace(',', '.')) || 0;
+              const diff = totalSelectedPendentes - vBanco;
+              if (!concValorBanco.trim() || selectedPendentes.length === 0) return null;
+              return (
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-sm">Diferença:</span>
+                  <span className={cn("font-bold", diff === 0 ? 'text-green-600' : diff > 0 ? 'text-yellow-600' : 'text-destructive')}>
+                    {formatCurrency(diff)}
+                  </span>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
       )}
     </div>
   );
