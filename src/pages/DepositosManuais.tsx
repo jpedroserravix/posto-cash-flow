@@ -1,15 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Card, CardContent } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Save, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Save, X, FilterX } from 'lucide-react';
+import { FilterableHead } from '@/components/FilterableHead';
 
 const TURNOS = ['TURNO 1', 'TURNO 2', 'TURNO 3'];
+const CENTROS_CUSTO = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO'];
+
+type SortDir = 'asc' | 'desc' | null;
 
 interface ManualDeposit {
   id: string;
@@ -21,16 +25,22 @@ interface ManualDeposit {
   observacao: string | null;
 }
 
-const CENTROS_CUSTO = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO'];
-
 export default function DepositosManuais() {
   const { selectedPostoId } = useAuth();
   const [deposits, setDeposits] = useState<ManualDeposit[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-
-  // Form state
   const [formData, setFormData] = useState({ data: '', turno: '', centro_custo: '', valor_lancado: '', valor_depositado: '', observacao: '' });
+
+  // Sort
+  const [sortCol, setSortCol] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>(null);
+
+  // Filters (Set = excluded values)
+  const [filterData, setFilterData] = useState<Set<string>>(new Set());
+  const [filterTurno, setFilterTurno] = useState<Set<string>>(new Set());
+  const [filterCentroCusto, setFilterCentroCusto] = useState<Set<string>>(new Set());
+  const [filterObservacao, setFilterObservacao] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (selectedPostoId) loadDeposits();
@@ -52,6 +62,69 @@ export default function DepositosManuais() {
     const n = parseFloat(v.replace(/\./g, '').replace(',', '.'));
     return isNaN(n) ? null : n;
   };
+
+  const formatCurrency = (v: number) =>
+    v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+  const formatDate = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('pt-BR');
+
+  // Unique values for filters
+  const uniqueData = useMemo(() => [...new Set(deposits.map(d => formatDate(d.data)))].sort(), [deposits]);
+  const uniqueTurno = useMemo(() => [...new Set(deposits.map(d => d.turno))].sort(), [deposits]);
+  const uniqueCentroCusto = useMemo(() => [...new Set(deposits.map(d => d.centro_custo || ''))].sort(), [deposits]);
+  const uniqueObservacao = useMemo(() => [...new Set(deposits.map(d => d.observacao || ''))].sort(), [deposits]);
+
+  const toggleSort = (col: string) => {
+    if (sortCol !== col) { setSortCol(col); setSortDir('asc'); }
+    else if (sortDir === 'asc') setSortDir('desc');
+    else { setSortCol(null); setSortDir(null); }
+  };
+
+  const activeFilterCount = filterData.size + filterTurno.size + filterCentroCusto.size + filterObservacao.size;
+
+  const clearAllFilters = () => {
+    setFilterData(new Set());
+    setFilterTurno(new Set());
+    setFilterCentroCusto(new Set());
+    setFilterObservacao(new Set());
+  };
+
+  // Filtered + sorted data
+  const filteredData = useMemo(() => {
+    let result = [...deposits];
+
+    if (filterData.size > 0) result = result.filter(d => !filterData.has(formatDate(d.data)));
+    if (filterTurno.size > 0) result = result.filter(d => !filterTurno.has(d.turno));
+    if (filterCentroCusto.size > 0) result = result.filter(d => !filterCentroCusto.has(d.centro_custo || ''));
+    if (filterObservacao.size > 0) result = result.filter(d => !filterObservacao.has(d.observacao || ''));
+
+    if (sortCol && sortDir) {
+      result.sort((a, b) => {
+        let va: any, vb: any;
+        switch (sortCol) {
+          case 'data': va = a.data; vb = b.data; break;
+          case 'turno': va = a.turno; vb = b.turno; break;
+          case 'centro_custo': va = a.centro_custo || ''; vb = b.centro_custo || ''; break;
+          case 'valor_lancado': va = a.valor_lancado; vb = b.valor_lancado; break;
+          case 'valor_depositado': va = a.valor_depositado || 0; vb = b.valor_depositado || 0; break;
+          case 'observacao': va = a.observacao || ''; vb = b.observacao || ''; break;
+          default: return 0;
+        }
+        if (va < vb) return sortDir === 'asc' ? -1 : 1;
+        if (va > vb) return sortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return result;
+  }, [deposits, filterData, filterTurno, filterCentroCusto, filterObservacao, sortCol, sortDir]);
+
+  // Running balance on filtered data
+  let saldoAcumulado = 0;
+  const depositsWithSaldo = filteredData.map(d => {
+    saldoAcumulado += d.valor_lancado - (d.valor_depositado || 0);
+    return { ...d, saldo: saldoAcumulado };
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,16 +179,6 @@ export default function DepositosManuais() {
     else { toast.success('Excluído'); loadDeposits(); }
   };
 
-  const formatCurrency = (v: number) =>
-    v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
-  // Calculate running balance
-  let saldoAcumulado = 0;
-  const depositsWithSaldo = deposits.map(d => {
-    saldoAcumulado += d.valor_lancado - (d.valor_depositado || 0);
-    return { ...d, saldo: saldoAcumulado };
-  });
-
   if (!selectedPostoId) {
     return <p className="text-muted-foreground text-center py-8">Selecione um posto para continuar.</p>;
   }
@@ -123,7 +186,14 @@ export default function DepositosManuais() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <h1 className="text-xl font-bold">Depósitos Manuais</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold">Depósitos Manuais</h1>
+          {activeFilterCount > 0 && (
+            <Button variant="ghost" size="sm" className="text-xs h-7" onClick={clearAllFilters}>
+              <FilterX className="w-3 h-3 mr-1" />Limpar filtros ({activeFilterCount})
+            </Button>
+          )}
+        </div>
         <Button size="sm" onClick={() => { setShowForm(!showForm); setEditingId(null); setFormData({ data: '', turno: '', centro_custo: '', valor_lancado: '', valor_depositado: '', observacao: '' }); }}>
           {showForm ? <><X className="w-4 h-4 mr-1" />Cancelar</> : <><Plus className="w-4 h-4 mr-1" />Novo Lançamento</>}
         </Button>
@@ -180,21 +250,21 @@ export default function DepositosManuais() {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Turno</TableHead>
-                  <TableHead>Centro de Custo</TableHead>
-                  <TableHead className="text-right">Valor Lançado</TableHead>
-                  <TableHead className="text-right">Valor Depositado</TableHead>
-                  <TableHead className="text-right">Saldo Pendente</TableHead>
-                  <TableHead>Observação</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
+                <tr>
+                  <FilterableHead label="Data" sortActive={sortCol === 'data'} sortDir={sortCol === 'data' ? sortDir : null} onSort={() => toggleSort('data')} uniqueValues={uniqueData} selectedValues={filterData} onFilterChange={setFilterData} />
+                  <FilterableHead label="Turno" sortActive={sortCol === 'turno'} sortDir={sortCol === 'turno' ? sortDir : null} onSort={() => toggleSort('turno')} uniqueValues={uniqueTurno} selectedValues={filterTurno} onFilterChange={setFilterTurno} />
+                  <FilterableHead label="Centro de Custo" sortActive={sortCol === 'centro_custo'} sortDir={sortCol === 'centro_custo' ? sortDir : null} onSort={() => toggleSort('centro_custo')} uniqueValues={uniqueCentroCusto} selectedValues={filterCentroCusto} onFilterChange={setFilterCentroCusto} />
+                  <FilterableHead label="Valor Lançado" sortActive={sortCol === 'valor_lancado'} sortDir={sortCol === 'valor_lancado' ? sortDir : null} onSort={() => toggleSort('valor_lancado')} uniqueValues={[]} selectedValues={new Set()} onFilterChange={() => {}} className="text-right" />
+                  <FilterableHead label="Valor Depositado" sortActive={sortCol === 'valor_depositado'} sortDir={sortCol === 'valor_depositado' ? sortDir : null} onSort={() => toggleSort('valor_depositado')} uniqueValues={[]} selectedValues={new Set()} onFilterChange={() => {}} className="text-right" />
+                  <FilterableHead label="Saldo Pendente" sortActive={false} sortDir={null} onSort={() => {}} uniqueValues={[]} selectedValues={new Set()} onFilterChange={() => {}} className="text-right" />
+                  <FilterableHead label="Observação" sortActive={sortCol === 'observacao'} sortDir={sortCol === 'observacao' ? sortDir : null} onSort={() => toggleSort('observacao')} uniqueValues={uniqueObservacao} selectedValues={filterObservacao} onFilterChange={setFilterObservacao} />
+                  <FilterableHead label="" sortActive={false} sortDir={null} onSort={() => {}} uniqueValues={[]} selectedValues={new Set()} onFilterChange={() => {}} />
+                </tr>
               </TableHeader>
               <TableBody>
                 {depositsWithSaldo.map(d => (
                   <TableRow key={d.id}>
-                    <TableCell className="text-xs">{new Date(d.data + 'T00:00:00').toLocaleDateString('pt-BR')}</TableCell>
+                    <TableCell className="text-xs">{formatDate(d.data)}</TableCell>
                     <TableCell className="text-xs">{d.turno}</TableCell>
                     <TableCell className="text-xs">{d.centro_custo || '—'}</TableCell>
                     <TableCell className="text-right text-xs font-medium">{formatCurrency(d.valor_lancado)}</TableCell>
