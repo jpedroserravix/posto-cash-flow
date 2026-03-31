@@ -36,6 +36,7 @@ function AppRoutes() {
       <Route path="/resumo" element={<ProtectedRoute><ResumoDiario /></ProtectedRoute>} />
       <Route path="/postos" element={<ProtectedRoute><Postos /></ProtectedRoute>} />
       <Route path="/usuarios" element={<ProtectedRoute><Usuarios /></ProtectedRoute>} />
+      <Route path="/bancos" element={<ProtectedRoute><ContasBancarias /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
