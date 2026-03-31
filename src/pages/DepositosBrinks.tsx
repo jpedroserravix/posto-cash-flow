@@ -704,8 +704,8 @@ export default function DepositosBrinks() {
                           <TableHead className="w-10">
                             <Checkbox
                               checked={(() => {
-                                const pendingIds = filteredData.filter(d => !d.conciliado_banco_id).map(d => d.id);
-                                return pendingIds.length > 0 && pendingIds.every(id => concSelected.has(id));
+                                const visibleIds = filteredData.map(d => d.id);
+                                return visibleIds.length > 0 && visibleIds.every(id => concSelected.has(id));
                               })()}
                               onCheckedChange={selectAllFiltered}
                             />
