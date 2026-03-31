@@ -1,26 +1,22 @@
 
 
-# Melhorar Rolagem Horizontal nas Tabelas
+# Somar Valores dos Itens Selecionados na Barra de Conciliação
 
 ## Problema
 
-As tabelas de Depósitos Brinks e Depósitos Manuais são largas e a única barra de rolagem horizontal fica no final da tabela, forçando o usuário a descer até o final para conseguir rolar para o lado.
+Ao selecionar depósitos para conciliar, a barra mostra apenas a quantidade de itens selecionados, mas não mostra a soma dos valores (lançado e depositado), dificultando a conferência.
 
 ## Solução
 
-Usar uma barra de rolagem horizontal **fixa no rodapé da tela** (sticky bottom) para que ela fique sempre visível, independente da posição vertical do scroll.
+Na barra de conciliação (linhas 338-356), calcular e exibir a soma de `valor_lancado` e `valor_depositado` dos itens selecionados.
 
-### Mudanças
+### Mudanças em `src/pages/DepositosManuais.tsx`
 
-**1. `src/pages/DepositosBrinks.tsx`**
-- Envolver a tabela principal em um container com `overflow-x-auto` e uma classe customizada que fixa a scrollbar no bottom da viewport
-- Usar CSS `position: sticky; bottom: 0` no container de scroll via uma classe utilitária
+1. **Calcular somas dos selecionados** — Adicionar um `useMemo` que filtra `deposits` pelos IDs em `concSelected` e soma `valor_lancado` e `valor_depositado`.
 
-**2. `src/pages/DepositosManuais.tsx`**
-- Mesma abordagem: container com scrollbar sticky no bottom
-
-**3. `src/index.css`**
-- Adicionar uma classe CSS customizada (ex: `.sticky-scrollbar`) que usa a pseudo-classe `::-webkit-scrollbar` e `overflow-x: auto` com `position: sticky; bottom: 0` — ou alternativamente, aplicar `max-height` com `overflow: auto` no wrapper para que a scrollbar horizontal fique sempre visível na viewport
-
-A abordagem mais simples e cross-browser: definir um `max-height` no container da tabela (ex: `calc(100vh - 200px)`) com `overflow: auto`, criando um scroll box contido onde **ambas** as barras (vertical e horizontal) ficam visíveis na tela sem precisar descer.
+2. **Exibir na barra de conciliação** — Ao lado do texto "{N} selecionado(s)", mostrar:
+   - `Valor Lançado: R$ X.XXX,XX`
+   - `Valor Depositado: R$ X.XXX,XX`
+   
+   Formatados com `formatCurrency`, em badges ou spans destacados para fácil leitura.
 
