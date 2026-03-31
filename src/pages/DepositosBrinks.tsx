@@ -201,7 +201,7 @@ export default function DepositosBrinks() {
 
   // Filter states - dropdown selection
   const [filterDepositante, setFilterDepositante] = useState<string>('all');
-  const [filterTipo, setFilterTipo] = useState<string>('all');
+  
   const [filterTurno, setFilterTurno] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterText, setFilterText] = useState('');
@@ -254,7 +254,7 @@ export default function DepositosBrinks() {
 
   // Extract unique values for dropdown filters
   const uniqueDepositantes = useMemo(() => [...new Set(allDepositos.map(d => d.depositante).filter(Boolean))].sort(), [allDepositos]);
-  const uniqueTipos = useMemo(() => [...new Set(allDepositos.map(d => d.tipo).filter(Boolean))].sort(), [allDepositos]);
+  
   const uniqueTurnos = useMemo(() => [...new Set(allDepositos.map(d => d.turno).filter(Boolean))].sort(), [allDepositos]);
 
   // Sort toggle
@@ -275,7 +275,7 @@ export default function DepositosBrinks() {
     let data = allDepositos;
 
     if (filterDepositante !== 'all') data = data.filter(d => d.depositante === filterDepositante);
-    if (filterTipo !== 'all') data = data.filter(d => d.tipo === filterTipo);
+    
     if (filterTurno !== 'all') data = data.filter(d => d.turno === filterTurno);
     if (filterStatus === 'pendente') data = data.filter(d => !d.conciliado_banco_id);
     if (filterStatus === 'conciliado') data = data.filter(d => !!d.conciliado_banco_id);
@@ -284,10 +284,8 @@ export default function DepositosBrinks() {
       const q = filterText.toLowerCase();
       data = data.filter(r =>
         r.depositante.toLowerCase().includes(q) ||
-        r.tipo.toLowerCase().includes(q) ||
         r.observacao.toLowerCase().includes(q) ||
-        r.data_deposito.toLowerCase().includes(q) ||
-        r.moeda.toLowerCase().includes(q)
+        r.data_deposito.toLowerCase().includes(q)
       );
     }
 
@@ -305,7 +303,7 @@ export default function DepositosBrinks() {
     }
 
     return data;
-  }, [allDepositos, filterDepositante, filterTipo, filterTurno, filterStatus, filterText, sortField, sortDir]);
+  }, [allDepositos, filterDepositante, filterTurno, filterStatus, filterText, sortField, sortDir]);
 
   const concTotalSelected = allDepositos
     .filter(d => concSelected.has(d.id))
@@ -506,7 +504,7 @@ export default function DepositosBrinks() {
 
   const totalFiltered = filteredData.reduce((sum, r) => sum + r.valor, 0);
 
-  const activeFilterCount = [filterDepositante, filterTipo, filterTurno, filterStatus].filter(f => f !== 'all').length;
+  const activeFilterCount = [filterDepositante, filterTurno, filterStatus].filter(f => f !== 'all').length;
 
   if (!selectedPostoId) {
     return <p className="text-muted-foreground text-center py-8">Selecione um posto para continuar.</p>;
@@ -544,9 +542,7 @@ export default function DepositosBrinks() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Data Depósito</TableHead>
-                  <TableHead>Moeda</TableHead>
                   <TableHead className="text-right">Valor</TableHead>
-                  <TableHead>Tipo</TableHead>
                   <TableHead>Depositante</TableHead>
                   <TableHead>Data Caixa</TableHead>
                   <TableHead>Turno</TableHead>
@@ -557,9 +553,7 @@ export default function DepositosBrinks() {
                 {importRows.map((row, i) => (
                   <TableRow key={i}>
                     <TableCell className="text-xs whitespace-nowrap">{row.data_deposito}</TableCell>
-                    <TableCell className="text-xs">{row.moeda}</TableCell>
                     <TableCell className="text-right text-xs font-medium">{formatCurrency(row.valor)}</TableCell>
-                    <TableCell className="text-xs">{row.tipo}</TableCell>
                     <TableCell className="text-xs">{row.depositante}</TableCell>
                     <TableCell>
                       <Input type="date" className="h-8 text-xs w-40" value={row.data_caixa} onChange={e => updateImportRow(i, 'data_caixa', e.target.value)} />
@@ -631,7 +625,7 @@ export default function DepositosBrinks() {
           <CardContent className="space-y-3">
             {/* Filters area */}
             {showFilters && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 p-3 bg-muted/50 rounded-lg">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-3 bg-muted/50 rounded-lg">
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground">Status</label>
                   <Select value={filterStatus} onValueChange={setFilterStatus}>
@@ -654,16 +648,6 @@ export default function DepositosBrinks() {
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">Tipo</label>
-                  <Select value={filterTipo} onValueChange={setFilterTipo}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      {uniqueTipos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground">Turno</label>
                   <Select value={filterTurno} onValueChange={setFilterTurno}>
                     <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
@@ -681,8 +665,8 @@ export default function DepositosBrinks() {
                   </div>
                 </div>
                 {activeFilterCount > 0 && (
-                  <div className="sm:col-span-2 lg:col-span-5 flex justify-end">
-                    <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setFilterDepositante('all'); setFilterTipo('all'); setFilterTurno('all'); setFilterStatus('all'); setFilterText(''); }}>
+                  <div className="sm:col-span-2 lg:col-span-4 flex justify-end">
+                    <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setFilterDepositante('all'); setFilterTurno('all'); setFilterStatus('all'); setFilterText(''); }}>
                       Limpar filtros
                     </Button>
                   </div>
@@ -713,9 +697,7 @@ export default function DepositosBrinks() {
                         )}
                         <TableHead className="w-20">Status</TableHead>
                         <SortableHead label="Data Depósito" active={sortField === 'data_deposito'} dir={sortDir} onClick={() => toggleSort('data_deposito')} />
-                        <SortableHead label="Moeda" active={sortField === 'moeda'} dir={sortDir} onClick={() => toggleSort('moeda')} />
                         <SortableHead label="Valor" active={sortField === 'valor'} dir={sortDir} onClick={() => toggleSort('valor')} className="text-right" />
-                        <SortableHead label="Tipo" active={sortField === 'tipo'} dir={sortDir} onClick={() => toggleSort('tipo')} />
                         <SortableHead label="Depositante" active={sortField === 'depositante'} dir={sortDir} onClick={() => toggleSort('depositante')} />
                         <SortableHead label="Data Caixa" active={sortField === 'data_caixa'} dir={sortDir} onClick={() => toggleSort('data_caixa')} />
                         <TableHead>Turno</TableHead>
@@ -743,9 +725,7 @@ export default function DepositosBrinks() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-xs whitespace-nowrap">{new Date(dep.data_deposito).toLocaleString('pt-BR')}</TableCell>
-                            <TableCell className="text-xs">{dep.moeda}</TableCell>
                             <TableCell className="text-right text-xs font-medium">{formatCurrency(dep.valor)}</TableCell>
-                            <TableCell className="text-xs">{dep.tipo}</TableCell>
                             <TableCell className="text-xs">{dep.depositante}</TableCell>
                             <TableCell>
                               <Input
