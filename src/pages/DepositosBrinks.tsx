@@ -288,11 +288,16 @@ export default function DepositosBrinks() {
   const filteredData = useMemo(() => {
     let data = allDepositos;
 
-    if (filterDepositante !== 'all') data = data.filter(d => d.depositante === filterDepositante);
-    
-    if (filterTurno !== 'all') data = data.filter(d => d.turno === filterTurno);
-    if (filterStatus === 'pendente') data = data.filter(d => !d.conciliado_banco_id);
-    if (filterStatus === 'conciliado') data = data.filter(d => !!d.conciliado_banco_id);
+    if (filterDataDeposito.size > 0) data = data.filter(d => !filterDataDeposito.has(new Date(d.data_deposito).toLocaleDateString('pt-BR')));
+    if (filterDepositante.size > 0) data = data.filter(d => !filterDepositante.has(d.depositante));
+    if (filterTurno.size > 0) data = data.filter(d => !filterTurno.has(d.turno));
+    if (filterCentroCusto.size > 0) data = data.filter(d => !filterCentroCusto.has(d.centro_custo));
+    if (filterStatus.size > 0) {
+      data = data.filter(d => {
+        const label = d.conciliado_banco_id ? 'Conciliado' : 'Pendente';
+        return !filterStatus.has(label);
+      });
+    }
 
     if (filterText.trim()) {
       const q = filterText.toLowerCase();
@@ -317,7 +322,7 @@ export default function DepositosBrinks() {
     }
 
     return data;
-  }, [allDepositos, filterDepositante, filterTurno, filterStatus, filterText, sortField, sortDir]);
+  }, [allDepositos, filterDataDeposito, filterDepositante, filterTurno, filterCentroCusto, filterStatus, filterText, sortField, sortDir]);
 
   const concTotalSelected = allDepositos
     .filter(d => concSelected.has(d.id))
