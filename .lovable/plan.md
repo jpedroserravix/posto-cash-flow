@@ -1,25 +1,41 @@
 
 
-# Indicador Visual de Salvamento Individual nos Depósitos
+# Adicionar Coluna "Centro de Custo" nas 3 Telas + Resumo
 
 ## Resumo
 
-Quando o usuário clicar no botão de salvar (ícone Save) de uma linha individual, a linha receberá um destaque visual temporário: ícone de check verde + fundo verde claro por alguns segundos.
+Adicionar o campo "Centro de Custo" (opções: Pista, Conveniência, Troca de Óleo) nas tabelas `depositos_brinks`, `depositos_manuais` e `resumo_conferencia`, e atualizar as 3 telas de UI + Resumo Diário para agrupar por centro de custo.
 
-## Mudanças em `src/pages/DepositosBrinks.tsx`
+## 1. Migração de Banco de Dados
 
-### 1. Novo state para linhas salvas
-- Adicionar `const [savedRows, setSavedRows] = useState<Set<string>>(new Set())` para rastrear quais linhas acabaram de ser salvas
+Adicionar coluna `centro_custo` (text, nullable, default null) nas 3 tabelas:
 
-### 2. Atualizar `handleUpdateRow` (linha 539)
-- Após salvar com sucesso, adicionar o `dep.id` ao `savedRows`
-- Usar `setTimeout` de 3 segundos para remover o ID do set, fazendo o indicador desaparecer automaticamente
+```sql
+ALTER TABLE depositos_brinks ADD COLUMN centro_custo text;
+ALTER TABLE depositos_manuais ADD COLUMN centro_custo text;
+ALTER TABLE resumo_conferencia ADD COLUMN centro_custo text;
+```
 
-### 3. Alterar a renderização da linha na tabela (linha 758)
-- Adicionar condição: se `savedRows.has(dep.id)`, aplicar classe `bg-green-100 dark:bg-green-900/30 transition-colors`
-- No botão Save (linha 807-809): quando `savedRows.has(dep.id)`, trocar o ícone `Save` por `Check` com cor verde (`text-green-600`)
+## 2. Depósitos Brinks (`src/pages/DepositosBrinks.tsx`)
 
-### 4. Importar `Check` do lucide-react
+- Adicionar `centro_custo` nas interfaces `BrinksRow` e `DepositoCompleto`
+- Adicionar constante `CENTROS_CUSTO = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO']`
+- Na tabela principal: adicionar coluna com Select dropdown ao lado de Turno
+- No `handleUpdateRow`: incluir `centro_custo` no update
+- No `handleSave` (importação): incluir `centro_custo` no insert (default vazio)
 
-Resultado: ao salvar, a linha pisca em verde com ícone de confirmação por 3 segundos, depois volta ao normal.
+## 3. Depósitos Manuais (`src/pages/DepositosManuais.tsx`)
+
+- Adicionar `centro_custo` na interface `ManualDeposit`
+- No formulário: adicionar Select de Centro de Custo (entre Turno e Valor)
+- Incluir no `formData`, `handleSubmit`, `handleEdit`
+- Na tabela: adicionar coluna Centro de Custo
+
+## 4. Resumo Diário (`src/pages/ResumoDiario.tsx`)
+
+- Alterar agrupamento: a chave passa de `data|turno` para `data|turno|centro_custo`
+- Incluir `centro_custo` nos selects de brinks e manuais
+- Adicionar coluna "Centro de Custo" na tabela
+- No `handleSaveRow`: incluir `centro_custo` no insert/conferência
+- Interface `ResumoRow`: adicionar campo `centroCusto`
 
