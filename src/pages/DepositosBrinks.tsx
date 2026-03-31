@@ -320,21 +320,51 @@ export default function DepositosBrinks() {
   };
 
   const selectAllFiltered = () => {
-    const pendingIds = filteredData.filter(d => !d.conciliado_banco_id).map(d => d.id);
-    const allSelected = pendingIds.every(id => concSelected.has(id));
+    const visibleIds = filteredData.map(d => d.id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every(id => concSelected.has(id));
     if (allSelected) {
       setConcSelected(prev => {
         const next = new Set(prev);
-        pendingIds.forEach(id => next.delete(id));
+        visibleIds.forEach(id => next.delete(id));
         return next;
       });
     } else {
       setConcSelected(prev => {
         const next = new Set(prev);
-        pendingIds.forEach(id => next.add(id));
+        visibleIds.forEach(id => next.add(id));
         return next;
       });
     }
+  };
+
+  // Separate selected into pendentes vs conciliados
+  const selectedPendentes = useMemo(() =>
+    allDepositos.filter(d => concSelected.has(d.id) && !d.conciliado_banco_id),
+    [allDepositos, concSelected]
+  );
+  const selectedConciliados = useMemo(() =>
+    allDepositos.filter(d => concSelected.has(d.id) && !!d.conciliado_banco_id),
+    [allDepositos, concSelected]
+  );
+  const totalSelectedPendentes = selectedPendentes.reduce((s, d) => s + Number(d.valor), 0);
+  const totalSelectedConciliados = selectedConciliados.reduce((s, d) => s + Number(d.valor), 0);
+
+  const handleDesconciliar = async () => {
+    if (selectedConciliados.length === 0) return;
+    setConcSaving(true);
+    const ids = selectedConciliados.map(d => d.id);
+    const { error } = await supabase
+      .from('depositos_brinks')
+      .update({ conciliado_banco_id: null })
+      .in('id', ids);
+    if (error) {
+      toast.error('Erro ao desconciliar: ' + error.message);
+    } else {
+      toast.success(`${ids.length} depósito(s) desconciliado(s)`);
+      setConcSelected(new Set());
+      loadAllDepositos();
+    }
+    setConcSaving(false);
   };
 
   const handleReceberBanco = async () => {
