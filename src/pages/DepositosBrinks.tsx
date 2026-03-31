@@ -233,7 +233,7 @@ export default function DepositosBrinks() {
     setLoading(true);
     const { data, error } = await supabase
       .from('depositos_brinks')
-      .select('id, data_deposito, moeda, valor, tipo, depositante, data_caixa, turno, observacao, conciliado_banco_id')
+      .select('id, data_deposito, moeda, valor, tipo, depositante, data_caixa, turno, observacao, conciliado_banco_id, centro_custo')
       .eq('posto_id', selectedPostoId)
       .order('data_deposito', { ascending: false });
     if (error) {
