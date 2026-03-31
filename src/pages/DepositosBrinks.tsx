@@ -705,7 +705,7 @@ export default function DepositosBrinks() {
               </p>
             ) : (
               <>
-                <div className="overflow-auto max-h-[calc(100vh-200px)]">
+                <HorizontalScrollSync>
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -853,7 +853,7 @@ export default function DepositosBrinks() {
                       })}
                     </TableBody>
                   </Table>
-                </div>
+                </HorizontalScrollSync>
 
                 {/* Footer: total */}
                 <div className="flex items-center justify-between border-t pt-3">

@@ -356,76 +356,78 @@ export default function DepositosManuais() {
       )}
 
       <Card>
-        <CardContent className="pt-4 overflow-auto max-h-[calc(100vh-200px)]">
+        <CardContent className="pt-4">
           {depositsWithSaldo.length === 0 ? (
             <p className="text-muted-foreground text-center py-6 text-sm">Nenhum lançamento manual ainda.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <tr>
-                  {role === 'admin' && <th className="w-8" />}
-                  <FilterableHead label="Status" sortActive={sortCol === 'status'} sortDir={sortCol === 'status' ? sortDir : null} onSort={() => toggleSort('status')} uniqueValues={uniqueStatus} selectedValues={filterStatus} onFilterChange={setFilterStatus} />
-                  <FilterableHead label="Data" sortActive={sortCol === 'data'} sortDir={sortCol === 'data' ? sortDir : null} onSort={() => toggleSort('data')} uniqueValues={uniqueData} selectedValues={filterData} onFilterChange={setFilterData} />
-                  <FilterableHead label="Turno" sortActive={sortCol === 'turno'} sortDir={sortCol === 'turno' ? sortDir : null} onSort={() => toggleSort('turno')} uniqueValues={uniqueTurno} selectedValues={filterTurno} onFilterChange={setFilterTurno} />
-                  <FilterableHead label="Centro de Custo" sortActive={sortCol === 'centro_custo'} sortDir={sortCol === 'centro_custo' ? sortDir : null} onSort={() => toggleSort('centro_custo')} uniqueValues={uniqueCentroCusto} selectedValues={filterCentroCusto} onFilterChange={setFilterCentroCusto} />
-                  <FilterableHead label="Valor Lançado" sortActive={sortCol === 'valor_lancado'} sortDir={sortCol === 'valor_lancado' ? sortDir : null} onSort={() => toggleSort('valor_lancado')} uniqueValues={[]} selectedValues={new Set()} onFilterChange={() => {}} className="text-right" />
-                  <FilterableHead label="Valor Depositado" sortActive={sortCol === 'valor_depositado'} sortDir={sortCol === 'valor_depositado' ? sortDir : null} onSort={() => toggleSort('valor_depositado')} uniqueValues={[]} selectedValues={new Set()} onFilterChange={() => {}} className="text-right" />
-                  <FilterableHead label="Saldo Pendente" sortActive={false} sortDir={null} onSort={() => {}} uniqueValues={[]} selectedValues={new Set()} onFilterChange={() => {}} className="text-right" />
-                  <FilterableHead label="Observação" sortActive={sortCol === 'observacao'} sortDir={sortCol === 'observacao' ? sortDir : null} onSort={() => toggleSort('observacao')} uniqueValues={uniqueObservacao} selectedValues={filterObservacao} onFilterChange={setFilterObservacao} />
-                  <FilterableHead label="" sortActive={false} sortDir={null} onSort={() => {}} uniqueValues={[]} selectedValues={new Set()} onFilterChange={() => {}} />
-                </tr>
-              </TableHeader>
-              <TableBody>
-                {depositsWithSaldo.map(d => {
-                  const isConciliado = !!d.conciliado_banco_id;
-                  const isConferido = d.conferido === 'OK';
-                  const isSelected = concSelected.has(d.id);
-                  return (
-                    <TableRow key={d.id} className={cn(
-                      isConciliado && 'bg-green-50 dark:bg-green-950/20',
-                      isSelected && !isConciliado && 'bg-accent/50'
-                    )}>
-                      {role === 'admin' && (
-                        <TableCell className="w-8">
-                          {!isConciliado && (
-                            <Checkbox checked={isSelected} onCheckedChange={() => toggleConcSelect(d.id)} />
+            <HorizontalScrollSync>
+              <Table>
+                <TableHeader>
+                  <tr>
+                    {role === 'admin' && <th className="w-8" />}
+                    <FilterableHead label="Status" sortActive={sortCol === 'status'} sortDir={sortCol === 'status' ? sortDir : null} onSort={() => toggleSort('status')} uniqueValues={uniqueStatus} selectedValues={filterStatus} onFilterChange={setFilterStatus} />
+                    <FilterableHead label="Data" sortActive={sortCol === 'data'} sortDir={sortCol === 'data' ? sortDir : null} onSort={() => toggleSort('data')} uniqueValues={uniqueData} selectedValues={filterData} onFilterChange={setFilterData} />
+                    <FilterableHead label="Turno" sortActive={sortCol === 'turno'} sortDir={sortCol === 'turno' ? sortDir : null} onSort={() => toggleSort('turno')} uniqueValues={uniqueTurno} selectedValues={filterTurno} onFilterChange={setFilterTurno} />
+                    <FilterableHead label="Centro de Custo" sortActive={sortCol === 'centro_custo'} sortDir={sortCol === 'centro_custo' ? sortDir : null} onSort={() => toggleSort('centro_custo')} uniqueValues={uniqueCentroCusto} selectedValues={filterCentroCusto} onFilterChange={setFilterCentroCusto} />
+                    <FilterableHead label="Valor Lançado" sortActive={sortCol === 'valor_lancado'} sortDir={sortCol === 'valor_lancado' ? sortDir : null} onSort={() => toggleSort('valor_lancado')} uniqueValues={[]} selectedValues={new Set()} onFilterChange={() => {}} className="text-right" />
+                    <FilterableHead label="Valor Depositado" sortActive={sortCol === 'valor_depositado'} sortDir={sortCol === 'valor_depositado' ? sortDir : null} onSort={() => toggleSort('valor_depositado')} uniqueValues={[]} selectedValues={new Set()} onFilterChange={() => {}} className="text-right" />
+                    <FilterableHead label="Saldo Pendente" sortActive={false} sortDir={null} onSort={() => {}} uniqueValues={[]} selectedValues={new Set()} onFilterChange={() => {}} className="text-right" />
+                    <FilterableHead label="Observação" sortActive={sortCol === 'observacao'} sortDir={sortCol === 'observacao' ? sortDir : null} onSort={() => toggleSort('observacao')} uniqueValues={uniqueObservacao} selectedValues={filterObservacao} onFilterChange={setFilterObservacao} />
+                    <FilterableHead label="" sortActive={false} sortDir={null} onSort={() => {}} uniqueValues={[]} selectedValues={new Set()} onFilterChange={() => {}} />
+                  </tr>
+                </TableHeader>
+                <TableBody>
+                  {depositsWithSaldo.map(d => {
+                    const isConciliado = !!d.conciliado_banco_id;
+                    const isConferido = d.conferido === 'OK';
+                    const isSelected = concSelected.has(d.id);
+                    return (
+                      <TableRow key={d.id} className={cn(
+                        isConciliado && 'bg-green-50 dark:bg-green-950/20',
+                        isSelected && !isConciliado && 'bg-accent/50'
+                      )}>
+                        {role === 'admin' && (
+                          <TableCell className="w-8">
+                            {!isConciliado && (
+                              <Checkbox checked={isSelected} onCheckedChange={() => toggleConcSelect(d.id)} />
+                            )}
+                          </TableCell>
+                        )}
+                        <TableCell>
+                          {isConciliado ? (
+                            <div className="space-y-0.5">
+                              <Badge variant="default" className="text-[10px] bg-green-600 hover:bg-green-700 cursor-pointer" onClick={() => role === 'admin' && handleDesconciliar(d.id)}>
+                                Recebido
+                              </Badge>
+                              <p className="text-[9px] text-muted-foreground truncate max-w-[120px]">{getContaName(d.conciliado_banco_id)}</p>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
                           )}
                         </TableCell>
-                      )}
-                      <TableCell>
-                        {isConciliado ? (
-                          <div className="space-y-0.5">
-                            <Badge variant="default" className="text-[10px] bg-green-600 hover:bg-green-700 cursor-pointer" onClick={() => role === 'admin' && handleDesconciliar(d.id)}>
-                              Recebido
-                            </Badge>
-                            <p className="text-[9px] text-muted-foreground truncate max-w-[120px]">{getContaName(d.conciliado_banco_id)}</p>
+                        <TableCell className="text-xs">{formatDate(d.data)}</TableCell>
+                        <TableCell className="text-xs">{d.turno}</TableCell>
+                        <TableCell className="text-xs">{d.centro_custo || '—'}</TableCell>
+                        <TableCell className="text-right text-xs font-medium">{formatCurrency(d.valor_lancado)}</TableCell>
+                        <TableCell className="text-right text-xs">{d.valor_depositado ? formatCurrency(d.valor_depositado) : '—'}</TableCell>
+                        <TableCell className={`text-right text-xs font-bold ${
+                          d.saldo === 0 ? 'text-success' : d.saldo > 0 ? 'text-warning' : 'text-destructive'
+                        }`}>
+                          {formatCurrency(d.saldo)}
+                        </TableCell>
+                        <TableCell className="text-xs">{d.observacao || ''}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button size="sm" variant="ghost" onClick={() => handleEdit(d)}><Pencil className="w-3 h-3" /></Button>
+                            <Button size="sm" variant="ghost" onClick={() => handleDelete(d.id)}><Trash2 className="w-3 h-3" /></Button>
                           </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-xs">{formatDate(d.data)}</TableCell>
-                      <TableCell className="text-xs">{d.turno}</TableCell>
-                      <TableCell className="text-xs">{d.centro_custo || '—'}</TableCell>
-                      <TableCell className="text-right text-xs font-medium">{formatCurrency(d.valor_lancado)}</TableCell>
-                      <TableCell className="text-right text-xs">{d.valor_depositado ? formatCurrency(d.valor_depositado) : '—'}</TableCell>
-                      <TableCell className={`text-right text-xs font-bold ${
-                        d.saldo === 0 ? 'text-success' : d.saldo > 0 ? 'text-warning' : 'text-destructive'
-                      }`}>
-                        {formatCurrency(d.saldo)}
-                      </TableCell>
-                      <TableCell className="text-xs">{d.observacao || ''}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          <Button size="sm" variant="ghost" onClick={() => handleEdit(d)}><Pencil className="w-3 h-3" /></Button>
-                          <Button size="sm" variant="ghost" onClick={() => handleDelete(d.id)}><Trash2 className="w-3 h-3" /></Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </HorizontalScrollSync>
           )}
         </CardContent>
       </Card>
