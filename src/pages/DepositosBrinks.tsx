@@ -275,7 +275,7 @@ export default function DepositosBrinks() {
     let data = allDepositos;
 
     if (filterDepositante !== 'all') data = data.filter(d => d.depositante === filterDepositante);
-    if (filterTipo !== 'all') data = data.filter(d => d.tipo === filterTipo);
+    
     if (filterTurno !== 'all') data = data.filter(d => d.turno === filterTurno);
     if (filterStatus === 'pendente') data = data.filter(d => !d.conciliado_banco_id);
     if (filterStatus === 'conciliado') data = data.filter(d => !!d.conciliado_banco_id);
