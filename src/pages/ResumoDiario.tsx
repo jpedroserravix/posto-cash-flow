@@ -14,6 +14,7 @@ const CONFERIDO_OPTIONS = ['OK', 'PENDENTE', 'DIVERGÊNCIA'];
 interface ResumoRow {
   data: string;
   turno: string;
+  centroCusto: string;
   cofreBrinks: number;
   manual: number;
   total: number;
