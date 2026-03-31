@@ -9,24 +9,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Upload, Save, Search, CheckCircle, ArrowUp, ArrowDown, ArrowUpDown, Filter, Check } from 'lucide-react';
+import { Upload, Save, Search, CheckCircle, Filter, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
+import { FilterableHead } from '@/components/FilterableHead';
 
 type SortDir = 'asc' | 'desc' | null;
-
-function SortableHead({ label, active, dir, onClick, className }: { label: string; active: boolean; dir: SortDir; onClick: () => void; className?: string }) {
-  return (
-    <TableHead className={cn("cursor-pointer select-none hover:bg-muted/50", className)} onClick={onClick}>
-      <span className="inline-flex items-center gap-1">
-        {label}
-        {!active && <ArrowUpDown className="w-3 h-3 text-muted-foreground" />}
-        {active && dir === 'asc' && <ArrowUp className="w-3 h-3" />}
-        {active && dir === 'desc' && <ArrowDown className="w-3 h-3" />}
-      </span>
-    </TableHead>
-  );
-}
 
 interface BrinksRow {
   id?: string;
