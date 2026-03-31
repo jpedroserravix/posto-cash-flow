@@ -81,7 +81,7 @@ export default function DepositosManuais() {
       toast.success('Lançamento adicionado');
     }
 
-    setFormData({ data: '', turno: '', valor_lancado: '', valor_depositado: '', observacao: '' });
+    setFormData({ data: '', turno: '', centro_custo: '', valor_lancado: '', valor_depositado: '', observacao: '' });
     setShowForm(false);
     loadDeposits();
   };
