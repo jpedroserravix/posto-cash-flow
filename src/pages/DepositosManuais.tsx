@@ -261,6 +261,22 @@ export default function DepositosManuais() {
     loadDeposits();
   };
 
+  const handleBulkCentroCusto = async () => {
+    if (concSelected.size === 0 || !bulkCentroCusto) {
+      toast.error('Selecione depósitos e um centro de custo');
+      return;
+    }
+    const ids = [...concSelected];
+    const { error } = await supabase
+      .from('depositos_manuais')
+      .update({ centro_custo: bulkCentroCusto })
+      .in('id', ids);
+    if (error) { toast.error('Erro: ' + error.message); return; }
+    toast.success(`Centro de custo aplicado em ${ids.length} depósito(s)`);
+    setBulkCentroCusto('');
+    loadDeposits();
+  };
+
   const contaLabel = (c: ContaBancaria) => `${c.banco} - Ag ${c.agencia} / Cc ${c.conta}`;
 
   const getContaName = (id: string | null) => {
