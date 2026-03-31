@@ -264,10 +264,12 @@ export default function DepositosBrinks() {
     }
   }, [selectedPostoId, loadAllDepositos, loadContasBancarias]);
 
-  // Extract unique values for dropdown filters
+  // Extract unique values for filters
+  const uniqueDataDeposito = useMemo(() => [...new Set(allDepositos.map(d => new Date(d.data_deposito).toLocaleDateString('pt-BR')))].sort(), [allDepositos]);
   const uniqueDepositantes = useMemo(() => [...new Set(allDepositos.map(d => d.depositante).filter(Boolean))].sort(), [allDepositos]);
-  
   const uniqueTurnos = useMemo(() => [...new Set(allDepositos.map(d => d.turno).filter(Boolean))].sort(), [allDepositos]);
+  const uniqueCentrosCusto = useMemo(() => [...new Set(allDepositos.map(d => d.centro_custo).filter(Boolean))].sort(), [allDepositos]);
+  const uniqueStatus = useMemo(() => ['Pendente', 'Conciliado'], []);
 
   // Sort toggle
   const toggleSort = (field: string) => {
