@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Upload, Save, Search, CheckCircle, ArrowUp, ArrowDown, ArrowUpDown, Filter } from 'lucide-react';
+import { Upload, Save, Search, CheckCircle, ArrowUp, ArrowDown, ArrowUpDown, Filter, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
 
@@ -205,6 +205,7 @@ export default function DepositosBrinks() {
 
   // Conciliation state
   const [concSelected, setConcSelected] = useState<Set<string>>(new Set());
+  const [savedRows, setSavedRows] = useState<Set<string>>(new Set());
   const [concValorBanco, setConcValorBanco] = useState<string>('');
   const [concBancoId, setConcBancoId] = useState<string>('');
   const [contasBancarias, setContasBancarias] = useState<{ id: string; banco: string; agencia: string; conta: string }[]>([]);
@@ -540,8 +541,19 @@ export default function DepositosBrinks() {
     const { error } = await supabase.from('depositos_brinks')
       .update({ data_caixa: dep.data_caixa || null, turno: dep.turno || null, observacao: dep.observacao || null })
       .eq('id', dep.id);
-    if (error) toast.error('Erro: ' + error.message);
-    else toast.success('Atualizado');
+    if (error) {
+      toast.error('Erro: ' + error.message);
+    } else {
+      toast.success('Atualizado');
+      setSavedRows(prev => new Set(prev).add(dep.id));
+      setTimeout(() => {
+        setSavedRows(prev => {
+          const next = new Set(prev);
+          next.delete(dep.id);
+          return next;
+        });
+      }, 3000);
+    }
   };
 
   const formatCurrency = (v: number) =>
@@ -756,8 +768,9 @@ export default function DepositosBrinks() {
                         const isSelected = concSelected.has(dep.id);
                         return (
                           <TableRow key={dep.id} className={cn(
-                            isConciliado && 'bg-green-50 dark:bg-green-950/20',
-                            isSelected && !isConciliado && 'bg-accent/50'
+                            savedRows.has(dep.id) && 'bg-green-100 dark:bg-green-900/30 transition-colors',
+                            isConciliado && !savedRows.has(dep.id) && 'bg-green-50 dark:bg-green-950/20',
+                            isSelected && !isConciliado && !savedRows.has(dep.id) && 'bg-accent/50'
                           )}>
                             {role === 'admin' && (
                               <TableCell>
@@ -805,7 +818,7 @@ export default function DepositosBrinks() {
                             </TableCell>
                             <TableCell>
                               <Button size="sm" variant="ghost" onClick={() => handleUpdateRow(dep)}>
-                                <Save className="w-3 h-3" />
+                                {savedRows.has(dep.id) ? <Check className="w-3 h-3 text-green-600" /> : <Save className="w-3 h-3" />}
                               </Button>
                             </TableCell>
                           </TableRow>
