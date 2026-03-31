@@ -249,6 +249,7 @@ export default function DepositosBrinks() {
         data_caixa: d.data_caixa || '',
         turno: d.turno || '',
         observacao: d.observacao || '',
+        centro_custo: (d as any).centro_custo || '',
         conciliado_banco_id: d.conciliado_banco_id,
       })));
     }
