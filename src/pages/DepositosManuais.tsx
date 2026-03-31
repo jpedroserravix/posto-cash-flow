@@ -126,7 +126,7 @@ export default function DepositosManuais() {
   };
 
   const getStatus = (d: ManualDeposit) =>
-    d.conciliado_banco_id ? 'Conciliado' : d.conferido === 'OK' ? 'Conferido' : 'Pendente';
+    d.conciliado_banco_id ? 'Recebido' : '';
 
   // Filtered + sorted data
   const filteredData = useMemo(() => {
