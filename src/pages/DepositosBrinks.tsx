@@ -798,25 +798,42 @@ export default function DepositosBrinks() {
               <p className="text-muted-foreground text-center py-6 text-sm">Todos os depósitos já foram conciliados.</p>
             ) : (
               <>
+                <div className="mb-3">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      className="pl-9 h-9 text-sm"
+                      placeholder="Filtrar por depositante, tipo, data..."
+                      value={concFilter}
+                      onChange={e => setConcFilter(e.target.value)}
+                    />
+                  </div>
+                </div>
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-10">
                           <Checkbox
-                            checked={concSelected.size === concDepositos.length && concDepositos.length > 0}
-                            onCheckedChange={toggleSelectAll}
+                            checked={concSelected.size === filteredConc.length && filteredConc.length > 0}
+                            onCheckedChange={() => {
+                              if (concSelected.size === filteredConc.length) {
+                                setConcSelected(new Set());
+                              } else {
+                                setConcSelected(new Set(filteredConc.map(d => d.id)));
+                              }
+                            }}
                           />
                         </TableHead>
-                        <TableHead>Data Caixa</TableHead>
-                        <TableHead>Data Depósito</TableHead>
-                        <TableHead className="text-right">Valor</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Depositante</TableHead>
+                        <SortableHead label="Data Caixa" active={concSortField === 'data_caixa'} dir={concSortDir} onClick={() => toggleSort('data_caixa', concSortField, concSortDir, setConcSortField, setConcSortDir)} />
+                        <SortableHead label="Data Depósito" active={concSortField === 'data_deposito'} dir={concSortDir} onClick={() => toggleSort('data_deposito', concSortField, concSortDir, setConcSortField, setConcSortDir)} />
+                        <SortableHead label="Valor" active={concSortField === 'valor'} dir={concSortDir} onClick={() => toggleSort('valor', concSortField, concSortDir, setConcSortField, setConcSortDir)} className="text-right" />
+                        <SortableHead label="Tipo" active={concSortField === 'tipo'} dir={concSortDir} onClick={() => toggleSort('tipo', concSortField, concSortDir, setConcSortField, setConcSortDir)} />
+                        <SortableHead label="Depositante" active={concSortField === 'depositante'} dir={concSortDir} onClick={() => toggleSort('depositante', concSortField, concSortDir, setConcSortField, setConcSortDir)} />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {concDepositos.map(dep => (
+                      {filteredConc.map(dep => (
                         <TableRow key={dep.id} className={concSelected.has(dep.id) ? 'bg-accent/50' : ''}>
                           <TableCell>
                             <Checkbox
