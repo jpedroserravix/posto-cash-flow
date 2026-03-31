@@ -210,13 +210,13 @@ export default function DepositosBrinks() {
   const [sortField, setSortField] = useState<string | null>('data_deposito');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
-  // Filter states - dropdown selection
-  const [filterDepositante, setFilterDepositante] = useState<string>('all');
-  
-  const [filterTurno, setFilterTurno] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
+  // Filter states - Set-based (excluded values)
+  const [filterDataDeposito, setFilterDataDeposito] = useState<Set<string>>(new Set());
+  const [filterDepositante, setFilterDepositante] = useState<Set<string>>(new Set());
+  const [filterTurno, setFilterTurno] = useState<Set<string>>(new Set());
+  const [filterCentroCusto, setFilterCentroCusto] = useState<Set<string>>(new Set());
+  const [filterStatus, setFilterStatus] = useState<Set<string>>(new Set());
   const [filterText, setFilterText] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
 
   // Load all deposits
   const loadAllDepositos = useCallback(async () => {
