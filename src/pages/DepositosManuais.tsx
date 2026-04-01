@@ -325,9 +325,12 @@ export default function DepositosManuais() {
               </div>
               <div>
                 <label className="text-xs font-medium mb-1 block">Centro de Custo</label>
-                <Select value={formData.centro_custo} onValueChange={v => setFormData({ ...formData, centro_custo: v })}>
+                <Select value={formData.centro_custo || '__empty__'} onValueChange={v => setFormData({ ...formData, centro_custo: v === '__empty__' ? '' : v })}>
                   <SelectTrigger className="h-9"><SelectValue placeholder="Selecionar" /></SelectTrigger>
-                  <SelectContent>{CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    <SelectItem value="__empty__">(Em branco)</SelectItem>
+                    {CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
                 </Select>
               </div>
               <div>
