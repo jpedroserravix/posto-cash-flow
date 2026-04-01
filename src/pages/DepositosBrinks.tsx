@@ -184,28 +184,15 @@ function parseXLSX(data: ArrayBuffer): BrinksRow[] {
 
 function normalizeDate(d: string): string {
   if (!d) return '';
-  // Try ISO format (from DB): "2026-03-15T10:30:00+00:00"
-  if (d.includes('T') || /^\d{4}-\d{2}-\d{2}/.test(d)) {
-    try {
-      const date = new Date(d);
-      if (!isNaN(date.getTime())) {
-        return date.toISOString().replace('T', ' ').split('.')[0];
-      }
-    } catch {}
+  // String-based normalization — no Date object, no timezone issues
+  const cleaned = d.replace(/T/, ' ').replace(/([+-]\d{2}:\d{2}|Z)$/, '').split('.')[0].trim();
+  // If BR format DD/MM/YYYY, convert to YYYY-MM-DD
+  if (cleaned.includes('/')) {
+    const [datePart, timePart] = cleaned.split(' ');
+    const [day, month, year] = datePart.split('/');
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')} ${timePart || '00:00:00'}`;
   }
-  // Try BR format (from file): "15/03/2026 10:30:00"
-  if (d.includes('/')) {
-    try {
-      const [datePart, timePart] = d.split(' ');
-      const [day, month, year] = datePart.split('/');
-      const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day),
-        ...(timePart ? timePart.split(':').map(Number) as [number, number, number] : [0, 0, 0]));
-      if (!isNaN(date.getTime())) {
-        return date.toISOString().replace('T', ' ').split('.')[0];
-      }
-    } catch {}
-  }
-  return d;
+  return cleaned;
 }
 
 function rowKey(r: { data_deposito: string; valor: number; depositante: string; tipo: string }) {
