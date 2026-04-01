@@ -1,42 +1,42 @@
 
 
-# Corrigir Duplicação na Importação Brinks
+# Limpar Duplicados e Corrigir Detecção
 
-## Problema
+## Etapa 1 — Deletar duplicados existentes no banco
 
-A detecção de duplicatas na função `handleFile` (linha 430-436) compara a `data_deposito` do arquivo importado com a do banco de dados usando `rowKey()`, que concatena os valores brutos. Porém:
+Usar uma query SQL para manter apenas 1 registro por combinação `(data_deposito, valor, depositante, tipo, posto_id)`, deletando os que têm ID duplicado (mantendo o mais antigo por `created_at`).
 
-- **Arquivo importado**: data vem formatada como `"DD/MM/YYYY HH:MM:SS"` (ex: `"15/03/2026 10:30:00"`)
-- **Banco de dados**: data vem como ISO timestamp (ex: `"2026-03-15T10:30:00+00:00"`)
-
-Como os formatos são diferentes, `rowKey()` nunca encontra match, e **todos os registros são considerados novos**, gerando duplicatas a cada importação.
-
-## Solução
-
-Normalizar o campo `data_deposito` antes de comparar. Converter ambos os lados (dados do banco e dados importados) para um formato comum antes de gerar a chave de comparação.
-
-### Mudanças em `src/pages/DepositosBrinks.tsx`
-
-1. **Criar função `normalizeDate`** que converte qualquer formato de data para `YYYY-MM-DD HH:MM:SS` (canônico para comparação)
-
-2. **Alterar `rowKey`** para usar `normalizeDate` no campo `data_deposito`, garantindo que tanto o dado do banco quanto o do arquivo resultem na mesma chave
-
-3. **Na função `handleFile`**, aplicar `normalizeDate` tanto nos registros existentes (`existing`) quanto nos registros parseados (`parsed`) ao gerar as chaves de comparação
-
-Concretamente:
+```sql
+DELETE FROM depositos_brinks
+WHERE id NOT IN (
+  SELECT DISTINCT ON (data_deposito, valor, depositante, tipo, posto_id)
+    id
+  FROM depositos_brinks
+  ORDER BY data_deposito, valor, depositante, tipo, posto_id, created_at ASC
+);
 ```
+
+## Etapa 2 — Corrigir `normalizeDate` no código
+
+**Causa raiz**: O arquivo gera datas como `"2026-03-31T08:20:39"` (sem timezone). O `new Date()` do JavaScript interpreta isso como horário **local**. Já o banco retorna `"2026-03-31T08:20:39+00:00"` que é interpretado como **UTC**. Resultado: a mesma data gera strings diferentes.
+
+**Correção**: Em vez de usar `new Date()` e `toISOString()`, extrair diretamente a parte `YYYY-MM-DD HH:MM:SS` da string com regex/split, sem passar pelo objeto Date. Isso evita qualquer problema de timezone.
+
+```typescript
 function normalizeDate(d: string): string {
-  // Tenta parse ISO (banco) e DD/MM/YYYY (arquivo)
-  // Retorna YYYY-MM-DD HH:MM:SS
+  if (!d) return '';
+  // Remove timezone suffix and T separator, extract raw datetime
+  const cleaned = d.replace(/[T]/, ' ').replace(/([+-]\d{2}:\d{2}|Z)$/, '').split('.')[0].trim();
+  // If BR format DD/MM/YYYY, convert to YYYY-MM-DD
+  if (cleaned.includes('/')) {
+    const [datePart, timePart] = cleaned.split(' ');
+    const [day, month, year] = datePart.split('/');
+    return `${year}-${month}-${day} ${timePart || '00:00:00'}`;
+  }
+  return cleaned;
 }
 ```
 
-E no `rowKey`:
-```
-function rowKey(r) {
-  return `${normalizeDate(r.data_deposito)}|${r.valor}|${r.depositante}|${r.tipo}`;
-}
-```
-
-Isso garante que `"15/03/2026 10:30:00"` e `"2026-03-15T10:30:00+00:00"` gerem a mesma chave, eliminando as duplicatas.
+### Arquivo alterado
+- `src/pages/DepositosBrinks.tsx` — função `normalizeDate`
 
