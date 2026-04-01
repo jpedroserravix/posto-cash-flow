@@ -279,7 +279,20 @@ export default function DepositosBrinks() {
   }, [selectedPostoId, loadAllDepositos, loadContasBancarias]);
 
   // Extract unique values for filters
-  const uniqueDataDeposito = useMemo(() => [...new Set(allDepositos.map(d => new Date(d.data_deposito).toLocaleDateString('pt-BR')))].sort(), [allDepositos]);
+  const formatDateDirect = (isoString: string): string => {
+    if (!isoString) return '';
+    const cleaned = isoString.replace(/T/, ' ').replace(/([+-]\d{2}:\d{2}|Z)$/, '').split('.')[0].trim();
+    if (cleaned.includes('/')) return cleaned;
+    const [datePart, timePart] = cleaned.split(' ');
+    const [y, m, d] = datePart.split('-');
+    return `${d}/${m}/${y}${timePart ? ' ' + timePart : ''}`;
+  };
+  const formatDateOnlyDirect = (isoString: string): string => {
+    const full = formatDateDirect(isoString);
+    return full.split(' ')[0] || '';
+  };
+
+  const uniqueDataDeposito = useMemo(() => [...new Set(allDepositos.map(d => formatDateOnlyDirect(d.data_deposito)))].sort(), [allDepositos]);
   const uniqueDepositantes = useMemo(() => [...new Set(allDepositos.map(d => d.depositante).filter(Boolean))].sort(), [allDepositos]);
   const uniqueTurnos = useMemo(() => [...new Set(allDepositos.map(d => d.turno).filter(Boolean))].sort(), [allDepositos]);
   const uniqueCentrosCusto = useMemo(() => [...new Set(allDepositos.map(d => d.centro_custo).filter(Boolean))].sort(), [allDepositos]);
