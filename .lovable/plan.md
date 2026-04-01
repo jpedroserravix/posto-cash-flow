@@ -1,17 +1,25 @@
 
 
-# Manter Depósitos Salvos em Verde Permanentemente
+# Adicionar Opção em Branco no Centro de Custo + Excluir do Resumo Diário
 
-## Problema
+## Resumo
 
-Atualmente, quando um depósito é salvo, ele fica verde por 3 segundos e depois volta ao normal (linhas 580-586 removem o ID do `savedRows` após timeout).
+Adicionar uma opção em branco ("Sem centro de custo") nos selects de centro de custo em Depósitos Brinks e Depósitos Manuais. Depósitos com centro de custo em branco/null serão ignorados no Resumo Diário.
 
-## Solução
+## Mudanças
 
-Remover o `setTimeout` que limpa o estado verde após 3 segundos (linhas 580-586). Assim, os depósitos salvos permanecem verdes durante toda a sessão.
+### 1. `src/pages/DepositosBrinks.tsx`
 
-### Arquivo: `src/pages/DepositosBrinks.tsx`
+- **Default de importação**: mudar `centro_custo: 'PISTA'` de volta para `centro_custo: ''` nas 3 funções de parsing (linhas 84, 128, 180)
+- **Select de centro de custo** (linhas 650-653 e 850-853): adicionar um `SelectItem` com valor vazio `""` e label "(Em branco)" antes das opções existentes
+- Ao salvar, `centro_custo: '' || null` já envia null para o banco (linha 524 e 573 já fazem isso)
 
-- **Remover linhas 580-586** — o `setTimeout` que deleta o `dep.id` do `savedRows` após 3s
-- O `savedRows` continuará acumulando IDs salvos, mantendo o fundo verde permanentemente enquanto o usuário estiver na página
+### 2. `src/pages/DepositosManuais.tsx`
+
+- **Select de centro de custo** no formulário (linha 328-331) e no bulk (linha 382-385): adicionar `SelectItem` com valor vazio e label "(Em branco)"
+
+### 3. `src/pages/ResumoDiario.tsx`
+
+- **Filtrar depósitos sem centro de custo**: nas iterações de `brinks` (linha ~60) e `manuais` (linha ~68), pular registros onde `centro_custo` é null/vazio
+- Adicionar condição: `if (!b.centro_custo) return;` e `if (!m.centro_custo) return;`
 
