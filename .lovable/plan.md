@@ -1,23 +1,42 @@
 
 
-# Corrigir Visibilidade do "Aplicar Centro de Custo"
+# Corrigir Duplicação na Importação Brinks
 
 ## Problema
 
-A barra com o "Aplicar Centro de Custo" só aparece quando **as 3 condições são verdadeiras**:
-1. Usuário é admin
-2. Há itens selecionados (checkbox)
-3. **Existem contas bancárias cadastradas** (`contas.length > 0`)
+A detecção de duplicatas na função `handleFile` (linha 430-436) compara a `data_deposito` do arquivo importado com a do banco de dados usando `rowKey()`, que concatena os valores brutos. Porém:
 
-Se não há contas bancárias, a barra inteira (incluindo o Centro de Custo em massa) fica invisível.
+- **Arquivo importado**: data vem formatada como `"DD/MM/YYYY HH:MM:SS"` (ex: `"15/03/2026 10:30:00"`)
+- **Banco de dados**: data vem como ISO timestamp (ex: `"2026-03-15T10:30:00+00:00"`)
+
+Como os formatos são diferentes, `rowKey()` nunca encontra match, e **todos os registros são considerados novos**, gerando duplicatas a cada importação.
 
 ## Solução
 
-Separar a lógica: a barra de conciliação bancária continua exigindo `contas.length > 0`, mas a seção de Centro de Custo em massa deve aparecer **sempre que houver itens selecionados** (para admin).
+Normalizar o campo `data_deposito` antes de comparar. Converter ambos os lados (dados do banco e dados importados) para um formato comum antes de gerar a chave de comparação.
 
-### Mudança em `src/pages/DepositosManuais.tsx`
+### Mudanças em `src/pages/DepositosBrinks.tsx`
 
-Alterar a condição da linha 356 para remover `contas.length > 0` do requisito geral, e aplicar essa restrição apenas à parte de conciliação bancária (Select de conta + botão Conciliar). A seção de Centro de Custo ficará visível independentemente de haver contas cadastradas.
+1. **Criar função `normalizeDate`** que converte qualquer formato de data para `YYYY-MM-DD HH:MM:SS` (canônico para comparação)
 
-Concretamente: dividir o bloco em duas partes condicionais dentro do mesmo Card — a parte de conciliação bancária aparece só com contas, a parte de centro de custo aparece sempre com seleção.
+2. **Alterar `rowKey`** para usar `normalizeDate` no campo `data_deposito`, garantindo que tanto o dado do banco quanto o do arquivo resultem na mesma chave
+
+3. **Na função `handleFile`**, aplicar `normalizeDate` tanto nos registros existentes (`existing`) quanto nos registros parseados (`parsed`) ao gerar as chaves de comparação
+
+Concretamente:
+```
+function normalizeDate(d: string): string {
+  // Tenta parse ISO (banco) e DD/MM/YYYY (arquivo)
+  // Retorna YYYY-MM-DD HH:MM:SS
+}
+```
+
+E no `rowKey`:
+```
+function rowKey(r) {
+  return `${normalizeDate(r.data_deposito)}|${r.valor}|${r.depositante}|${r.tipo}`;
+}
+```
+
+Isso garante que `"15/03/2026 10:30:00"` e `"2026-03-15T10:30:00+00:00"` gerem a mesma chave, eliminando as duplicatas.
 
