@@ -382,9 +382,12 @@ export default function DepositosManuais() {
                 Cancelar
               </Button>
               <div className="w-px h-6 bg-border mx-1" />
-              <Select value={bulkCentroCusto} onValueChange={setBulkCentroCusto}>
+              <Select value={bulkCentroCusto || '__empty__'} onValueChange={v => setBulkCentroCusto(v === '__empty__' ? '' : v)}>
                 <SelectTrigger className="h-8 w-48 text-xs"><SelectValue placeholder="Centro de Custo" /></SelectTrigger>
-                <SelectContent>{CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                <SelectContent>
+                  <SelectItem value="__empty__">(Em branco)</SelectItem>
+                  {CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
               </Select>
               <Button size="sm" className="h-8" onClick={handleBulkCentroCusto} disabled={!bulkCentroCusto}>
                 Aplicar Centro de Custo
