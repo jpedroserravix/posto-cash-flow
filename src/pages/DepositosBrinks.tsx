@@ -279,7 +279,20 @@ export default function DepositosBrinks() {
   }, [selectedPostoId, loadAllDepositos, loadContasBancarias]);
 
   // Extract unique values for filters
-  const uniqueDataDeposito = useMemo(() => [...new Set(allDepositos.map(d => new Date(d.data_deposito).toLocaleDateString('pt-BR')))].sort(), [allDepositos]);
+  const formatDateDirect = (isoString: string): string => {
+    if (!isoString) return '';
+    const cleaned = isoString.replace(/T/, ' ').replace(/([+-]\d{2}:\d{2}|Z)$/, '').split('.')[0].trim();
+    if (cleaned.includes('/')) return cleaned;
+    const [datePart, timePart] = cleaned.split(' ');
+    const [y, m, d] = datePart.split('-');
+    return `${d}/${m}/${y}${timePart ? ' ' + timePart : ''}`;
+  };
+  const formatDateOnlyDirect = (isoString: string): string => {
+    const full = formatDateDirect(isoString);
+    return full.split(' ')[0] || '';
+  };
+
+  const uniqueDataDeposito = useMemo(() => [...new Set(allDepositos.map(d => formatDateOnlyDirect(d.data_deposito)))].sort(), [allDepositos]);
   const uniqueDepositantes = useMemo(() => [...new Set(allDepositos.map(d => d.depositante).filter(Boolean))].sort(), [allDepositos]);
   const uniqueTurnos = useMemo(() => [...new Set(allDepositos.map(d => d.turno).filter(Boolean))].sort(), [allDepositos]);
   const uniqueCentrosCusto = useMemo(() => [...new Set(allDepositos.map(d => d.centro_custo).filter(Boolean))].sort(), [allDepositos]);
@@ -302,7 +315,7 @@ export default function DepositosBrinks() {
   const filteredData = useMemo(() => {
     let data = allDepositos;
 
-    if (filterDataDeposito.size > 0) data = data.filter(d => !filterDataDeposito.has(new Date(d.data_deposito).toLocaleDateString('pt-BR')));
+    if (filterDataDeposito.size > 0) data = data.filter(d => !filterDataDeposito.has(formatDateOnlyDirect(d.data_deposito)));
     if (filterDepositante.size > 0) data = data.filter(d => !filterDepositante.has(d.depositante));
     if (filterTurno.size > 0) data = data.filter(d => !filterTurno.has(d.turno));
     if (filterCentroCusto.size > 0) data = data.filter(d => !filterCentroCusto.has(d.centro_custo));
@@ -811,7 +824,7 @@ export default function DepositosBrinks() {
                                 {isConciliado ? 'Conciliado' : 'Pendente'}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-xs whitespace-nowrap">{new Date(dep.data_deposito).toLocaleString('pt-BR')}</TableCell>
+                            <TableCell className="text-xs whitespace-nowrap">{formatDateDirect(dep.data_deposito)}</TableCell>
                             <TableCell className="text-right text-xs font-medium">{formatCurrency(dep.valor)}</TableCell>
                             <TableCell className="text-xs">{dep.depositante}</TableCell>
                             <TableCell>
