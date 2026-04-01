@@ -1,19 +1,17 @@
 
 
-# Centro de Custo Padrão "PISTA" nos Depósitos Brinks
+# Manter Depósitos Salvos em Verde Permanentemente
 
-## Resumo
+## Problema
 
-Definir "PISTA" como valor default para o campo `centro_custo` em todos os pontos onde registros são criados (importação de arquivo e parsing). O usuário poderá alterar individualmente quando necessário.
+Atualmente, quando um depósito é salvo, ele fica verde por 3 segundos e depois volta ao normal (linhas 580-586 removem o ID do `savedRows` após timeout).
 
-## Mudanças em `src/pages/DepositosBrinks.tsx`
+## Solução
 
-1. **Parsing de arquivos** — nas 3 funções de parsing (`parseTSV`, `parseHTML`, `parseXLS`), trocar `centro_custo: ''` por `centro_custo: 'PISTA'`
-   - Linha 84: `parseTSV`
-   - Linha 128: `parseHTML` (ou equivalente)
-   - Linha 180: `parseXLS` (ou equivalente)
+Remover o `setTimeout` que limpa o estado verde após 3 segundos (linhas 580-586). Assim, os depósitos salvos permanecem verdes durante toda a sessão.
 
-2. **Estado default de novas linhas manuais** (se houver) — mesmo tratamento
+### Arquivo: `src/pages/DepositosBrinks.tsx`
 
-Isso garante que ao importar qualquer arquivo Brinks, todos os registros já vêm com "PISTA" preenchido. Se o posto tiver outro centro de custo, o usuário altera individualmente no select da tabela.
+- **Remover linhas 580-586** — o `setTimeout` que deleta o `dep.id` do `savedRows` após 3s
+- O `savedRows` continuará acumulando IDs salvos, mantendo o fundo verde permanentemente enquanto o usuário estiver na página
 
