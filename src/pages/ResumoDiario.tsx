@@ -71,7 +71,7 @@ export default function ResumoDiario() {
 
     manuais?.forEach((m) => {
       if (!m.centro_custo) return;
-      const key = `${m.data}|${cc}|${m.turno}`;
+      const key = `${m.data}|${m.centro_custo}|${m.turno}`;
       const existing = turnoMap.get(key) || { brinks: 0, manual: 0 };
       existing.manual += m.valor_lancado;
       turnoMap.set(key, existing);
