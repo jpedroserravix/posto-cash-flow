@@ -577,13 +577,6 @@ export default function DepositosBrinks() {
     } else {
       toast.success('Atualizado');
       setSavedRows(prev => new Set(prev).add(dep.id));
-      setTimeout(() => {
-        setSavedRows(prev => {
-          const next = new Set(prev);
-          next.delete(dep.id);
-          return next;
-        });
-      }, 3000);
     }
   };
 
