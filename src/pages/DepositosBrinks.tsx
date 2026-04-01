@@ -824,7 +824,7 @@ export default function DepositosBrinks() {
                                 {isConciliado ? 'Conciliado' : 'Pendente'}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-xs whitespace-nowrap">{new Date(dep.data_deposito).toLocaleString('pt-BR')}</TableCell>
+                            <TableCell className="text-xs whitespace-nowrap">{formatDateDirect(dep.data_deposito)}</TableCell>
                             <TableCell className="text-right text-xs font-medium">{formatCurrency(dep.valor)}</TableCell>
                             <TableCell className="text-xs">{dep.depositante}</TableCell>
                             <TableCell>
