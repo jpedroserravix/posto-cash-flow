@@ -315,7 +315,7 @@ export default function DepositosBrinks() {
   const filteredData = useMemo(() => {
     let data = allDepositos;
 
-    if (filterDataDeposito.size > 0) data = data.filter(d => !filterDataDeposito.has(new Date(d.data_deposito).toLocaleDateString('pt-BR')));
+    if (filterDataDeposito.size > 0) data = data.filter(d => !filterDataDeposito.has(formatDateOnlyDirect(d.data_deposito)));
     if (filterDepositante.size > 0) data = data.filter(d => !filterDepositante.has(d.depositante));
     if (filterTurno.size > 0) data = data.filter(d => !filterTurno.has(d.turno));
     if (filterCentroCusto.size > 0) data = data.filter(d => !filterCentroCusto.has(d.centro_custo));
