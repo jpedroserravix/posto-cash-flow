@@ -325,9 +325,12 @@ export default function DepositosManuais() {
               </div>
               <div>
                 <label className="text-xs font-medium mb-1 block">Centro de Custo</label>
-                <Select value={formData.centro_custo} onValueChange={v => setFormData({ ...formData, centro_custo: v })}>
+                <Select value={formData.centro_custo || '__empty__'} onValueChange={v => setFormData({ ...formData, centro_custo: v === '__empty__' ? '' : v })}>
                   <SelectTrigger className="h-9"><SelectValue placeholder="Selecionar" /></SelectTrigger>
-                  <SelectContent>{CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    <SelectItem value="__empty__">(Em branco)</SelectItem>
+                    {CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
                 </Select>
               </div>
               <div>
@@ -379,9 +382,12 @@ export default function DepositosManuais() {
                 Cancelar
               </Button>
               <div className="w-px h-6 bg-border mx-1" />
-              <Select value={bulkCentroCusto} onValueChange={setBulkCentroCusto}>
+              <Select value={bulkCentroCusto || '__empty__'} onValueChange={v => setBulkCentroCusto(v === '__empty__' ? '' : v)}>
                 <SelectTrigger className="h-8 w-48 text-xs"><SelectValue placeholder="Centro de Custo" /></SelectTrigger>
-                <SelectContent>{CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                <SelectContent>
+                  <SelectItem value="__empty__">(Em branco)</SelectItem>
+                  {CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
               </Select>
               <Button size="sm" className="h-8" onClick={handleBulkCentroCusto} disabled={!bulkCentroCusto}>
                 Aplicar Centro de Custo

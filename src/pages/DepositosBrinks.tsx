@@ -81,7 +81,7 @@ function parseCSV(text: string): BrinksRow[] {
       data_caixa: dataStr.split(' ')[0] || dataStr.substring(0, 10),
       turno: '',
       observacao: '',
-      centro_custo: 'PISTA',
+      centro_custo: '',
     };
   });
 }
@@ -125,7 +125,7 @@ function parseHTML(text: string): BrinksRow[] {
       data_caixa: dataStr.split(' ')[0] || dataStr.substring(0, 10),
       turno: '',
       observacao: '',
-      centro_custo: 'PISTA',
+      centro_custo: '',
     });
   }
   return result;
@@ -177,7 +177,7 @@ function parseXLSX(data: ArrayBuffer): BrinksRow[] {
       data_caixa: dataStr.split(' ')[0] || dataStr.substring(0, 10),
       turno: '',
       observacao: '',
-      centro_custo: 'PISTA',
+      centro_custo: '',
     };
   });
 }
@@ -647,9 +647,12 @@ export default function DepositosBrinks() {
                       </Select>
                     </TableCell>
                     <TableCell>
-                      <Select value={row.centro_custo} onValueChange={v => updateImportRow(i, 'centro_custo', v)}>
+                      <Select value={row.centro_custo || '__empty__'} onValueChange={v => updateImportRow(i, 'centro_custo', v === '__empty__' ? '' : v)}>
                         <SelectTrigger className="h-8 text-xs w-36"><SelectValue placeholder="Centro Custo" /></SelectTrigger>
-                        <SelectContent>{CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                        <SelectContent>
+                          <SelectItem value="__empty__">(Em branco)</SelectItem>
+                          {CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                        </SelectContent>
                       </Select>
                     </TableCell>
                     <TableCell>
@@ -843,13 +846,16 @@ export default function DepositosBrinks() {
                             </TableCell>
                             <TableCell>
                               <Select
-                                value={dep.centro_custo}
+                                value={dep.centro_custo || '__empty__'}
                                 onValueChange={v => {
-                                  setAllDepositos(prev => prev.map(d => d.id === dep.id ? { ...d, centro_custo: v } : d));
+                                  setAllDepositos(prev => prev.map(d => d.id === dep.id ? { ...d, centro_custo: v === '__empty__' ? '' : v } : d));
                                 }}
                               >
                                 <SelectTrigger className="h-8 text-xs w-36"><SelectValue placeholder="Centro Custo" /></SelectTrigger>
-                                <SelectContent>{CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                                <SelectContent>
+                                  <SelectItem value="__empty__">(Em branco)</SelectItem>
+                                  {CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                </SelectContent>
                               </Select>
                             </TableCell>
                             <TableCell>

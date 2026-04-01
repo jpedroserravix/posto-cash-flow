@@ -61,7 +61,7 @@ export default function ResumoDiario() {
     const turnoMap = new Map<string, { brinks: number; manual: number }>();
 
     brinks?.forEach((b) => {
-      if (!b.data_caixa || !b.turno) return;
+      if (!b.data_caixa || !b.turno || !b.centro_custo) return;
       const cc = b.centro_custo || 'SEM CENTRO';
       const key = `${b.data_caixa}|${cc}|${b.turno}`;
       const existing = turnoMap.get(key) || { brinks: 0, manual: 0 };
@@ -70,8 +70,8 @@ export default function ResumoDiario() {
     });
 
     manuais?.forEach((m) => {
-      const cc = m.centro_custo || 'SEM CENTRO';
-      const key = `${m.data}|${cc}|${m.turno}`;
+      if (!m.centro_custo) return;
+      const key = `${m.data}|${m.centro_custo}|${m.turno}`;
       const existing = turnoMap.get(key) || { brinks: 0, manual: 0 };
       existing.manual += m.valor_lancado;
       turnoMap.set(key, existing);
