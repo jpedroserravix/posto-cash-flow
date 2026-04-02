@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Fuel, LogOut, FileSpreadsheet, PenLine, BarChart3, Building2, Users, Landmark } from 'lucide-react';
+import { Fuel, LogOut, FileSpreadsheet, PenLine, BarChart3, Building2, Users, Landmark, Receipt } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
@@ -16,6 +16,7 @@ const adminItems = [
   { to: '/postos', label: 'Postos', icon: Building2 },
   { to: '/usuarios', label: 'Usuários', icon: Users },
   { to: '/bancos', label: 'Bancos', icon: Landmark },
+  { to: '/extrato', label: 'Extrato Bancário', icon: Receipt },
 ];
 
 export default function AppLayout({ children }: { children: ReactNode }) {

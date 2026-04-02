@@ -11,6 +11,7 @@ import ResumoDiario from "./pages/ResumoDiario";
 import Postos from "./pages/Postos";
 import Usuarios from "./pages/Usuarios";
 import ContasBancarias from "./pages/ContasBancarias";
+import ExtratoBancario from "./pages/ExtratoBancario";
 import AppLayout from "./components/AppLayout";
 import NotFound from "./pages/NotFound";
 
@@ -37,6 +38,7 @@ function AppRoutes() {
       <Route path="/postos" element={<ProtectedRoute><Postos /></ProtectedRoute>} />
       <Route path="/usuarios" element={<ProtectedRoute><Usuarios /></ProtectedRoute>} />
       <Route path="/bancos" element={<ProtectedRoute><ContasBancarias /></ProtectedRoute>} />
+      <Route path="/extrato" element={<ProtectedRoute><ExtratoBancario /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
