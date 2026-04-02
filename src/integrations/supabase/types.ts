@@ -207,6 +207,63 @@ export type Database = {
           },
         ]
       }
+      extrato_bancario: {
+        Row: {
+          conciliado: boolean
+          conta_bancaria_id: string
+          created_at: string
+          data_lancamento: string
+          deposito_brinks_ids: string[] | null
+          fitid: string
+          id: string
+          memo: string | null
+          posto_id: string
+          tipo: string | null
+          valor: number
+        }
+        Insert: {
+          conciliado?: boolean
+          conta_bancaria_id: string
+          created_at?: string
+          data_lancamento: string
+          deposito_brinks_ids?: string[] | null
+          fitid: string
+          id?: string
+          memo?: string | null
+          posto_id: string
+          tipo?: string | null
+          valor: number
+        }
+        Update: {
+          conciliado?: boolean
+          conta_bancaria_id?: string
+          created_at?: string
+          data_lancamento?: string
+          deposito_brinks_ids?: string[] | null
+          fitid?: string
+          id?: string
+          memo?: string | null
+          posto_id?: string
+          tipo?: string | null
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "extrato_bancario_conta_bancaria_id_fkey"
+            columns: ["conta_bancaria_id"]
+            isOneToOne: false
+            referencedRelation: "contas_bancarias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "extrato_bancario_posto_id_fkey"
+            columns: ["posto_id"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       postos: {
         Row: {
           cnpj: string
