@@ -11,6 +11,7 @@ import ResumoDiario from "./pages/ResumoDiario";
 import Postos from "./pages/Postos";
 import Usuarios from "./pages/Usuarios";
 import ContasBancarias from "./pages/ContasBancarias";
+import ExtratoBancario from "./pages/ExtratoBancario";
 import AppLayout from "./components/AppLayout";
 import NotFound from "./pages/NotFound";
 
