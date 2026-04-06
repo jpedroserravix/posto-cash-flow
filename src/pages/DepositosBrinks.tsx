@@ -404,6 +404,20 @@ export default function DepositosBrinks() {
     if (error) {
       toast.error('Erro ao desconciliar: ' + error.message);
     } else {
+      // Sync: desconciliar lançamentos no extrato bancário que referenciam esses IDs
+      for (const depId of ids) {
+        const { data: extratoRows } = await supabase
+          .from('extrato_bancario')
+          .select('id')
+          .eq('posto_id', selectedPostoId!)
+          .contains('deposito_brinks_ids', [depId]);
+        if (extratoRows && extratoRows.length > 0) {
+          await supabase
+            .from('extrato_bancario')
+            .update({ conciliado: false, deposito_brinks_ids: null })
+            .in('id', extratoRows.map(r => r.id));
+        }
+      }
       toast.success(`${ids.length} depósito(s) desconciliado(s)`);
       setConcSelected(new Set());
       loadAllDepositos();
@@ -423,6 +437,24 @@ export default function DepositosBrinks() {
     if (error) {
       toast.error('Erro ao conciliar: ' + error.message);
     } else {
+      // Sync: tentar conciliar lançamento no extrato bancário
+      const totalSum = selectedPendentes.reduce((s, d) => s + Number(d.valor), 0);
+      const { data: stmtMatch } = await supabase
+        .from('extrato_bancario')
+        .select('id')
+        .eq('conta_bancaria_id', concBancoId)
+        .eq('posto_id', selectedPostoId!)
+        .eq('valor', totalSum)
+        .ilike('memo', '%CREDITO COFRE INTELIGENTE%')
+        .eq('conciliado', false)
+        .limit(1)
+        .maybeSingle();
+      if (stmtMatch) {
+        await supabase
+          .from('extrato_bancario')
+          .update({ conciliado: true, deposito_brinks_ids: ids })
+          .eq('id', stmtMatch.id);
+      }
       toast.success(`${ids.length} depósito(s) conciliado(s)`);
       setConcSelected(new Set());
       setConcValorBanco('');

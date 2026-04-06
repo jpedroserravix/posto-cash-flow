@@ -81,6 +81,9 @@ export default function ExtratoBancario() {
       .eq('posto_id', selectedPostoId)
       .order('banco');
     setContasBancarias(data || []);
+    if (data && data.length > 0 && !selectedContaId) {
+      setSelectedContaId(data[0].id);
+    }
   }, [selectedPostoId]);
 
   const loadExtrato = useCallback(async () => {
