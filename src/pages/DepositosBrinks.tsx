@@ -437,6 +437,24 @@ export default function DepositosBrinks() {
     if (error) {
       toast.error('Erro ao conciliar: ' + error.message);
     } else {
+      // Sync: tentar conciliar lançamento no extrato bancário
+      const totalSum = selectedPendentes.reduce((s, d) => s + Number(d.valor), 0);
+      const { data: stmtMatch } = await supabase
+        .from('extrato_bancario')
+        .select('id')
+        .eq('conta_bancaria_id', concBancoId)
+        .eq('posto_id', selectedPostoId!)
+        .eq('valor', totalSum)
+        .ilike('memo', '%CREDITO COFRE INTELIGENTE%')
+        .eq('conciliado', false)
+        .limit(1)
+        .maybeSingle();
+      if (stmtMatch) {
+        await supabase
+          .from('extrato_bancario')
+          .update({ conciliado: true, deposito_brinks_ids: ids })
+          .eq('id', stmtMatch.id);
+      }
       toast.success(`${ids.length} depósito(s) conciliado(s)`);
       setConcSelected(new Set());
       setConcValorBanco('');
