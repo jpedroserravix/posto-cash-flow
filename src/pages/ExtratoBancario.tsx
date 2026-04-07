@@ -222,6 +222,8 @@ export default function ExtratoBancario() {
     return extrato;
   }, [extrato, filterStatus]);
 
+  const pagination = usePagination(filtered, [filterStatus, selectedContaId]);
+
   const totalCreditos = useMemo(() =>
     filtered.filter(e => e.valor > 0).reduce((s, e) => s + e.valor, 0), [filtered]);
   const totalDebitos = useMemo(() =>
