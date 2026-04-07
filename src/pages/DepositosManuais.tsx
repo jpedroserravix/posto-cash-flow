@@ -13,6 +13,8 @@ import { Plus, Pencil, Trash2, Save, X, FilterX, Check, Landmark } from 'lucide-
 import { FilterableHead } from '@/components/FilterableHead';
 import { HorizontalScrollSync } from '@/components/HorizontalScrollSync';
 import { cn } from '@/lib/utils';
+import { usePagination } from '@/hooks/usePagination';
+import { PaginationControls } from '@/components/PaginationControls';
 
 const TURNOS = ['TURNO 1', 'TURNO 2', 'TURNO 3'];
 const CENTROS_CUSTO = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO'];
@@ -168,6 +170,8 @@ export default function DepositosManuais() {
     saldoAcumulado += d.valor_lancado - (d.valor_depositado || 0);
     return { ...d, saldo: saldoAcumulado };
   });
+
+  const pagination = usePagination(depositsWithSaldo, [filterData, filterTurno, filterCentroCusto, filterObservacao, filterStatus]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -419,7 +423,7 @@ export default function DepositosManuais() {
                   </tr>
                 </TableHeader>
                 <TableBody>
-                  {depositsWithSaldo.map(d => {
+                  {pagination.paginatedData.map(d => {
                     const isConciliado = !!d.conciliado_banco_id;
                     const isConferido = d.conferido === 'OK';
                     const isSelected = concSelected.has(d.id);
@@ -470,6 +474,16 @@ export default function DepositosManuais() {
                 </TableBody>
               </Table>
             </HorizontalScrollSync>
+            <PaginationControls
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              pageSize={pagination.pageSize}
+              totalItems={pagination.totalItems}
+              startIndex={pagination.startIndex}
+              endIndex={pagination.endIndex}
+              onPageChange={pagination.setPage}
+              onPageSizeChange={pagination.handlePageSizeChange}
+            />
           )}
         </CardContent>
       </Card>

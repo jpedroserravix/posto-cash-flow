@@ -14,6 +14,8 @@ import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
 import { FilterableHead } from '@/components/FilterableHead';
 import { HorizontalScrollSync } from '@/components/HorizontalScrollSync';
+import { usePagination } from '@/hooks/usePagination';
+import { PaginationControls } from '@/components/PaginationControls';
 
 type SortDir = 'asc' | 'desc' | null;
 
@@ -350,6 +352,8 @@ export default function DepositosBrinks() {
 
     return data;
   }, [allDepositos, filterDataDeposito, filterDepositante, filterTurno, filterCentroCusto, filterStatus, filterText, sortField, sortDir]);
+
+  const pagination = usePagination(filteredData, [filterDataDeposito, filterDepositante, filterTurno, filterCentroCusto, filterStatus, filterText]);
 
   const concTotalSelected = allDepositos
     .filter(d => concSelected.has(d.id))
@@ -833,7 +837,7 @@ export default function DepositosBrinks() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredData.map(dep => {
+                      {pagination.paginatedData.map(dep => {
                         const isConciliado = !!dep.conciliado_banco_id;
                         const isSelected = concSelected.has(dep.id);
                         return (
@@ -912,8 +916,18 @@ export default function DepositosBrinks() {
                   </Table>
                 </HorizontalScrollSync>
 
+                <PaginationControls
+                  page={pagination.page}
+                  totalPages={pagination.totalPages}
+                  pageSize={pagination.pageSize}
+                  totalItems={pagination.totalItems}
+                  startIndex={pagination.startIndex}
+                  endIndex={pagination.endIndex}
+                  onPageChange={pagination.setPage}
+                  onPageSizeChange={pagination.handlePageSizeChange}
+                />
                 {/* Footer: total */}
-                <div className="flex items-center justify-between border-t pt-3">
+                <div className="flex items-center justify-between pt-2 px-4">
                   <span className="font-semibold text-sm">{filteredData.length} depósitos — Total:</span>
                   <span className="font-bold text-lg">{formatCurrency(totalFiltered)}</span>
                 </div>

@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Upload, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { usePagination } from '@/hooks/usePagination';
+import { PaginationControls } from '@/components/PaginationControls';
 
 interface ExtratoRow {
   id: string;
@@ -304,7 +306,7 @@ export default function ExtratoBancario() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map(row => (
+                {pagination.paginatedData.map(row => (
                   <TableRow key={row.id} className={cn(row.conciliado && 'bg-green-50')}>
                     <TableCell className="text-xs whitespace-nowrap">{formatDate(row.data_lancamento)}</TableCell>
                     <TableCell className={cn('text-xs text-right whitespace-nowrap font-medium', row.valor < 0 ? 'text-destructive' : 'text-green-700')}>
@@ -321,12 +323,21 @@ export default function ExtratoBancario() {
                 ))}
               </TableBody>
             </Table>
-            <div className="flex justify-between items-center px-4 py-3 border-t text-sm">
+            <PaginationControls
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              pageSize={pagination.pageSize}
+              totalItems={pagination.totalItems}
+              startIndex={pagination.startIndex}
+              endIndex={pagination.endIndex}
+              onPageChange={pagination.setPage}
+              onPageSizeChange={pagination.handlePageSizeChange}
+            />
+            <div className="flex justify-between items-center px-4 py-2 text-sm">
               <div className="flex gap-4">
                 <span>Créditos: <strong className="text-green-700">{formatBRL(totalCreditos)}</strong></span>
                 <span>Débitos: <strong className="text-destructive">{formatBRL(totalDebitos)}</strong></span>
               </div>
-              <span className="text-muted-foreground">{filtered.length} lançamento(s)</span>
             </div>
           </div>
         )}
