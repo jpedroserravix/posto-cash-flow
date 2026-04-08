@@ -83,7 +83,7 @@ function parseCSV(text: string): BrinksRow[] {
       data_caixa: dataStr.split(' ')[0] || dataStr.substring(0, 10),
       turno: '',
       observacao: '',
-      centro_custo: '',
+      centro_custo: 'PISTA',
     };
   });
 }
@@ -127,7 +127,7 @@ function parseHTML(text: string): BrinksRow[] {
       data_caixa: dataStr.split(' ')[0] || dataStr.substring(0, 10),
       turno: '',
       observacao: '',
-      centro_custo: '',
+      centro_custo: 'PISTA',
     });
   }
   return result;
@@ -179,7 +179,7 @@ function parseXLSX(data: ArrayBuffer): BrinksRow[] {
       data_caixa: dataStr.split(' ')[0] || dataStr.substring(0, 10),
       turno: '',
       observacao: '',
-      centro_custo: '',
+      centro_custo: 'PISTA',
     };
   });
 }
@@ -256,7 +256,7 @@ export default function DepositosBrinks() {
         data_caixa: d.data_caixa || '',
         turno: d.turno || '',
         observacao: d.observacao || '',
-        centro_custo: (d as any).centro_custo || '',
+        centro_custo: (d as any).centro_custo || 'PISTA',
         conciliado_banco_id: d.conciliado_banco_id,
       })));
     }
@@ -873,7 +873,9 @@ export default function DepositosBrinks() {
                               <Select
                                 value={dep.turno}
                                 onValueChange={v => {
-                                  setAllDepositos(prev => prev.map(d => d.id === dep.id ? { ...d, turno: v } : d));
+                                  const updated = { ...dep, turno: v };
+                                  setAllDepositos(prev => prev.map(d => d.id === dep.id ? updated : d));
+                                  handleUpdateRow(updated);
                                 }}
                               >
                                 <SelectTrigger className="h-8 text-xs w-28"><SelectValue placeholder="Turno" /></SelectTrigger>
@@ -884,7 +886,9 @@ export default function DepositosBrinks() {
                               <Select
                                 value={dep.centro_custo || '__empty__'}
                                 onValueChange={v => {
-                                  setAllDepositos(prev => prev.map(d => d.id === dep.id ? { ...d, centro_custo: v === '__empty__' ? '' : v } : d));
+                                  const updated = { ...dep, centro_custo: v === '__empty__' ? '' : v };
+                                  setAllDepositos(prev => prev.map(d => d.id === dep.id ? updated : d));
+                                  handleUpdateRow(updated);
                                 }}
                               >
                                 <SelectTrigger className="h-8 text-xs w-36"><SelectValue placeholder="Centro Custo" /></SelectTrigger>
