@@ -1,31 +1,74 @@
 
 
-# Corrigir Sincronização Brinks ↔ Extrato + Auto-seleção de Conta
+# Importação de Relatório PDF Quality + Integração com Resumo Diário
 
-## Mudanças
+## 1. Migration SQL
 
-### 1. `src/pages/DepositosBrinks.tsx` — `handleDesconciliar` (linha ~396)
+Criar tabela `relatorio_quality` com as colunas especificadas, RLS com as mesmas políticas padrão (admin full + users own posto).
 
-Após zerar `conciliado_banco_id` dos depósitos (linha 403), adicionar:
-- Buscar em `extrato_bancario` lançamentos que contenham qualquer dos IDs desconciliados no array `deposito_brinks_ids` (usando `.contains()` para cada ID, ou query direta)
-- Como Supabase não suporta "array contains any of" facilmente, buscar todos os lançamentos do posto e filtrar no client, ou fazer N queries com `.contains([id])`
-- Para cada lançamento encontrado: `update({ conciliado: false, deposito_brinks_ids: null })`
+```sql
+CREATE TABLE public.relatorio_quality (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  posto_id uuid NOT NULL,
+  data_caixa date NOT NULL,
+  total_dinheiro_apurado numeric,
+  total_cartao numeric,
+  total_pix numeric,
+  total_vendas numeric,
+  total_despesas numeric,
+  diferenca_caixa numeric,
+  raw_text text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (posto_id, data_caixa)
+);
+ALTER TABLE public.relatorio_quality ENABLE ROW LEVEL SECURITY;
+-- RLS admin + user posto (mesmas das outras tabelas)
+```
 
-### 2. `src/pages/DepositosBrinks.tsx` — `handleReceberBanco` (linha ~414)
+## 2. Parser PDF Quality
 
-Após salvar `conciliado_banco_id` (linha 421), adicionar:
-- Calcular soma dos depósitos selecionados a partir do estado local
-- Buscar em `extrato_bancario` lançamento com `conta_bancaria_id = concBancoId`, `posto_id = selectedPostoId`, `valor = somaCalculada`, memo contendo "CREDITO COFRE INTELIGENTE", e `conciliado = false`
-- Se encontrar match: `update({ conciliado: true, deposito_brinks_ids: ids })`
+Usar `pdfjs-dist` (já disponível no ecossistema Vite) para extrair texto do PDF no browser. Criar função `parseQualityPDF(text: string)` que usa regex para extrair:
 
-### 3. `src/pages/ExtratoBancario.tsx` — Auto-seleção de conta (linha ~76-84)
+- `data_caixa`: regex em "Caixa: DD/MM/YYYY"
+- `total_dinheiro_apurado`: linha "Dinheiro" → coluna "Apurado"
+- `total_cartao`: "Subtotal" da seção "Tipo: POS"
+- `total_pix`: "GETNET PIX" na seção POS
+- `total_vendas`: "Total Geral" seção financeiro
+- `total_despesas`: "Subtotal" da seção "Tipo: Despesa"
+- `diferenca_caixa`: "Total" → coluna "Diferença"
 
-No `loadContas`, após receber os dados, se `selectedContaId` está vazio e há contas disponíveis, chamar `setSelectedContaId(data[0].id)` automaticamente. Isso faz o `loadExtrato` disparar via useEffect existente.
+**Nota**: O parser precisará de um PDF de exemplo real para calibrar os regex. Farei um parser baseado na estrutura descrita e poderá ser ajustado depois.
 
-## Arquivos editados
+## 3. Mudanças em `src/pages/ResumoDiario.tsx`
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/pages/DepositosBrinks.tsx` | Sincronizar extrato em `handleDesconciliar` e `handleReceberBanco` |
-| `src/pages/ExtratoBancario.tsx` | Auto-selecionar primeira conta ao carregar |
+### Botão de importação
+- Adicionar botão "Importar Quality" no topo, ao lado do título
+- Input file hidden que aceita `.pdf`
+- Ao selecionar arquivo: extrair texto com pdfjs-dist → parsear → upsert na tabela `relatorio_quality`
+
+### Carregar dados Quality
+- No `loadResumo`, buscar também `relatorio_quality` do posto
+- Criar mapa `qualityMap: Map<string, QualityData>` por data
+
+### Interface GroupData expandida
+- Adicionar campo opcional `quality?: QualityData` em cada grupo
+
+### Painel colapsável por card
+- Usar `Collapsible` do shadcn para seção "Conferência Quality"
+- Se existir quality para a data: tabela comparativa com colunas Campo / Brinks+Manual / Quality / Diferença
+- Linha "Dinheiro": soma do sistema vs `total_dinheiro_apurado`, delta colorido (verde=0, vermelho≠0)
+- Linhas informativas: Cartão/PIX, Despesas, Diferença caixa (sem comparação direta, apenas exibição)
+- Se não existir: badge cinza "Sem relatório Quality"
+
+## 4. Instalação
+
+- Instalar `pdfjs-dist` como dependência
+
+## Arquivos
+
+| Arquivo | Ação |
+|---------|------|
+| Migration SQL | Criar tabela + RLS |
+| `package.json` | Adicionar `pdfjs-dist` |
+| `src/pages/ResumoDiario.tsx` | Botão importar, parser, painel comparativo |
 
