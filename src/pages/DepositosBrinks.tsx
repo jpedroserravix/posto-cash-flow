@@ -12,6 +12,10 @@ import { toast } from 'sonner';
 import { Upload, Save, Search, CheckCircle, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
+} from '@/components/ui/alert-dialog';
 import { FilterableHead } from '@/components/FilterableHead';
 import { HorizontalScrollSync } from '@/components/HorizontalScrollSync';
 import { usePagination } from '@/hooks/usePagination';
@@ -44,6 +48,7 @@ interface DepositoCompleto {
   observacao: string;
   centro_custo: string;
   conciliado_banco_id: string | null;
+  conciliado_forcado: boolean;
 }
 
 const CENTROS_CUSTO = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO'];
@@ -221,6 +226,8 @@ export default function DepositosBrinks() {
   const [concBancoId, setConcBancoId] = useState<string>('');
   const [contasBancarias, setContasBancarias] = useState<{ id: string; banco: string; agencia: string; conta: string }[]>([]);
   const [concSaving, setConcSaving] = useState(false);
+  const [forceDialogOpen, setForceDialogOpen] = useState(false);
+  const [forceDialogValor, setForceDialogValor] = useState(0);
 
   // Sort state
   const [sortField, setSortField] = useState<string | null>('data_deposito');
@@ -240,7 +247,7 @@ export default function DepositosBrinks() {
     setLoading(true);
     const { data, error } = await supabase
       .from('depositos_brinks')
-      .select('id, data_deposito, moeda, valor, tipo, depositante, data_caixa, turno, observacao, conciliado_banco_id, centro_custo')
+      .select('id, data_deposito, moeda, valor, tipo, depositante, data_caixa, turno, observacao, conciliado_banco_id, centro_custo, conciliado_forcado')
       .eq('posto_id', selectedPostoId)
       .order('data_deposito', { ascending: false });
     if (error) {
@@ -258,6 +265,7 @@ export default function DepositosBrinks() {
         observacao: d.observacao || '',
         centro_custo: (d as any).centro_custo || 'PISTA',
         conciliado_banco_id: d.conciliado_banco_id,
+        conciliado_forcado: !!(d as any).conciliado_forcado,
       })));
     }
     setLoading(false);
