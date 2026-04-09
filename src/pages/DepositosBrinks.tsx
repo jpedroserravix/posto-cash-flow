@@ -885,8 +885,15 @@ export default function DepositosBrinks() {
                               </TableCell>
                             )}
                             <TableCell>
-                              <Badge variant={isConciliado ? 'default' : 'secondary'} className={cn("text-[10px]", isConciliado && 'bg-green-600 hover:bg-green-700')}>
-                                {isConciliado ? 'Conciliado' : 'Pendente'}
+                              <Badge
+                                variant={isConciliado ? 'default' : 'secondary'}
+                                className={cn(
+                                  "text-[10px]",
+                                  isConciliado && !dep.conciliado_forcado && 'bg-green-600 hover:bg-green-700',
+                                  isConciliado && dep.conciliado_forcado && 'bg-yellow-500 hover:bg-yellow-600 text-black'
+                                )}
+                              >
+                                {isConciliado ? (dep.conciliado_forcado ? 'Conciliado*' : 'Conciliado') : 'Pendente'}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-xs whitespace-nowrap">{formatDateDirect(dep.data_deposito)}</TableCell>
@@ -1048,6 +1055,22 @@ export default function DepositosBrinks() {
           </div>
         </div>
       )}
+      <AlertDialog open={forceDialogOpen} onOpenChange={setForceDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Lançamento não encontrado no extrato</AlertDialogTitle>
+            <AlertDialogDescription>
+              Nenhum lançamento correspondente encontrado no extrato bancário para o valor de {formatCurrency(forceDialogValor)}. Deseja forçar a conciliação mesmo assim?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setForceDialogOpen(false); setConcSaving(false); }}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={async () => { setForceDialogOpen(false); await doConciliar(true); }}>
+              Forçar conciliação
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
