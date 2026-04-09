@@ -1,0 +1,1 @@
+ALTER TABLE public.depositos_brinks ADD COLUMN conciliado_forcado boolean NOT NULL DEFAULT false;
