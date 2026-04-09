@@ -437,42 +437,67 @@ export default function DepositosBrinks() {
     setConcSaving(false);
   };
 
-  const handleReceberBanco = async () => {
-    if (concSelected.size === 0) { toast.error('Selecione ao menos um depósito'); return; }
-    if (!concBancoId) { toast.error('Selecione uma conta bancária'); return; }
-    setConcSaving(true);
+  const doConciliar = async (forcado: boolean) => {
     const ids = Array.from(concSelected);
+    const updatePayload: any = { conciliado_banco_id: concBancoId };
+    if (forcado) updatePayload.conciliado_forcado = true;
     const { error } = await supabase
       .from('depositos_brinks')
-      .update({ conciliado_banco_id: concBancoId })
+      .update(updatePayload)
       .in('id', ids);
     if (error) {
       toast.error('Erro ao conciliar: ' + error.message);
     } else {
-      // Sync: tentar conciliar lançamento no extrato bancário
-      const totalSum = selectedPendentes.reduce((s, d) => s + Number(d.valor), 0);
-      const { data: stmtMatch } = await supabase
-        .from('extrato_bancario')
-        .select('id')
-        .eq('conta_bancaria_id', concBancoId)
-        .eq('posto_id', selectedPostoId!)
-        .eq('valor', totalSum)
-        .ilike('memo', '%CREDITO COFRE INTELIGENTE%')
-        .eq('conciliado', false)
-        .limit(1)
-        .maybeSingle();
-      if (stmtMatch) {
-        await supabase
+      if (!forcado) {
+        // Sync extrato
+        const totalSum = selectedPendentes.reduce((s, d) => s + Number(d.valor), 0);
+        const { data: stmtMatch } = await supabase
           .from('extrato_bancario')
-          .update({ conciliado: true, deposito_brinks_ids: ids })
-          .eq('id', stmtMatch.id);
+          .select('id')
+          .eq('conta_bancaria_id', concBancoId)
+          .eq('posto_id', selectedPostoId!)
+          .eq('valor', totalSum)
+          .ilike('memo', '%CREDITO COFRE INTELIGENTE%')
+          .eq('conciliado', false)
+          .limit(1)
+          .maybeSingle();
+        if (stmtMatch) {
+          await supabase
+            .from('extrato_bancario')
+            .update({ conciliado: true, deposito_brinks_ids: ids })
+            .eq('id', stmtMatch.id);
+        }
       }
-      toast.success(`${ids.length} depósito(s) conciliado(s)`);
+      toast.success(`${ids.length} depósito(s) conciliado(s)${forcado ? ' (forçado)' : ''}`);
       setConcSelected(new Set());
       setConcValorBanco('');
       loadAllDepositos();
     }
     setConcSaving(false);
+  };
+
+  const handleReceberBanco = async () => {
+    if (concSelected.size === 0) { toast.error('Selecione ao menos um depósito'); return; }
+    if (!concBancoId) { toast.error('Selecione uma conta bancária'); return; }
+    setConcSaving(true);
+    const totalSum = selectedPendentes.reduce((s, d) => s + Number(d.valor), 0);
+    // Check extrato first
+    const { data: stmtMatch } = await supabase
+      .from('extrato_bancario')
+      .select('id')
+      .eq('conta_bancaria_id', concBancoId)
+      .eq('posto_id', selectedPostoId!)
+      .eq('valor', totalSum)
+      .ilike('memo', '%CREDITO COFRE INTELIGENTE%')
+      .eq('conciliado', false)
+      .limit(1)
+      .maybeSingle();
+    if (stmtMatch) {
+      await doConciliar(false);
+    } else {
+      setForceDialogValor(totalSum);
+      setForceDialogOpen(true);
+    }
   };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
