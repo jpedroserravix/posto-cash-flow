@@ -288,6 +288,56 @@ export type Database = {
         }
         Relationships: []
       }
+      relatorio_quality: {
+        Row: {
+          created_at: string
+          data_caixa: string
+          diferenca_caixa: number | null
+          id: string
+          posto_id: string
+          raw_text: string | null
+          total_cartao: number | null
+          total_despesas: number | null
+          total_dinheiro_apurado: number | null
+          total_pix: number | null
+          total_vendas: number | null
+        }
+        Insert: {
+          created_at?: string
+          data_caixa: string
+          diferenca_caixa?: number | null
+          id?: string
+          posto_id: string
+          raw_text?: string | null
+          total_cartao?: number | null
+          total_despesas?: number | null
+          total_dinheiro_apurado?: number | null
+          total_pix?: number | null
+          total_vendas?: number | null
+        }
+        Update: {
+          created_at?: string
+          data_caixa?: string
+          diferenca_caixa?: number | null
+          id?: string
+          posto_id?: string
+          raw_text?: string | null
+          total_cartao?: number | null
+          total_despesas?: number | null
+          total_dinheiro_apurado?: number | null
+          total_pix?: number | null
+          total_vendas?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "relatorio_quality_posto_id_fkey"
+            columns: ["posto_id"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       resumo_conferencia: {
         Row: {
           centro_custo: string | null
