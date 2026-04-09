@@ -12,6 +12,10 @@ import { toast } from 'sonner';
 import { Upload, Save, Search, CheckCircle, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
+} from '@/components/ui/alert-dialog';
 import { FilterableHead } from '@/components/FilterableHead';
 import { HorizontalScrollSync } from '@/components/HorizontalScrollSync';
 import { usePagination } from '@/hooks/usePagination';
@@ -44,6 +48,7 @@ interface DepositoCompleto {
   observacao: string;
   centro_custo: string;
   conciliado_banco_id: string | null;
+  conciliado_forcado: boolean;
 }
 
 const CENTROS_CUSTO = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO'];
@@ -221,6 +226,8 @@ export default function DepositosBrinks() {
   const [concBancoId, setConcBancoId] = useState<string>('');
   const [contasBancarias, setContasBancarias] = useState<{ id: string; banco: string; agencia: string; conta: string }[]>([]);
   const [concSaving, setConcSaving] = useState(false);
+  const [forceDialogOpen, setForceDialogOpen] = useState(false);
+  const [forceDialogValor, setForceDialogValor] = useState(0);
 
   // Sort state
   const [sortField, setSortField] = useState<string | null>('data_deposito');
@@ -240,7 +247,7 @@ export default function DepositosBrinks() {
     setLoading(true);
     const { data, error } = await supabase
       .from('depositos_brinks')
-      .select('id, data_deposito, moeda, valor, tipo, depositante, data_caixa, turno, observacao, conciliado_banco_id, centro_custo')
+      .select('id, data_deposito, moeda, valor, tipo, depositante, data_caixa, turno, observacao, conciliado_banco_id, centro_custo, conciliado_forcado')
       .eq('posto_id', selectedPostoId)
       .order('data_deposito', { ascending: false });
     if (error) {
@@ -258,6 +265,7 @@ export default function DepositosBrinks() {
         observacao: d.observacao || '',
         centro_custo: (d as any).centro_custo || 'PISTA',
         conciliado_banco_id: d.conciliado_banco_id,
+        conciliado_forcado: !!(d as any).conciliado_forcado,
       })));
     }
     setLoading(false);
@@ -429,42 +437,67 @@ export default function DepositosBrinks() {
     setConcSaving(false);
   };
 
-  const handleReceberBanco = async () => {
-    if (concSelected.size === 0) { toast.error('Selecione ao menos um depósito'); return; }
-    if (!concBancoId) { toast.error('Selecione uma conta bancária'); return; }
-    setConcSaving(true);
+  const doConciliar = async (forcado: boolean) => {
     const ids = Array.from(concSelected);
+    const updatePayload: any = { conciliado_banco_id: concBancoId };
+    if (forcado) updatePayload.conciliado_forcado = true;
     const { error } = await supabase
       .from('depositos_brinks')
-      .update({ conciliado_banco_id: concBancoId })
+      .update(updatePayload)
       .in('id', ids);
     if (error) {
       toast.error('Erro ao conciliar: ' + error.message);
     } else {
-      // Sync: tentar conciliar lançamento no extrato bancário
-      const totalSum = selectedPendentes.reduce((s, d) => s + Number(d.valor), 0);
-      const { data: stmtMatch } = await supabase
-        .from('extrato_bancario')
-        .select('id')
-        .eq('conta_bancaria_id', concBancoId)
-        .eq('posto_id', selectedPostoId!)
-        .eq('valor', totalSum)
-        .ilike('memo', '%CREDITO COFRE INTELIGENTE%')
-        .eq('conciliado', false)
-        .limit(1)
-        .maybeSingle();
-      if (stmtMatch) {
-        await supabase
+      if (!forcado) {
+        // Sync extrato
+        const totalSum = selectedPendentes.reduce((s, d) => s + Number(d.valor), 0);
+        const { data: stmtMatch } = await supabase
           .from('extrato_bancario')
-          .update({ conciliado: true, deposito_brinks_ids: ids })
-          .eq('id', stmtMatch.id);
+          .select('id')
+          .eq('conta_bancaria_id', concBancoId)
+          .eq('posto_id', selectedPostoId!)
+          .eq('valor', totalSum)
+          .ilike('memo', '%CREDITO COFRE INTELIGENTE%')
+          .eq('conciliado', false)
+          .limit(1)
+          .maybeSingle();
+        if (stmtMatch) {
+          await supabase
+            .from('extrato_bancario')
+            .update({ conciliado: true, deposito_brinks_ids: ids })
+            .eq('id', stmtMatch.id);
+        }
       }
-      toast.success(`${ids.length} depósito(s) conciliado(s)`);
+      toast.success(`${ids.length} depósito(s) conciliado(s)${forcado ? ' (forçado)' : ''}`);
       setConcSelected(new Set());
       setConcValorBanco('');
       loadAllDepositos();
     }
     setConcSaving(false);
+  };
+
+  const handleReceberBanco = async () => {
+    if (concSelected.size === 0) { toast.error('Selecione ao menos um depósito'); return; }
+    if (!concBancoId) { toast.error('Selecione uma conta bancária'); return; }
+    setConcSaving(true);
+    const totalSum = selectedPendentes.reduce((s, d) => s + Number(d.valor), 0);
+    // Check extrato first
+    const { data: stmtMatch } = await supabase
+      .from('extrato_bancario')
+      .select('id')
+      .eq('conta_bancaria_id', concBancoId)
+      .eq('posto_id', selectedPostoId!)
+      .eq('valor', totalSum)
+      .ilike('memo', '%CREDITO COFRE INTELIGENTE%')
+      .eq('conciliado', false)
+      .limit(1)
+      .maybeSingle();
+    if (stmtMatch) {
+      await doConciliar(false);
+    } else {
+      setForceDialogValor(totalSum);
+      setForceDialogOpen(true);
+    }
   };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -852,8 +885,15 @@ export default function DepositosBrinks() {
                               </TableCell>
                             )}
                             <TableCell>
-                              <Badge variant={isConciliado ? 'default' : 'secondary'} className={cn("text-[10px]", isConciliado && 'bg-green-600 hover:bg-green-700')}>
-                                {isConciliado ? 'Conciliado' : 'Pendente'}
+                              <Badge
+                                variant={isConciliado ? 'default' : 'secondary'}
+                                className={cn(
+                                  "text-[10px]",
+                                  isConciliado && !dep.conciliado_forcado && 'bg-green-600 hover:bg-green-700',
+                                  isConciliado && dep.conciliado_forcado && 'bg-yellow-500 hover:bg-yellow-600 text-black'
+                                )}
+                              >
+                                {isConciliado ? (dep.conciliado_forcado ? 'Conciliado*' : 'Conciliado') : 'Pendente'}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-xs whitespace-nowrap">{formatDateDirect(dep.data_deposito)}</TableCell>
@@ -1015,6 +1055,22 @@ export default function DepositosBrinks() {
           </div>
         </div>
       )}
+      <AlertDialog open={forceDialogOpen} onOpenChange={setForceDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Lançamento não encontrado no extrato</AlertDialogTitle>
+            <AlertDialogDescription>
+              Nenhum lançamento correspondente encontrado no extrato bancário para o valor de {formatCurrency(forceDialogValor)}. Deseja forçar a conciliação mesmo assim?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setForceDialogOpen(false); setConcSaving(false); }}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={async () => { setForceDialogOpen(false); await doConciliar(true); }}>
+              Forçar conciliação
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

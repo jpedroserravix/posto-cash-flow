@@ -88,6 +88,7 @@ export type Database = {
         Row: {
           centro_custo: string | null
           conciliado_banco_id: string | null
+          conciliado_forcado: boolean
           created_at: string
           data_caixa: string | null
           data_deposito: string
@@ -104,6 +105,7 @@ export type Database = {
         Insert: {
           centro_custo?: string | null
           conciliado_banco_id?: string | null
+          conciliado_forcado?: boolean
           created_at?: string
           data_caixa?: string | null
           data_deposito: string
@@ -120,6 +122,7 @@ export type Database = {
         Update: {
           centro_custo?: string | null
           conciliado_banco_id?: string | null
+          conciliado_forcado?: boolean
           created_at?: string
           data_caixa?: string | null
           data_deposito?: string
