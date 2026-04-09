@@ -1,12 +1,20 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 
-const SESSION_KEY = 'pagination_pageSize';
+const DEFAULT_SESSION_KEY = 'pagination_pageSize';
 
-export function usePagination<T>(data: T[], deps: any[] = []) {
+export function usePagination<T>(
+  data: T[],
+  deps: any[] = [],
+  options?: { defaultPageSize?: number; sessionKey?: string }
+) {
+  const sessionKey = options?.sessionKey ?? DEFAULT_SESSION_KEY;
+  const defaultPageSize = options?.defaultPageSize ?? 25;
+
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(() => {
-    const stored = sessionStorage.getItem(SESSION_KEY);
-    return stored === '50' ? 50 : 25;
+    const stored = sessionStorage.getItem(sessionKey);
+    const parsed = stored ? parseInt(stored) : NaN;
+    return isNaN(parsed) ? defaultPageSize : parsed;
   });
 
   // Reset to page 1 when filters change
@@ -28,9 +36,9 @@ export function usePagination<T>(data: T[], deps: any[] = []) {
   const handlePageSizeChange = useCallback((size: string) => {
     const n = parseInt(size);
     setPageSize(n);
-    sessionStorage.setItem(SESSION_KEY, String(n));
+    sessionStorage.setItem(sessionKey, String(n));
     setPage(1);
-  }, []);
+  }, [sessionKey]);
 
   const startIndex = (page - 1) * pageSize + 1;
   const endIndex = Math.min(page * pageSize, data.length);

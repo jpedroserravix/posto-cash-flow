@@ -812,7 +812,7 @@ export default function DepositosBrinks() {
                           </TableHead>
                         )}
                         <FilterableHead
-                          label="Status"
+                          label={<span className="leading-tight">Status<br />Bancário</span>}
                           sortActive={false} sortDir={null} onSort={() => {}}
                           uniqueValues={uniqueStatus}
                           selectedValues={filterStatus}

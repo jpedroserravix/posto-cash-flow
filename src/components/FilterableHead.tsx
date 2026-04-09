@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import React from 'react';
 import { TableHead } from '@/components/ui/table';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -11,7 +12,7 @@ import { cn } from '@/lib/utils';
 type SortDir = 'asc' | 'desc' | null;
 
 interface FilterableHeadProps {
-  label: string;
+  label: React.ReactNode;
   sortActive: boolean;
   sortDir: SortDir;
   onSort: () => void;

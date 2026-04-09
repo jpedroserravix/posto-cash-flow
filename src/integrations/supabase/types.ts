@@ -294,7 +294,9 @@ export type Database = {
           data_caixa: string
           diferenca_caixa: number | null
           id: string
+          pdf_path: string | null
           posto_id: string
+          quality_conferido: string
           raw_text: string | null
           total_cartao: number | null
           total_despesas: number | null
@@ -307,7 +309,9 @@ export type Database = {
           data_caixa: string
           diferenca_caixa?: number | null
           id?: string
+          pdf_path?: string | null
           posto_id: string
+          quality_conferido?: string
           raw_text?: string | null
           total_cartao?: number | null
           total_despesas?: number | null
@@ -320,7 +324,9 @@ export type Database = {
           data_caixa?: string
           diferenca_caixa?: number | null
           id?: string
+          pdf_path?: string | null
           posto_id?: string
+          quality_conferido?: string
           raw_text?: string | null
           total_cartao?: number | null
           total_despesas?: number | null

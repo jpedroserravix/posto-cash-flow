@@ -11,11 +11,15 @@ interface PaginationControlsProps {
   endIndex: number;
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: string) => void;
+  pageSizeOptions?: number[];
+  itemLabel?: string;
 }
 
 export function PaginationControls({
   page, totalPages, pageSize, totalItems, startIndex, endIndex,
   onPageChange, onPageSizeChange,
+  pageSizeOptions = [25, 50],
+  itemLabel = 'registros',
 }: PaginationControlsProps) {
   if (totalItems === 0) return null;
 
@@ -28,14 +32,15 @@ export function PaginationControls({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="25">25</SelectItem>
-            <SelectItem value="50">50</SelectItem>
+            {pageSizeOptions.map((n) => (
+              <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
 
       <span className="text-xs text-muted-foreground">
-        Exibindo {startIndex}–{endIndex} de {totalItems} registros
+        Exibindo {startIndex}–{endIndex} de {totalItems} {itemLabel}
       </span>
 
       <div className="flex items-center gap-1">

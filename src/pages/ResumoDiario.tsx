@@ -7,10 +7,12 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { Save, Upload, ChevronDown } from 'lucide-react';
-import { parseQualityPDF, type QualityData } from '@/lib/qualityParser';
+import { Save, Upload, FileText, X } from 'lucide-react';
+import { usePagination } from '@/hooks/usePagination';
+import { PaginationControls } from '@/components/PaginationControls';
 
 const CONFERIDO_OPTIONS = ['OK', 'PENDENTE', 'DIVERGÊNCIA'];
 
@@ -19,6 +21,11 @@ interface TurnoRow {
   cofreBrinks: number;
   manual: number;
   total: number;
+}
+
+interface QualityInfo {
+  pdf_path: string | null;
+  quality_conferido: string;
 }
 
 interface GroupData {
@@ -31,13 +38,20 @@ interface GroupData {
   conferido: string;
   observacao: string;
   resumoId?: string;
-  quality?: QualityData;
+  quality?: QualityInfo;
 }
 
 export default function ResumoDiario() {
   const { selectedPostoId } = useAuth();
   const [groups, setGroups] = useState<GroupData[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingDate, setUploadingDate] = useState<string | null>(null);
+  const [deletingDate, setDeletingDate] = useState<string | null>(null);
+  const qualityFileInputRef = useRef<HTMLInputElement>(null);
+
+  const pagination = usePagination(groups, [selectedPostoId], {
+    defaultPageSize: 10,
+    sessionKey: 'resumo_diario_pageSize',
+  });
 
   useEffect(() => {
     if (selectedPostoId) loadResumo();
@@ -63,7 +77,7 @@ export default function ResumoDiario() {
         .eq('posto_id', selectedPostoId),
       supabase
         .from('relatorio_quality')
-        .select('*')
+        .select('data_caixa, pdf_path, quality_conferido')
         .eq('posto_id', selectedPostoId),
     ]);
 
@@ -105,17 +119,11 @@ export default function ResumoDiario() {
       }
     });
 
-    const qualityMap = new Map<string, QualityData>();
+    const qualityMap = new Map<string, QualityInfo>();
     qualityData?.forEach((q: any) => {
       qualityMap.set(q.data_caixa, {
-        data_caixa: q.data_caixa,
-        total_dinheiro_apurado: q.total_dinheiro_apurado,
-        total_cartao: q.total_cartao,
-        total_pix: q.total_pix,
-        total_vendas: q.total_vendas,
-        total_despesas: q.total_despesas,
-        diferenca_caixa: q.diferenca_caixa,
-        raw_text: q.raw_text || '',
+        pdf_path: q.pdf_path ?? null,
+        quality_conferido: q.quality_conferido ?? 'PENDENTE',
       });
     });
 
@@ -145,6 +153,82 @@ export default function ResumoDiario() {
     setGroups(result);
   };
 
+  const getPdfUrl = (path: string) => {
+    const { data } = supabase.storage.from('quality-pdfs').getPublicUrl(path);
+    return data.publicUrl;
+  };
+
+  const handleUploadQualityPDF = async (file: File) => {
+    if (!uploadingDate || !selectedPostoId) return;
+    const path = `${selectedPostoId}/${uploadingDate}.pdf`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('quality-pdfs')
+      .upload(path, file, { upsert: true, contentType: 'application/pdf' });
+
+    if (uploadError) {
+      toast.error('Erro ao enviar PDF: ' + uploadError.message);
+      return;
+    }
+
+    const { error: dbError } = await supabase
+      .from('relatorio_quality')
+      .upsert({
+        posto_id: selectedPostoId,
+        data_caixa: uploadingDate,
+        pdf_path: path,
+        quality_conferido: 'PENDENTE',
+      } as any, { onConflict: 'posto_id,data_caixa' });
+
+    if (dbError) {
+      toast.error('Erro ao salvar: ' + dbError.message);
+      return;
+    }
+
+    toast.success('PDF importado com sucesso!');
+    setUploadingDate(null);
+    loadResumo();
+  };
+
+  const handleDeleteQualityPDF = async (data_caixa: string, pdf_path: string) => {
+    const { error: storageError } = await supabase.storage
+      .from('quality-pdfs')
+      .remove([pdf_path]);
+
+    if (storageError) {
+      toast.error('Erro ao deletar arquivo: ' + storageError.message);
+      return;
+    }
+
+    const { error: dbError } = await supabase
+      .from('relatorio_quality')
+      .update({ pdf_path: null, quality_conferido: 'PENDENTE' } as any)
+      .eq('posto_id', selectedPostoId!)
+      .eq('data_caixa', data_caixa);
+
+    if (dbError) {
+      toast.error('Erro ao atualizar registro: ' + dbError.message);
+      return;
+    }
+
+    toast.success('PDF removido.');
+    setDeletingDate(null);
+    loadResumo();
+  };
+
+  const handleToggleQualityStatus = async (data_caixa: string, currentStatus: string) => {
+    if (!selectedPostoId) return;
+    const newStatus = currentStatus === 'OK' ? 'PENDENTE' : 'OK';
+    const { error } = await supabase
+      .from('relatorio_quality')
+      .update({ quality_conferido: newStatus } as any)
+      .eq('posto_id', selectedPostoId)
+      .eq('data_caixa', data_caixa);
+
+    if (error) { toast.error('Erro: ' + error.message); return; }
+    loadResumo();
+  };
+
   const handleSaveGroup = async (group: GroupData) => {
     if (!selectedPostoId) return;
 
@@ -172,60 +256,6 @@ export default function ResumoDiario() {
     loadResumo();
   };
 
-  const handleImportQuality = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedPostoId) return;
-
-    try {
-      const pdfjsLib = await import('pdfjs-dist');
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
-
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-
-      let fullText = '';
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const content = await page.getTextContent();
-        const strings = content.items.map((item: any) => item.str);
-        fullText += strings.join(' ') + '\n';
-      }
-
-      const parsed = parseQualityPDF(fullText);
-
-      if (!parsed.data_caixa) {
-        toast.error('Não foi possível extrair a data do PDF. Verifique o formato.');
-        return;
-      }
-
-      const { error } = await supabase
-        .from('relatorio_quality')
-        .upsert({
-          posto_id: selectedPostoId,
-          data_caixa: parsed.data_caixa,
-          total_dinheiro_apurado: parsed.total_dinheiro_apurado,
-          total_cartao: parsed.total_cartao,
-          total_pix: parsed.total_pix,
-          total_vendas: parsed.total_vendas,
-          total_despesas: parsed.total_despesas,
-          diferenca_caixa: parsed.diferenca_caixa,
-          raw_text: parsed.raw_text,
-        }, { onConflict: 'posto_id,data_caixa' });
-
-      if (error) {
-        toast.error('Erro ao salvar: ' + error.message);
-        return;
-      }
-
-      toast.success(`Relatório Quality importado para ${new Date(parsed.data_caixa + 'T00:00:00').toLocaleDateString('pt-BR')}`);
-      loadResumo();
-    } catch (err: any) {
-      toast.error('Erro ao processar PDF: ' + (err.message || err));
-    } finally {
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
   const updateGroup = (index: number, field: 'conferido' | 'observacao', value: string) => {
     setGroups((prev) => prev.map((group, i) => (i === index ? { ...group, [field]: value } : group)));
   };
@@ -245,16 +275,20 @@ export default function ResumoDiario() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Resumo Diário</h1>
-        <div>
-          <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" onChange={handleImportQuality} />
-          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-            <Upload className="mr-2 h-4 w-4" />
-            Importar Quality
-          </Button>
-        </div>
-      </div>
+      <h1 className="text-xl font-bold">Resumo Diário</h1>
+
+      {/* Hidden file input — shared across all cards */}
+      <input
+        ref={qualityFileInputRef}
+        type="file"
+        accept=".pdf"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleUploadQualityPDF(file);
+          if (qualityFileInputRef.current) qualityFileInputRef.current.value = '';
+        }}
+      />
 
       {groups.length === 0 ? (
         <Card>
@@ -265,154 +299,181 @@ export default function ResumoDiario() {
           </CardContent>
         </Card>
       ) : (
-        groups.map((group, i) => (
-          <Card key={`${group.data}-${group.centroCusto}`} className={borderColor(group.conferido)}>
-            <CardHeader className="px-4 pb-2 pt-4">
-              <div className="flex items-center justify-between gap-3">
-                <CardTitle className="text-base">
-                  {new Date(`${group.data}T00:00:00`).toLocaleDateString('pt-BR')} — {group.centroCusto}
-                </CardTitle>
-                <span className="text-lg font-bold">{formatCurrency(group.totalGeral)}</span>
-              </div>
-            </CardHeader>
+        <>
+          {pagination.paginatedData.map((group, i) => {
+            const i_real = (pagination.page - 1) * pagination.pageSize + i;
+            const pdfUrl = group.quality?.pdf_path ? getPdfUrl(group.quality.pdf_path) : null;
 
-            <CardContent className="px-4 pb-2">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-xs">Turno</TableHead>
-                    <TableHead className="text-right text-xs">Cofre Brinks</TableHead>
-                    <TableHead className="text-right text-xs">Manual</TableHead>
-                    <TableHead className="text-right text-xs">Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {group.turnos.map((turno) => (
-                    <TableRow key={turno.turno}>
-                      <TableCell className="py-1 text-xs">{turno.turno}</TableCell>
-                      <TableCell className="py-1 text-right text-xs">{formatCurrency(turno.cofreBrinks)}</TableCell>
-                      <TableCell className="py-1 text-right text-xs">{formatCurrency(turno.manual)}</TableCell>
-                      <TableCell className="py-1 text-right text-xs font-medium">{formatCurrency(turno.total)}</TableCell>
-                    </TableRow>
-                  ))}
-                  <TableRow className="border-t-2">
-                    <TableCell className="py-1 text-xs font-bold">Soma</TableCell>
-                    <TableCell className="py-1 text-right text-xs font-bold">{formatCurrency(group.totalBrinks)}</TableCell>
-                    <TableCell className="py-1 text-right text-xs font-bold">{formatCurrency(group.totalManual)}</TableCell>
-                    <TableCell className="py-1 text-right text-xs font-bold">{formatCurrency(group.totalGeral)}</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+            return (
+              <Card key={`${group.data}-${group.centroCusto}`} className={borderColor(group.conferido)}>
+                <CardHeader className="px-4 pb-2 pt-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <CardTitle className="text-base">
+                      {new Date(`${group.data}T00:00:00`).toLocaleDateString('pt-BR')} — {group.centroCusto}
+                    </CardTitle>
+                    <span className="text-lg font-bold">{formatCurrency(group.totalGeral)}</span>
+                  </div>
+                </CardHeader>
 
-              {/* Quality comparison panel */}
-              {group.quality ? (
-                <QualityPanel quality={group.quality} totalSistema={group.totalGeral} />
-              ) : (
-                <div className="mt-2">
-                  <Badge variant="secondary" className="text-xs opacity-60">Sem relatório Quality</Badge>
-                </div>
-              )}
-            </CardContent>
+                <CardContent className="px-4 pb-2">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs">Turno</TableHead>
+                        <TableHead className="text-right text-xs">Cofre Brinks</TableHead>
+                        <TableHead className="text-right text-xs">Manual</TableHead>
+                        <TableHead className="text-right text-xs">Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {group.turnos.map((turno) => (
+                        <TableRow key={turno.turno}>
+                          <TableCell className="py-1 text-xs">{turno.turno}</TableCell>
+                          <TableCell className="py-1 text-right text-xs">{formatCurrency(turno.cofreBrinks)}</TableCell>
+                          <TableCell className="py-1 text-right text-xs">{formatCurrency(turno.manual)}</TableCell>
+                          <TableCell className="py-1 text-right text-xs font-medium">{formatCurrency(turno.total)}</TableCell>
+                        </TableRow>
+                      ))}
+                      <TableRow className="border-t-2">
+                        <TableCell className="py-1 text-xs font-bold">Soma</TableCell>
+                        <TableCell className="py-1 text-right text-xs font-bold">{formatCurrency(group.totalBrinks)}</TableCell>
+                        <TableCell className="py-1 text-right text-xs font-bold">{formatCurrency(group.totalManual)}</TableCell>
+                        <TableCell className="py-1 text-right text-xs font-bold">{formatCurrency(group.totalGeral)}</TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
 
-            <CardFooter className="flex flex-wrap items-center gap-2 px-4 pb-3 pt-1">
-              <Select value={group.conferido} onValueChange={(value) => updateGroup(i, 'conferido', value)}>
-                <SelectTrigger
-                  className={`h-8 w-36 text-xs ${
-                    group.conferido === 'OK'
-                      ? 'border-success text-success'
-                      : group.conferido === 'DIVERGÊNCIA'
-                        ? 'border-destructive text-destructive'
-                        : 'border-warning text-warning'
-                  }`}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CONFERIDO_OPTIONS.map((option) => (
-                    <SelectItem key={option} value={option}>{option}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  {/* Quality PDF row */}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {pdfUrl ? (
+                      <>
+                        {/* PDF thumbnail with hover preview + delete button */}
+                        <div className="group/pdf relative">
+                          <HoverCard openDelay={300} closeDelay={100}>
+                            <HoverCardTrigger asChild>
+                              <button
+                                className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-all hover:scale-105 hover:border-primary hover:text-foreground"
+                                onClick={() => window.open(pdfUrl, '_blank')}
+                              >
+                                <FileText className="h-3.5 w-3.5 text-red-500" />
+                                <span>PDF Quality</span>
+                                <span className="text-muted-foreground/60">
+                                  {new Date(`${group.data}T00:00:00`).toLocaleDateString('pt-BR')}
+                                </span>
+                              </button>
+                            </HoverCardTrigger>
+                            <HoverCardContent className="w-80 p-1.5" align="start" side="bottom">
+                              <p className="mb-1 px-0.5 text-[10px] text-muted-foreground">
+                                Clique para abrir em tela cheia
+                              </p>
+                              <iframe
+                                src={pdfUrl}
+                                className="h-52 w-full rounded border border-border"
+                                title="Preview PDF Quality"
+                              />
+                            </HoverCardContent>
+                          </HoverCard>
+                          <button
+                            className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 transition-opacity group-hover/pdf:opacity-100"
+                            onClick={() => setDeletingDate(group.data)}
+                            title="Remover PDF"
+                          >
+                            <X className="h-2.5 w-2.5" />
+                          </button>
+                        </div>
 
-              <Input
-                className="h-8 min-w-[120px] flex-1 text-xs"
-                value={group.observacao}
-                onChange={(e) => updateGroup(i, 'observacao', e.target.value)}
-                placeholder="Observação"
-              />
+                      </>
+                    ) : (
+                      <Badge variant="secondary" className="text-xs opacity-60">Sem PDF Quality</Badge>
+                    )}
 
-              <Button size="sm" variant="ghost" onClick={() => handleSaveGroup(group)}>
-                <Save className="h-4 w-4" />
-              </Button>
-            </CardFooter>
-          </Card>
-        ))
+                    {/* Upload button — always visible */}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="ml-auto h-7 text-xs"
+                      onClick={() => { setUploadingDate(group.data); qualityFileInputRef.current?.click(); }}
+                    >
+                      <Upload className="mr-1 h-3 w-3" />
+                      {pdfUrl ? 'Substituir PDF' : 'Importar PDF Quality'}
+                    </Button>
+                  </div>
+                </CardContent>
+
+                <CardFooter className="flex flex-wrap items-center gap-2 px-4 pb-3 pt-1">
+                  <Select value={group.conferido} onValueChange={(value) => updateGroup(i_real, 'conferido', value)}>
+                    <SelectTrigger
+                      className={`h-8 w-36 text-xs ${
+                        group.conferido === 'OK'
+                          ? 'border-success text-success'
+                          : group.conferido === 'DIVERGÊNCIA'
+                            ? 'border-destructive text-destructive'
+                            : 'border-warning text-warning'
+                      }`}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CONFERIDO_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={option}>{option}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Input
+                    className="h-8 min-w-[120px] flex-1 text-xs"
+                    value={group.observacao}
+                    onChange={(e) => updateGroup(i_real, 'observacao', e.target.value)}
+                    placeholder="Observação"
+                  />
+
+                  <Button size="sm" variant="ghost" onClick={() => handleSaveGroup(group)}>
+                    <Save className="h-4 w-4" />
+                  </Button>
+                </CardFooter>
+              </Card>
+            );
+          })}
+
+          <PaginationControls
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            pageSize={pagination.pageSize}
+            totalItems={pagination.totalItems}
+            startIndex={pagination.startIndex}
+            endIndex={pagination.endIndex}
+            onPageChange={pagination.setPage}
+            onPageSizeChange={pagination.handlePageSizeChange}
+            pageSizeOptions={[10, 20, 50]}
+            itemLabel="caixas"
+          />
+        </>
       )}
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={deletingDate !== null} onOpenChange={(open) => { if (!open) setDeletingDate(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir PDF Quality?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir este PDF? O arquivo será removido do Storage e o vínculo desfeito. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                const group = groups.find((g) => g.data === deletingDate);
+                if (deletingDate && group?.quality?.pdf_path) {
+                  handleDeleteQualityPDF(deletingDate, group.quality.pdf_path);
+                }
+              }}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
-  );
-}
-
-function QualityPanel({ quality, totalSistema }: { quality: QualityData; totalSistema: number }) {
-  const deltaDinheiro = totalSistema - (quality.total_dinheiro_apurado ?? 0);
-  const deltaIsZero = Math.abs(deltaDinheiro) < 0.01;
-
-  const formatCurrency = (value: number | null | undefined) =>
-    (value ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
-  return (
-    <Collapsible className="mt-2">
-      <CollapsibleTrigger asChild>
-        <Button variant="ghost" size="sm" className="w-full justify-between text-xs">
-          <span>Conferência Quality</span>
-          <ChevronDown className="h-3 w-3" />
-        </Button>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="text-xs">Campo</TableHead>
-              <TableHead className="text-right text-xs">Brinks+Manual</TableHead>
-              <TableHead className="text-right text-xs">Quality</TableHead>
-              <TableHead className="text-right text-xs">Diferença</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow>
-              <TableCell className="py-1 text-xs font-medium">Dinheiro</TableCell>
-              <TableCell className="py-1 text-right text-xs">{formatCurrency(totalSistema)}</TableCell>
-              <TableCell className="py-1 text-right text-xs">{formatCurrency(quality.total_dinheiro_apurado)}</TableCell>
-              <TableCell className={`py-1 text-right text-xs font-bold ${deltaIsZero ? 'text-success' : 'text-destructive'}`}>
-                {formatCurrency(deltaDinheiro)}
-              </TableCell>
-            </TableRow>
-            <TableRow>
-              <TableCell className="py-1 text-xs">Cartão/POS</TableCell>
-              <TableCell className="py-1 text-right text-xs">—</TableCell>
-              <TableCell className="py-1 text-right text-xs">{formatCurrency(quality.total_cartao)}</TableCell>
-              <TableCell className="py-1 text-right text-xs">—</TableCell>
-            </TableRow>
-            <TableRow>
-              <TableCell className="py-1 text-xs">PIX</TableCell>
-              <TableCell className="py-1 text-right text-xs">—</TableCell>
-              <TableCell className="py-1 text-right text-xs">{formatCurrency(quality.total_pix)}</TableCell>
-              <TableCell className="py-1 text-right text-xs">—</TableCell>
-            </TableRow>
-            <TableRow>
-              <TableCell className="py-1 text-xs">Despesas</TableCell>
-              <TableCell className="py-1 text-right text-xs">—</TableCell>
-              <TableCell className="py-1 text-right text-xs">{formatCurrency(quality.total_despesas)}</TableCell>
-              <TableCell className="py-1 text-right text-xs">—</TableCell>
-            </TableRow>
-            <TableRow>
-              <TableCell className="py-1 text-xs">Diferença caixa</TableCell>
-              <TableCell className="py-1 text-right text-xs">—</TableCell>
-              <TableCell className="py-1 text-right text-xs">{formatCurrency(quality.diferenca_caixa)}</TableCell>
-              <TableCell className="py-1 text-right text-xs">—</TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-      </CollapsibleContent>
-    </Collapsible>
   );
 }

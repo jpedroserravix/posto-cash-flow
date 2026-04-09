@@ -13,6 +13,7 @@ import Usuarios from "./pages/Usuarios";
 import ContasBancarias from "./pages/ContasBancarias";
 import ExtratoBancario from "./pages/ExtratoBancario";
 import AppLayout from "./components/AppLayout";
+import Pessoal from "./pages/Pessoal";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,6 +40,7 @@ function AppRoutes() {
       <Route path="/usuarios" element={<ProtectedRoute><Usuarios /></ProtectedRoute>} />
       <Route path="/bancos" element={<ProtectedRoute><ContasBancarias /></ProtectedRoute>} />
       <Route path="/extrato" element={<ProtectedRoute><ExtratoBancario /></ProtectedRoute>} />
+      <Route path="/pessoal" element={<ProtectedRoute><Pessoal /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

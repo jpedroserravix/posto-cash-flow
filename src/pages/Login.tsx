@@ -29,7 +29,7 @@ export default function Login() {
           <div className="mx-auto w-12 h-12 rounded-lg bg-primary flex items-center justify-center">
             <Fuel className="w-6 h-6 text-primary-foreground" />
           </div>
-          <CardTitle className="text-2xl font-bold">Controle de Caixa</CardTitle>
+          <CardTitle className="text-2xl font-bold">POSTO INTELIGENTE</CardTitle>
           <p className="text-muted-foreground text-sm">Rede de Postos de Combustível</p>
         </CardHeader>
         <CardContent>
