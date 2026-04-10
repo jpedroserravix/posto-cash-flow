@@ -9,8 +9,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Save, Upload, FileText, X } from 'lucide-react';
+import { Save, Upload, FileText, X, ExternalLink } from 'lucide-react';
 import { usePagination } from '@/hooks/usePagination';
 import { PaginationControls } from '@/components/PaginationControls';
 
@@ -46,6 +47,7 @@ export default function ResumoDiario() {
   const [groups, setGroups] = useState<GroupData[]>([]);
   const [uploadingDate, setUploadingDate] = useState<string | null>(null);
   const [deletingDate, setDeletingDate] = useState<string | null>(null);
+  const [previewPdf, setPreviewPdf] = useState<{ url: string; label: string } | null>(null);
   const qualityFileInputRef = useRef<HTMLInputElement>(null);
 
   const pagination = usePagination(groups, [selectedPostoId], {
@@ -353,7 +355,10 @@ export default function ResumoDiario() {
                             <HoverCardTrigger asChild>
                               <button
                                 className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-all hover:scale-105 hover:border-primary hover:text-foreground"
-                                onClick={() => window.open(pdfUrl, '_blank')}
+                                onClick={() => setPreviewPdf({
+                                  url: pdfUrl,
+                                  label: `PDF Quality — ${new Date(`${group.data}T00:00:00`).toLocaleDateString('pt-BR')}`,
+                                })}
                               >
                                 <FileText className="h-3.5 w-3.5 text-red-500" />
                                 <span>PDF Quality</span>
@@ -364,7 +369,7 @@ export default function ResumoDiario() {
                             </HoverCardTrigger>
                             <HoverCardContent className="w-80 p-1.5" align="start" side="bottom">
                               <p className="mb-1 px-0.5 text-[10px] text-muted-foreground">
-                                Clique para abrir em tela cheia
+                                Clique para abrir com zoom
                               </p>
                               <iframe
                                 src={pdfUrl}
@@ -449,6 +454,29 @@ export default function ResumoDiario() {
           />
         </>
       )}
+      {/* PDF zoom modal */}
+      <Dialog open={previewPdf !== null} onOpenChange={(open) => { if (!open) setPreviewPdf(null); }}>
+        <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="flex-row items-center justify-between px-4 py-2 border-b shrink-0">
+            <DialogTitle className="text-sm font-medium">{previewPdf?.label}</DialogTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 text-xs"
+              onClick={() => window.open(previewPdf?.url, '_blank')}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Abrir em nova aba
+            </Button>
+          </DialogHeader>
+          <iframe
+            src={previewPdf?.url}
+            className="flex-1 w-full border-0"
+            title="PDF Quality"
+          />
+        </DialogContent>
+      </Dialog>
+
       {/* Delete confirmation dialog */}
       <AlertDialog open={deletingDate !== null} onOpenChange={(open) => { if (!open) setDeletingDate(null); }}>
         <AlertDialogContent>
