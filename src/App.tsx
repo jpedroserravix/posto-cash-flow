@@ -4,7 +4,9 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { firstAllowedPath } from "@/lib/permissions";
 import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
 import DepositosBrinks from "./pages/DepositosBrinks";
 import DepositosManuais from "./pages/DepositosManuais";
 import ResumoDiario from "./pages/ResumoDiario";
@@ -13,34 +15,80 @@ import Usuarios from "./pages/Usuarios";
 import ContasBancarias from "./pages/ContasBancarias";
 import ExtratoBancario from "./pages/ExtratoBancario";
 import AppLayout from "./components/AppLayout";
-import Pessoal from "./pages/Pessoal";
+import EnvioRapido from "./pages/EnvioRapido";
+import Documentos from "./pages/Documentos";
+import Funcionarios from "./pages/pessoal/Funcionarios";
+import PontoOcorrencias from "./pages/pessoal/PontoOcorrencias";
+import FechamentoMensal from "./pages/pessoal/FechamentoMensal";
+import HistoricoFuncionario from "./pages/pessoal/HistoricoFuncionario";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Carregando...</div>;
+const Loading = () => (
+  <div className="min-h-screen flex items-center justify-center text-muted-foreground">
+    Carregando...
+  </div>
+);
+
+function ProtectedRoute({
+  children,
+  permission,
+}: {
+  children: React.ReactNode;
+  permission?: string;
+}) {
+  const { user, loading, hasPermission, permissoes } = useAuth();
+
+  if (loading) return <Loading />;
   if (!user) return <Navigate to="/login" replace />;
+
+  // Wait until permissions have been loaded (permissoes will be empty array until profile loads)
+  // We detect "still loading permissions" by checking if the user is set but permissoes hasn't populated yet.
+  // Since loading=false at this point, if permissoes is empty it means the user truly has no permissions.
+
+  if (permission && !hasPermission(permission)) {
+    const fallback = firstAllowedPath(hasPermission);
+    return <Navigate to={fallback} replace />;
+  }
+
   return <AppLayout>{children}</AppLayout>;
+}
+
+// "/" renders Dashboard if user has dashboard permission, otherwise their first allowed page
+function HomeRoute() {
+  const { user, loading, hasPermission } = useAuth();
+  if (loading) return <Loading />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (hasPermission('dashboard')) return <AppLayout><Dashboard /></AppLayout>;
+  const fallback = firstAllowedPath(hasPermission);
+  if (fallback === '/') return <AppLayout><Dashboard /></AppLayout>; // shouldn't loop
+  return <Navigate to={fallback} replace />;
 }
 
 function AppRoutes() {
   const { user, loading } = useAuth();
-  
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Carregando...</div>;
+  if (loading) return <Loading />;
 
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
-      <Route path="/" element={<ProtectedRoute><DepositosBrinks /></ProtectedRoute>} />
-      <Route path="/manuais" element={<ProtectedRoute><DepositosManuais /></ProtectedRoute>} />
-      <Route path="/resumo" element={<ProtectedRoute><ResumoDiario /></ProtectedRoute>} />
-      <Route path="/postos" element={<ProtectedRoute><Postos /></ProtectedRoute>} />
-      <Route path="/usuarios" element={<ProtectedRoute><Usuarios /></ProtectedRoute>} />
-      <Route path="/bancos" element={<ProtectedRoute><ContasBancarias /></ProtectedRoute>} />
-      <Route path="/extrato" element={<ProtectedRoute><ExtratoBancario /></ProtectedRoute>} />
-      <Route path="/pessoal" element={<ProtectedRoute><Pessoal /></ProtectedRoute>} />
+      <Route path="/" element={<HomeRoute />} />
+      <Route path="/brinks"      element={<ProtectedRoute permission="brinks">     <DepositosBrinks /></ProtectedRoute>} />
+      <Route path="/manuais"     element={<ProtectedRoute permission="manuais">    <DepositosManuais /></ProtectedRoute>} />
+      <Route path="/resumo"      element={<ProtectedRoute permission="resumo">     <ResumoDiario /></ProtectedRoute>} />
+      <Route path="/extrato"     element={<ProtectedRoute permission="extrato">    <ExtratoBancario /></ProtectedRoute>} />
+      <Route path="/postos"      element={<ProtectedRoute permission="postos">     <Postos /></ProtectedRoute>} />
+      <Route path="/usuarios"    element={<ProtectedRoute permission="usuarios">   <Usuarios /></ProtectedRoute>} />
+      <Route path="/bancos"      element={<ProtectedRoute permission="bancos">     <ContasBancarias /></ProtectedRoute>} />
+      <Route path="/funcionarios"      element={<ProtectedRoute permission="pessoal"><Funcionarios /></ProtectedRoute>} />
+      <Route path="/ponto"             element={<ProtectedRoute permission="pessoal"><PontoOcorrencias /></ProtectedRoute>} />
+      <Route path="/fechamento"        element={<ProtectedRoute permission="pessoal"><FechamentoMensal /></ProtectedRoute>} />
+      <Route path="/historico-pessoal" element={<ProtectedRoute permission="pessoal"><HistoricoFuncionario /></ProtectedRoute>} />
+      <Route path="/alvaras"       element={<ProtectedRoute permission="alvaras">      <Documentos /></ProtectedRoute>} />
+      <Route path="/garantias"     element={<ProtectedRoute permission="garantias">    <Documentos /></ProtectedRoute>} />
+      <Route path="/docs-empresa"  element={<ProtectedRoute permission="docs-empresa"> <Documentos /></ProtectedRoute>} />
+      <Route path="/envio-rapido" element={<ProtectedRoute permission="envio-rapido"><EnvioRapido /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

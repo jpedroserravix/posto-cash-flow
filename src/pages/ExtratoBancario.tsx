@@ -11,6 +11,8 @@ import { Upload, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePagination } from '@/hooks/usePagination';
 import { PaginationControls } from '@/components/PaginationControls';
+import { useDateFilter } from '@/hooks/useDateFilter';
+import { DateFilter } from '@/components/DateFilter';
 
 interface ExtratoRow {
   id: string;
@@ -68,6 +70,7 @@ function parseOFX(text: string): OFXTransaction[] {
 
 export default function ExtratoBancario() {
   const { selectedPostoId } = useAuth();
+  const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter();
   const [contasBancarias, setContasBancarias] = useState<{ id: string; banco: string; agencia: string; conta: string }[]>([]);
   const [selectedContaId, setSelectedContaId] = useState<string>('');
   const [extrato, setExtrato] = useState<ExtratoRow[]>([]);
@@ -96,6 +99,8 @@ export default function ExtratoBancario() {
       .select('id, data_lancamento, valor, memo, tipo, conciliado, fitid, deposito_brinks_ids')
       .eq('posto_id', selectedPostoId)
       .eq('conta_bancaria_id', selectedContaId)
+      .gte('data_lancamento', dfRange.start)
+      .lte('data_lancamento', dfRange.end)
       .order('data_lancamento', { ascending: false });
     if (error) toast.error('Erro ao carregar extrato: ' + error.message);
     else setExtrato((data || []).map(d => ({
@@ -105,7 +110,7 @@ export default function ExtratoBancario() {
       deposito_brinks_ids: d.deposito_brinks_ids as string[] | null,
     })));
     setLoading(false);
-  }, [selectedPostoId, selectedContaId]);
+  }, [selectedPostoId, selectedContaId, dfRange.start, dfRange.end]);
 
   useEffect(() => { loadContas(); }, [loadContas]);
   useEffect(() => { loadExtrato(); }, [loadExtrato]);
@@ -237,6 +242,8 @@ export default function ExtratoBancario() {
   };
 
   return (
+    <div className="space-y-4">
+    <DateFilter preset={dfPreset} range={dfRange} onChange={setDfPreset} />
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
@@ -345,6 +352,7 @@ export default function ExtratoBancario() {
         )}
       </CardContent>
     </Card>
+    </div>
   );
 }
 

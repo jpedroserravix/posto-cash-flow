@@ -11,9 +11,11 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/h
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Save, Upload, FileText, X, ExternalLink } from 'lucide-react';
+import { Save, Upload, FileText, X, ExternalLink, Paperclip } from 'lucide-react';
 import { usePagination } from '@/hooks/usePagination';
 import { PaginationControls } from '@/components/PaginationControls';
+import { useDateFilter } from '@/hooks/useDateFilter';
+import { DateFilter } from '@/components/DateFilter';
 
 const CONFERIDO_OPTIONS = ['OK', 'PENDENTE', 'DIVERGÊNCIA'];
 
@@ -29,6 +31,13 @@ interface QualityInfo {
   quality_conferido: string;
 }
 
+interface Comprovante {
+  id: string;
+  file_path: string;
+  file_name: string;
+  file_type: 'pdf' | 'image';
+}
+
 interface GroupData {
   data: string;
   centroCusto: string;
@@ -40,15 +49,32 @@ interface GroupData {
   observacao: string;
   resumoId?: string;
   quality?: QualityInfo;
+  comprovantes: Comprovante[];
+}
+
+interface PreviewFile {
+  url: string;
+  label: string;
+  fileType: 'pdf' | 'image';
 }
 
 export default function ResumoDiario() {
   const { selectedPostoId } = useAuth();
+  const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter();
   const [groups, setGroups] = useState<GroupData[]>([]);
-  const [uploadingDate, setUploadingDate] = useState<string | null>(null);
-  const [deletingDate, setDeletingDate] = useState<string | null>(null);
-  const [previewPdf, setPreviewPdf] = useState<{ url: string; label: string } | null>(null);
+
+  // Quality PDF state
+  const [uploadingQualityDate, setUploadingQualityDate] = useState<string | null>(null);
+  const [deletingQualityDate, setDeletingQualityDate] = useState<string | null>(null);
   const qualityFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Comprovantes state
+  const [uploadingComprovDate, setUploadingComprovDate] = useState<string | null>(null);
+  const [deletingComprovante, setDeletingComprovante] = useState<{ id: string; file_path: string } | null>(null);
+  const comprovantesFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Shared preview modal
+  const [previewFile, setPreviewFile] = useState<PreviewFile | null>(null);
 
   const pagination = usePagination(groups, [selectedPostoId], {
     defaultPageSize: 10,
@@ -57,30 +83,50 @@ export default function ResumoDiario() {
 
   useEffect(() => {
     if (selectedPostoId) loadResumo();
-  }, [selectedPostoId]);
+  }, [selectedPostoId, dfRange.start, dfRange.end]);
 
   const loadResumo = async () => {
     if (!selectedPostoId) return;
 
-    const [{ data: brinks }, { data: manuais }, { data: conferencias }, { data: qualityData }] = await Promise.all([
+    const [
+      { data: brinks },
+      { data: manuais },
+      { data: conferencias },
+      { data: qualityData },
+      { data: comprovantesData },
+    ] = await Promise.all([
       supabase
         .from('depositos_brinks')
         .select('data_caixa, turno, valor, centro_custo')
         .eq('posto_id', selectedPostoId)
         .not('data_caixa', 'is', null)
-        .not('turno', 'is', null),
+        .not('turno', 'is', null)
+        .gte('data_caixa', dfRange.start)
+        .lte('data_caixa', dfRange.end),
       supabase
         .from('depositos_manuais')
         .select('data, turno, valor_lancado, centro_custo')
-        .eq('posto_id', selectedPostoId),
+        .eq('posto_id', selectedPostoId)
+        .gte('data', dfRange.start)
+        .lte('data', dfRange.end),
       supabase
         .from('resumo_conferencia')
         .select('*')
-        .eq('posto_id', selectedPostoId),
+        .eq('posto_id', selectedPostoId)
+        .gte('data', dfRange.start)
+        .lte('data', dfRange.end),
       supabase
         .from('relatorio_quality')
         .select('data_caixa, pdf_path, quality_conferido')
-        .eq('posto_id', selectedPostoId),
+        .eq('posto_id', selectedPostoId)
+        .gte('data_caixa', dfRange.start)
+        .lte('data_caixa', dfRange.end),
+      supabase
+        .from('comprovantes_despesas' as any)
+        .select('id, data_caixa, file_path, file_name, file_type')
+        .eq('posto_id', selectedPostoId)
+        .gte('data_caixa', dfRange.start)
+        .lte('data_caixa', dfRange.end),
     ]);
 
     const turnoMap = new Map<string, { brinks: number; manual: number }>();
@@ -129,6 +175,13 @@ export default function ResumoDiario() {
       });
     });
 
+    const comprovantesMap = new Map<string, Comprovante[]>();
+    (comprovantesData as any[] ?? []).forEach((c) => {
+      const arr = comprovantesMap.get(c.data_caixa) || [];
+      arr.push({ id: c.id, file_path: c.file_path, file_name: c.file_name, file_type: c.file_type });
+      comprovantesMap.set(c.data_caixa, arr);
+    });
+
     const result: GroupData[] = Array.from(groupMap.entries())
       .map(([key, turnos]) => {
         const [data, centroCusto] = key.split('|');
@@ -148,6 +201,7 @@ export default function ResumoDiario() {
           observacao: conf?.observacao || '',
           resumoId: conf?.id,
           quality: qualityMap.get(data),
+          comprovantes: comprovantesMap.get(data) || [],
         };
       })
       .sort((a, b) => b.data.localeCompare(a.data) || a.centroCusto.localeCompare(b.centroCusto));
@@ -155,52 +209,39 @@ export default function ResumoDiario() {
     setGroups(result);
   };
 
-  const getPdfUrl = (path: string) => {
-    const { data } = supabase.storage.from('quality-pdfs').getPublicUrl(path);
+  // --- Helpers ---
+
+  const getStorageUrl = (bucket: string, path: string) => {
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
     return data.publicUrl;
   };
 
+  // --- Quality PDF handlers ---
+
   const handleUploadQualityPDF = async (file: File) => {
-    if (!uploadingDate || !selectedPostoId) return;
-    const path = `${selectedPostoId}/${uploadingDate}.pdf`;
+    if (!uploadingQualityDate || !selectedPostoId) return;
+    const path = `${selectedPostoId}/${uploadingQualityDate}.pdf`;
 
     const { error: uploadError } = await supabase.storage
       .from('quality-pdfs')
       .upload(path, file, { upsert: true, contentType: 'application/pdf' });
 
-    if (uploadError) {
-      toast.error('Erro ao enviar PDF: ' + uploadError.message);
-      return;
-    }
+    if (uploadError) { toast.error('Erro ao enviar PDF: ' + uploadError.message); return; }
 
     const { error: dbError } = await supabase
       .from('relatorio_quality')
-      .upsert({
-        posto_id: selectedPostoId,
-        data_caixa: uploadingDate,
-        pdf_path: path,
-        quality_conferido: 'PENDENTE',
-      } as any, { onConflict: 'posto_id,data_caixa' });
+      .upsert({ posto_id: selectedPostoId, data_caixa: uploadingQualityDate, pdf_path: path, quality_conferido: 'PENDENTE' } as any, { onConflict: 'posto_id,data_caixa' });
 
-    if (dbError) {
-      toast.error('Erro ao salvar: ' + dbError.message);
-      return;
-    }
+    if (dbError) { toast.error('Erro ao salvar: ' + dbError.message); return; }
 
     toast.success('PDF importado com sucesso!');
-    setUploadingDate(null);
+    setUploadingQualityDate(null);
     loadResumo();
   };
 
   const handleDeleteQualityPDF = async (data_caixa: string, pdf_path: string) => {
-    const { error: storageError } = await supabase.storage
-      .from('quality-pdfs')
-      .remove([pdf_path]);
-
-    if (storageError) {
-      toast.error('Erro ao deletar arquivo: ' + storageError.message);
-      return;
-    }
+    const { error: storageError } = await supabase.storage.from('quality-pdfs').remove([pdf_path]);
+    if (storageError) { toast.error('Erro ao deletar arquivo: ' + storageError.message); return; }
 
     const { error: dbError } = await supabase
       .from('relatorio_quality')
@@ -208,28 +249,69 @@ export default function ResumoDiario() {
       .eq('posto_id', selectedPostoId!)
       .eq('data_caixa', data_caixa);
 
-    if (dbError) {
-      toast.error('Erro ao atualizar registro: ' + dbError.message);
-      return;
-    }
+    if (dbError) { toast.error('Erro ao atualizar registro: ' + dbError.message); return; }
 
     toast.success('PDF removido.');
-    setDeletingDate(null);
+    setDeletingQualityDate(null);
     loadResumo();
   };
 
-  const handleToggleQualityStatus = async (data_caixa: string, currentStatus: string) => {
-    if (!selectedPostoId) return;
-    const newStatus = currentStatus === 'OK' ? 'PENDENTE' : 'OK';
-    const { error } = await supabase
-      .from('relatorio_quality')
-      .update({ quality_conferido: newStatus } as any)
-      .eq('posto_id', selectedPostoId)
-      .eq('data_caixa', data_caixa);
+  // --- Comprovantes handlers ---
 
-    if (error) { toast.error('Erro: ' + error.message); return; }
+  const handleUploadComprovantes = async (files: FileList) => {
+    if (!uploadingComprovDate || !selectedPostoId) return;
+
+    let successCount = 0;
+    for (const file of Array.from(files)) {
+      const fileType = file.type.startsWith('image/') ? 'image' : 'pdf';
+      const ext = file.name.split('.').pop() ?? 'bin';
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `${selectedPostoId}/${uploadingComprovDate}/${Date.now()}-${safeName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('despesas-comprovantes')
+        .upload(path, file, { upsert: false, contentType: file.type });
+
+      if (uploadError) { toast.error(`Erro ao enviar "${file.name}": ` + uploadError.message); continue; }
+
+      const { error: dbError } = await supabase
+        .from('comprovantes_despesas' as any)
+        .insert({ posto_id: selectedPostoId, data_caixa: uploadingComprovDate, file_path: path, file_name: file.name, file_type: fileType });
+
+      if (dbError) { toast.error(`Erro ao salvar "${file.name}": ` + dbError.message); continue; }
+
+      successCount++;
+    }
+
+    if (successCount > 0) {
+      toast.success(`${successCount} comprovante${successCount > 1 ? 's' : ''} anexado${successCount > 1 ? 's' : ''}!`);
+      loadResumo();
+    }
+    setUploadingComprovDate(null);
+  };
+
+  const handleDeleteComprovante = async () => {
+    if (!deletingComprovante) return;
+
+    const { error: storageError } = await supabase.storage
+      .from('despesas-comprovantes')
+      .remove([deletingComprovante.file_path]);
+
+    if (storageError) { toast.error('Erro ao deletar arquivo: ' + storageError.message); return; }
+
+    const { error: dbError } = await supabase
+      .from('comprovantes_despesas' as any)
+      .delete()
+      .eq('id', deletingComprovante.id);
+
+    if (dbError) { toast.error('Erro ao remover registro: ' + dbError.message); return; }
+
+    toast.success('Comprovante removido.');
+    setDeletingComprovante(null);
     loadResumo();
   };
+
+  // --- Other handlers ---
 
   const handleSaveGroup = async (group: GroupData) => {
     if (!selectedPostoId) return;
@@ -279,7 +361,9 @@ export default function ResumoDiario() {
     <div className="space-y-4">
       <h1 className="text-xl font-bold">Resumo Diário</h1>
 
-      {/* Hidden file input — shared across all cards */}
+      <DateFilter preset={dfPreset} range={dfRange} onChange={setDfPreset} />
+
+      {/* Hidden file inputs */}
       <input
         ref={qualityFileInputRef}
         type="file"
@@ -289,6 +373,17 @@ export default function ResumoDiario() {
           const file = e.target.files?.[0];
           if (file) handleUploadQualityPDF(file);
           if (qualityFileInputRef.current) qualityFileInputRef.current.value = '';
+        }}
+      />
+      <input
+        ref={comprovantesFileInputRef}
+        type="file"
+        accept=".pdf,.jpg,.jpeg,.png"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files?.length) handleUploadComprovantes(e.target.files);
+          if (comprovantesFileInputRef.current) comprovantesFileInputRef.current.value = '';
         }}
       />
 
@@ -304,7 +399,9 @@ export default function ResumoDiario() {
         <>
           {pagination.paginatedData.map((group, i) => {
             const i_real = (pagination.page - 1) * pagination.pageSize + i;
-            const pdfUrl = group.quality?.pdf_path ? getPdfUrl(group.quality.pdf_path) : null;
+            const pdfUrl = group.quality?.pdf_path
+              ? getStorageUrl('quality-pdfs', group.quality.pdf_path)
+              : null;
 
             return (
               <Card key={`${group.data}-${group.centroCusto}`} className={borderColor(group.conferido)}>
@@ -317,7 +414,8 @@ export default function ResumoDiario() {
                   </div>
                 </CardHeader>
 
-                <CardContent className="px-4 pb-2">
+                <CardContent className="px-4 pb-2 space-y-3">
+                  {/* Turnos table */}
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -346,62 +444,113 @@ export default function ResumoDiario() {
                   </Table>
 
                   {/* Quality PDF row */}
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     {pdfUrl ? (
-                      <>
-                        {/* PDF thumbnail with hover preview + delete button */}
-                        <div className="group/pdf relative">
-                          <HoverCard openDelay={300} closeDelay={100}>
-                            <HoverCardTrigger asChild>
-                              <button
-                                className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-all hover:scale-105 hover:border-primary hover:text-foreground"
-                                onClick={() => setPreviewPdf({
-                                  url: pdfUrl,
-                                  label: `PDF Quality — ${new Date(`${group.data}T00:00:00`).toLocaleDateString('pt-BR')}`,
-                                })}
-                              >
-                                <FileText className="h-3.5 w-3.5 text-red-500" />
-                                <span>PDF Quality</span>
-                                <span className="text-muted-foreground/60">
-                                  {new Date(`${group.data}T00:00:00`).toLocaleDateString('pt-BR')}
-                                </span>
-                              </button>
-                            </HoverCardTrigger>
-                            <HoverCardContent className="w-80 p-1.5" align="start" side="bottom">
-                              <p className="mb-1 px-0.5 text-[10px] text-muted-foreground">
-                                Clique para abrir com zoom
-                              </p>
-                              <iframe
-                                src={pdfUrl}
-                                className="h-52 w-full rounded border border-border"
-                                title="Preview PDF Quality"
-                              />
-                            </HoverCardContent>
-                          </HoverCard>
-                          <button
-                            className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 transition-opacity group-hover/pdf:opacity-100"
-                            onClick={() => setDeletingDate(group.data)}
-                            title="Remover PDF"
-                          >
-                            <X className="h-2.5 w-2.5" />
-                          </button>
-                        </div>
-
-                      </>
+                      <div className="group/pdf relative">
+                        <HoverCard openDelay={300} closeDelay={100}>
+                          <HoverCardTrigger asChild>
+                            <button
+                              className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-all hover:scale-105 hover:border-primary hover:text-foreground"
+                              onClick={() => setPreviewFile({ url: pdfUrl, label: `PDF Quality — ${new Date(`${group.data}T00:00:00`).toLocaleDateString('pt-BR')}`, fileType: 'pdf' })}
+                            >
+                              <FileText className="h-3.5 w-3.5 text-red-500" />
+                              <span>PDF Quality</span>
+                              <span className="text-muted-foreground/60">{new Date(`${group.data}T00:00:00`).toLocaleDateString('pt-BR')}</span>
+                            </button>
+                          </HoverCardTrigger>
+                          <HoverCardContent className="w-80 p-1.5" align="start" side="bottom">
+                            <p className="mb-1 px-0.5 text-[10px] text-muted-foreground">Clique para abrir com zoom</p>
+                            <iframe src={pdfUrl} className="h-52 w-full rounded border border-border" title="Preview PDF Quality" />
+                          </HoverCardContent>
+                        </HoverCard>
+                        <button
+                          className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 transition-opacity group-hover/pdf:opacity-100"
+                          onClick={() => setDeletingQualityDate(group.data)}
+                          title="Remover PDF"
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </div>
                     ) : (
                       <Badge variant="secondary" className="text-xs opacity-60">Sem PDF Quality</Badge>
                     )}
-
-                    {/* Upload button — always visible */}
                     <Button
                       size="sm"
                       variant="ghost"
                       className="ml-auto h-7 text-xs"
-                      onClick={() => { setUploadingDate(group.data); qualityFileInputRef.current?.click(); }}
+                      onClick={() => { setUploadingQualityDate(group.data); qualityFileInputRef.current?.click(); }}
                     >
                       <Upload className="mr-1 h-3 w-3" />
                       {pdfUrl ? 'Substituir PDF' : 'Importar PDF Quality'}
                     </Button>
+                  </div>
+
+                  {/* Comprovantes de despesas */}
+                  <div className="border-t pt-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground font-medium">Comprovantes Despesas</span>
+                        {group.comprovantes.length > 0 && (
+                          <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
+                            {group.comprovantes.length} {group.comprovantes.length === 1 ? 'anexo' : 'anexos'}
+                          </Badge>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 text-xs"
+                        onClick={() => { setUploadingComprovDate(group.data); comprovantesFileInputRef.current?.click(); }}
+                      >
+                        <Upload className="mr-1 h-3 w-3" />
+                        Adicionar
+                      </Button>
+                    </div>
+
+                    {group.comprovantes.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {group.comprovantes.map((comp) => {
+                          const compUrl = getStorageUrl('despesas-comprovantes', comp.file_path);
+                          return (
+                            <div key={comp.id} className="group/comp relative">
+                              <HoverCard openDelay={300} closeDelay={100}>
+                                <HoverCardTrigger asChild>
+                                  <button
+                                    className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-all hover:scale-105 hover:border-primary hover:text-foreground"
+                                    onClick={() => setPreviewFile({ url: compUrl, label: comp.file_name, fileType: comp.file_type })}
+                                  >
+                                    {comp.file_type === 'image' ? (
+                                      <img src={compUrl} className="h-4 w-4 rounded object-cover shrink-0" alt="" />
+                                    ) : (
+                                      <FileText className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                                    )}
+                                    <span className="max-w-[100px] truncate">{comp.file_name}</span>
+                                  </button>
+                                </HoverCardTrigger>
+                                <HoverCardContent className="w-64 p-1.5" align="start" side="bottom">
+                                  {comp.file_type === 'image' ? (
+                                    <img src={compUrl} className="w-full max-h-48 rounded border border-border object-contain" alt={comp.file_name} />
+                                  ) : (
+                                    <>
+                                      <p className="mb-1 px-0.5 text-[10px] text-muted-foreground">Clique para abrir com zoom</p>
+                                      <iframe src={compUrl} className="h-40 w-full rounded border border-border" title={comp.file_name} />
+                                    </>
+                                  )}
+                                </HoverCardContent>
+                              </HoverCard>
+                              <button
+                                className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 transition-opacity group-hover/comp:opacity-100"
+                                onClick={() => setDeletingComprovante({ id: comp.id, file_path: comp.file_path })}
+                                title="Remover"
+                              >
+                                <X className="h-2.5 w-2.5" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </CardContent>
 
@@ -454,36 +603,47 @@ export default function ResumoDiario() {
           />
         </>
       )}
-      {/* PDF zoom modal */}
-      <Dialog open={previewPdf !== null} onOpenChange={(open) => { if (!open) setPreviewPdf(null); }}>
+
+      {/* Shared preview modal (PDF + image) */}
+      <Dialog open={previewFile !== null} onOpenChange={(open) => { if (!open) setPreviewFile(null); }}>
         <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0 gap-0">
           <DialogHeader className="flex-row items-center justify-between px-4 py-2 border-b shrink-0">
-            <DialogTitle className="text-sm font-medium">{previewPdf?.label}</DialogTitle>
+            <DialogTitle className="text-sm font-medium truncate pr-4">{previewFile?.label}</DialogTitle>
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 gap-1.5 text-xs"
-              onClick={() => window.open(previewPdf?.url, '_blank')}
+              className="h-7 gap-1.5 text-xs shrink-0"
+              onClick={() => window.open(previewFile?.url, '_blank')}
             >
               <ExternalLink className="h-3.5 w-3.5" />
               Abrir em nova aba
             </Button>
           </DialogHeader>
-          <iframe
-            src={previewPdf?.url}
-            className="flex-1 w-full border-0"
-            title="PDF Quality"
-          />
+          {previewFile?.fileType === 'image' ? (
+            <div className="flex-1 flex items-center justify-center p-4 overflow-auto bg-muted/30">
+              <img
+                src={previewFile.url}
+                alt={previewFile.label}
+                className="max-w-full max-h-full object-contain rounded"
+              />
+            </div>
+          ) : (
+            <iframe
+              src={previewFile?.url}
+              className="flex-1 w-full border-0"
+              title={previewFile?.label}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirmation dialog */}
-      <AlertDialog open={deletingDate !== null} onOpenChange={(open) => { if (!open) setDeletingDate(null); }}>
+      {/* Delete Quality PDF confirmation */}
+      <AlertDialog open={deletingQualityDate !== null} onOpenChange={(open) => { if (!open) setDeletingQualityDate(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir PDF Quality?</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir este PDF? O arquivo será removido do Storage e o vínculo desfeito. Esta ação não pode ser desfeita.
+              O arquivo será removido do Storage e o vínculo desfeito. Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -491,11 +651,32 @@ export default function ResumoDiario() {
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
-                const group = groups.find((g) => g.data === deletingDate);
-                if (deletingDate && group?.quality?.pdf_path) {
-                  handleDeleteQualityPDF(deletingDate, group.quality.pdf_path);
+                const group = groups.find((g) => g.data === deletingQualityDate);
+                if (deletingQualityDate && group?.quality?.pdf_path) {
+                  handleDeleteQualityPDF(deletingQualityDate, group.quality.pdf_path);
                 }
               }}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete comprovante confirmation */}
+      <AlertDialog open={deletingComprovante !== null} onOpenChange={(open) => { if (!open) setDeletingComprovante(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir comprovante?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O arquivo será removido do Storage permanentemente. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteComprovante}
             >
               Excluir
             </AlertDialogAction>

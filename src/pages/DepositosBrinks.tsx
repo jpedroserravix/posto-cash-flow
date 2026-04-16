@@ -20,6 +20,8 @@ import { FilterableHead } from '@/components/FilterableHead';
 import { HorizontalScrollSync } from '@/components/HorizontalScrollSync';
 import { usePagination } from '@/hooks/usePagination';
 import { PaginationControls } from '@/components/PaginationControls';
+import { useDateFilter } from '@/hooks/useDateFilter';
+import { DateFilter } from '@/components/DateFilter';
 
 type SortDir = 'asc' | 'desc' | null;
 
@@ -208,6 +210,7 @@ function rowKey(r: { data_deposito: string; valor: number; depositante: string; 
 
 export default function DepositosBrinks() {
   const { selectedPostoId, role } = useAuth();
+  const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter();
   const [importRows, setImportRows] = useState<BrinksRow[]>([]);
   const [loteId, setLoteId] = useState<string>('');
   const [valorBanco, setValorBanco] = useState<string>('');
@@ -249,6 +252,8 @@ export default function DepositosBrinks() {
       .from('depositos_brinks')
       .select('id, data_deposito, moeda, valor, tipo, depositante, data_caixa, turno, observacao, conciliado_banco_id, centro_custo, conciliado_forcado')
       .eq('posto_id', selectedPostoId)
+      .gte('data_deposito', dfRange.start)
+      .lte('data_deposito', dfRange.end + 'T23:59:59')
       .order('data_deposito', { ascending: false });
     if (error) {
       toast.error('Erro ao carregar depósitos: ' + error.message);
@@ -269,7 +274,7 @@ export default function DepositosBrinks() {
       })));
     }
     setLoading(false);
-  }, [selectedPostoId]);
+  }, [selectedPostoId, dfRange.start, dfRange.end]);
 
   const loadContasBancarias = useCallback(async () => {
     if (!selectedPostoId) return;
@@ -673,6 +678,8 @@ export default function DepositosBrinks() {
           </label>
         </div>
       </div>
+
+      <DateFilter preset={dfPreset} range={dfRange} onChange={setDfPreset} />
 
       {/* Import view */}
       {isImporting && importRows.length > 0 && (

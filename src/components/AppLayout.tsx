@@ -2,19 +2,18 @@ import { ReactNode } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Fuel, LogOut, FileSpreadsheet, PenLine, BarChart3, Building2, Users, Landmark, Receipt, Wrench } from 'lucide-react';
+import { Fuel, LogOut, FileSpreadsheet, PenLine, BarChart3, Building2, Users, Landmark, Receipt, Wrench, Zap, LayoutDashboard, FileCheck2, ShoppingBag, UserCircle, Clock, Calculator, History } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 interface NavItem {
   to: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  adminOnly?: boolean;
+  permission: string;
 }
 
 interface NavGroup {
   label: string;
-  adminOnly?: boolean;
   items: NavItem[];
 }
 
@@ -22,38 +21,47 @@ const navGroups: NavGroup[] = [
   {
     label: 'Financeiro',
     items: [
-      { to: '/', label: 'Depósitos Brinks', icon: FileSpreadsheet },
-      { to: '/manuais', label: 'Depósitos Manuais', icon: PenLine },
-      { to: '/resumo', label: 'Resumo Diário', icon: BarChart3 },
-      { to: '/extrato', label: 'Extrato Bancário', icon: Receipt, adminOnly: true },
+      { to: '/brinks',  label: 'Depósitos Brinks',  icon: FileSpreadsheet, permission: 'brinks' },
+      { to: '/manuais', label: 'Depósitos Manuais', icon: PenLine,         permission: 'manuais' },
+      { to: '/resumo',  label: 'Resumo Diário',      icon: BarChart3,       permission: 'resumo' },
+      { to: '/extrato', label: 'Extrato Bancário',   icon: Receipt,         permission: 'extrato' },
     ],
   },
   {
     label: 'Pessoal',
     items: [
-      { to: '/pessoal', label: 'Em construção', icon: Wrench },
+      { to: '/funcionarios',       label: 'Funcionários',       icon: UserCircle,  permission: 'pessoal' },
+      { to: '/ponto',              label: 'Ponto e Ocorrências', icon: Clock,       permission: 'pessoal' },
+      { to: '/fechamento',         label: 'Fechamento Mensal',   icon: Calculator,  permission: 'pessoal' },
+      { to: '/historico-pessoal',  label: 'Histórico',           icon: History,     permission: 'pessoal' },
+    ],
+  },
+  {
+    label: 'Documentos',
+    items: [
+      { to: '/alvaras',      label: 'Alvarás e Licenças',       icon: FileCheck2,  permission: 'alvaras' },
+      { to: '/garantias',    label: 'Notas Fiscais e Garantias', icon: ShoppingBag, permission: 'garantias' },
+      { to: '/docs-empresa', label: 'Documentos da Empresa',    icon: Building2,   permission: 'docs-empresa' },
     ],
   },
   {
     label: 'Cadastros',
-    adminOnly: true,
     items: [
-      { to: '/postos', label: 'Postos', icon: Building2 },
-      { to: '/usuarios', label: 'Usuários', icon: Users },
-      { to: '/bancos', label: 'Contas Bancárias', icon: Landmark },
+      { to: '/postos',   label: 'Postos',            icon: Building2, permission: 'postos' },
+      { to: '/usuarios', label: 'Usuários',           icon: Users,     permission: 'usuarios' },
+      { to: '/bancos',   label: 'Contas Bancárias',   icon: Landmark,  permission: 'bancos' },
     ],
   },
 ];
 
 export default function AppLayout({ children }: { children: ReactNode }) {
-  const { role, postoNome, allPostos, selectedPostoId, setSelectedPostoId, signOut } = useAuth();
+  const { role, postoNome, allPostos, selectedPostoId, setSelectedPostoId, signOut, hasPermission } = useAuth();
   const location = useLocation();
 
   const visibleGroups = navGroups
-    .filter((g) => !g.adminOnly || role === 'admin')
     .map((g) => ({
       ...g,
-      visibleItems: g.items.filter((item) => !item.adminOnly || role === 'admin'),
+      visibleItems: g.items.filter((item) => hasPermission(item.permission)),
     }))
     .filter((g) => g.visibleItems.length > 0);
 
@@ -61,9 +69,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     g.visibleItems.some((item) => location.pathname === item.to)
   );
 
-  const secondaryTabs = activeGroup && activeGroup.visibleItems.length > 1
-    ? activeGroup.visibleItems
-    : null;
+  const secondaryTabs =
+    activeGroup && activeGroup.visibleItems.length > 1 ? activeGroup.visibleItems : null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -78,19 +85,19 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           </div>
 
           <div className="flex items-center gap-2">
-            {role === 'admin' && allPostos.length > 0 && (
+            {allPostos.length > 1 && (
               <Select value={selectedPostoId || ''} onValueChange={setSelectedPostoId}>
                 <SelectTrigger className="w-[180px] h-9 text-sm">
                   <SelectValue placeholder="Selecionar posto" />
                 </SelectTrigger>
                 <SelectContent>
-                  {allPostos.map(p => (
+                  {allPostos.map((p) => (
                     <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             )}
-            {role === 'funcionario' && postoNome && (
+            {allPostos.length <= 1 && postoNome && (
               <span className="text-sm text-muted-foreground">{postoNome}</span>
             )}
             <Button variant="ghost" size="icon" onClick={signOut} title="Sair">
@@ -100,13 +107,25 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      {/* Primary navigation — groups */}
+      {/* Primary navigation */}
       <nav className="bg-card border-b overflow-x-auto">
         <div className="container flex gap-1 py-1">
+          {hasPermission('dashboard') && (
+            <Link to="/">
+              <Button
+                variant={location.pathname === '/' ? 'default' : 'ghost'}
+                size="sm"
+                className="text-xs gap-1.5 whitespace-nowrap"
+              >
+                <LayoutDashboard className="w-3.5 h-3.5" />
+                Dashboard
+              </Button>
+            </Link>
+          )}
+
           {visibleGroups.map((group) => {
             const isActive = group.visibleItems.some((item) => location.pathname === item.to);
             const firstTo = group.visibleItems[0].to;
-
             return (
               <Link key={group.label} to={firstTo}>
                 <Button
@@ -119,6 +138,21 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               </Link>
             );
           })}
+
+          {hasPermission('envio-rapido') && (
+            <div className="ml-auto">
+              <Link to="/envio-rapido">
+                <Button
+                  variant={location.pathname === '/envio-rapido' ? 'default' : 'outline'}
+                  size="sm"
+                  className="text-xs gap-1.5 whitespace-nowrap"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  Envio Rápido
+                </Button>
+              </Link>
+            </div>
+          )}
         </div>
       </nav>
 
@@ -148,9 +182,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       )}
 
       {/* Content */}
-      <main className="container py-4">
-        {children}
-      </main>
+      <main className="container py-4">{children}</main>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -8,13 +8,18 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Save, X, FilterX, Check, Landmark } from 'lucide-react';
+import { Plus, Pencil, Trash2, Save, X, FilterX, Check, Landmark, Paperclip, FileText } from 'lucide-react';
 import { FilterableHead } from '@/components/FilterableHead';
 import { HorizontalScrollSync } from '@/components/HorizontalScrollSync';
 import { cn } from '@/lib/utils';
 import { usePagination } from '@/hooks/usePagination';
 import { PaginationControls } from '@/components/PaginationControls';
+import { useDateFilter } from '@/hooks/useDateFilter';
+import { DateFilter } from '@/components/DateFilter';
 
 const TURNOS = ['TURNO 1', 'TURNO 2', 'TURNO 3'];
 const CENTROS_CUSTO = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO'];
@@ -31,6 +36,13 @@ interface ManualDeposit {
   observacao: string | null;
   conferido: string;
   conciliado_banco_id: string | null;
+  comprovante_path: string | null;
+  comprovante_type: string | null;
+}
+
+interface PreviewFile {
+  url: string;
+  type: 'image' | 'pdf';
 }
 
 interface ContaBancaria {
@@ -42,7 +54,9 @@ interface ContaBancaria {
 
 export default function DepositosManuais() {
   const { selectedPostoId, role } = useAuth();
+  const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter();
   const [deposits, setDeposits] = useState<ManualDeposit[]>([]);
+  const [allDeposits, setAllDeposits] = useState<ManualDeposit[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({ data: '', turno: '', centro_custo: '', valor_lancado: '', valor_depositado: '', observacao: '' });
@@ -50,6 +64,10 @@ export default function DepositosManuais() {
   const [concSelected, setConcSelected] = useState<Set<string>>(new Set());
   const [concContaId, setConcContaId] = useState('');
   const [bulkCentroCusto, setBulkCentroCusto] = useState('');
+  const [formFile, setFormFile] = useState<File | null>(null);
+  const [previewFile, setPreviewFile] = useState<PreviewFile | null>(null);
+  const [deletingComprovanteId, setDeletingComprovanteId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Sort
   const [sortCol, setSortCol] = useState<string | null>(null);
@@ -64,10 +82,27 @@ export default function DepositosManuais() {
 
   useEffect(() => {
     if (selectedPostoId) {
-      loadDeposits();
+      loadAllDeposits();
       loadContas();
     }
   }, [selectedPostoId]);
+
+  useEffect(() => {
+    if (selectedPostoId) {
+      loadDeposits();
+    }
+  }, [selectedPostoId, dfRange.start, dfRange.end]);
+
+  const loadAllDeposits = async () => {
+    if (!selectedPostoId) return;
+    const { data } = await supabase
+      .from('depositos_manuais')
+      .select('*')
+      .eq('posto_id', selectedPostoId)
+      .order('data', { ascending: true })
+      .order('created_at', { ascending: true });
+    setAllDeposits(data || []);
+  };
 
   const loadDeposits = async () => {
     if (!selectedPostoId) return;
@@ -75,6 +110,8 @@ export default function DepositosManuais() {
       .from('depositos_manuais')
       .select('*')
       .eq('posto_id', selectedPostoId)
+      .gte('data', dfRange.start)
+      .lte('data', dfRange.end)
       .order('data', { ascending: true })
       .order('created_at', { ascending: true });
     setDeposits(data || []);
@@ -88,6 +125,9 @@ export default function DepositosManuais() {
       .eq('posto_id', selectedPostoId);
     setContas(data || []);
   };
+
+  const getStorageUrl = (path: string) =>
+    supabase.storage.from('despesas-comprovantes').getPublicUrl(path).data.publicUrl;
 
   const parseMoney = (v: string) => {
     if (!v.trim()) return null;
@@ -164,12 +204,21 @@ export default function DepositosManuais() {
     return result;
   }, [deposits, filterData, filterTurno, filterCentroCusto, filterObservacao, filterStatus, sortCol, sortDir]);
 
-  // Running balance on filtered data
-  let saldoAcumulado = 0;
-  const depositsWithSaldo = filteredData.map(d => {
-    saldoAcumulado += d.valor_lancado - (d.valor_depositado || 0);
-    return { ...d, saldo: saldoAcumulado };
-  });
+  // Historical cumulative balance map — computed from ALL deposits regardless of date filter
+  const historicalSaldoMap = useMemo(() => {
+    let acc = 0;
+    const map: Record<string, number> = {};
+    for (const d of allDeposits) {
+      acc += d.valor_lancado - (d.valor_depositado || 0);
+      map[d.id] = acc;
+    }
+    return map;
+  }, [allDeposits]);
+
+  const depositsWithSaldo = filteredData.map(d => ({
+    ...d,
+    saldo: historicalSaldoMap[d.id] ?? 0,
+  }));
 
   const pagination = usePagination(depositsWithSaldo, [filterData, filterTurno, filterCentroCusto, filterObservacao, filterStatus]);
 
@@ -180,6 +229,21 @@ export default function DepositosManuais() {
     const valorLancado = parseMoney(formData.valor_lancado);
     if (valorLancado === null) { toast.error('Informe o valor lançado'); return; }
 
+    let comprovante_path: string | null = null;
+    let comprovante_type: string | null = null;
+
+    if (formFile) {
+      const fileType = formFile.type.startsWith('image/') ? 'image' : 'pdf';
+      const safeName = formFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `${selectedPostoId}/${formData.data}/${Date.now()}-${safeName}`;
+      const { error: uploadError } = await supabase.storage
+        .from('despesas-comprovantes')
+        .upload(path, formFile, { upsert: false, contentType: formFile.type });
+      if (uploadError) { toast.error('Erro ao enviar arquivo: ' + uploadError.message); return; }
+      comprovante_path = path;
+      comprovante_type = fileType;
+    }
+
     const record = {
       posto_id: selectedPostoId,
       data: formData.data,
@@ -188,6 +252,7 @@ export default function DepositosManuais() {
       valor_lancado: valorLancado,
       valor_depositado: parseMoney(formData.valor_depositado),
       observacao: formData.observacao || null,
+      ...(comprovante_path ? { comprovante_path, comprovante_type } : {}),
     };
 
     if (editingId) {
@@ -202,8 +267,27 @@ export default function DepositosManuais() {
     }
 
     setFormData({ data: '', turno: '', centro_custo: '', valor_lancado: '', valor_depositado: '', observacao: '' });
+    setFormFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
     setShowForm(false);
     loadDeposits();
+    loadAllDeposits();
+  };
+
+  const handleDeleteComprovante = async (d: ManualDeposit) => {
+    if (!d.comprovante_path) return;
+    const { error: storageError } = await supabase.storage
+      .from('despesas-comprovantes')
+      .remove([d.comprovante_path]);
+    if (storageError) { toast.error('Erro ao remover arquivo: ' + storageError.message); return; }
+    const { error } = await supabase.from('depositos_manuais')
+      .update({ comprovante_path: null, comprovante_type: null })
+      .eq('id', d.id);
+    if (error) { toast.error('Erro: ' + error.message); return; }
+    toast.success('Comprovante removido');
+    setDeletingComprovanteId(null);
+    loadDeposits();
+    loadAllDeposits();
   };
 
   const handleEdit = (d: ManualDeposit) => {
@@ -223,7 +307,7 @@ export default function DepositosManuais() {
     if (!confirm('Excluir este lançamento?')) return;
     const { error } = await supabase.from('depositos_manuais').delete().eq('id', id);
     if (error) toast.error('Erro: ' + error.message);
-    else { toast.success('Excluído'); loadDeposits(); }
+    else { toast.success('Excluído'); loadDeposits(); loadAllDeposits(); }
   };
 
   const handleToggleConferido = async (d: ManualDeposit) => {
@@ -232,6 +316,7 @@ export default function DepositosManuais() {
     if (error) { toast.error('Erro: ' + error.message); return; }
     toast.success(newStatus === 'OK' ? 'Marcado como conferido' : 'Marcado como pendente');
     loadDeposits();
+    loadAllDeposits();
   };
 
   const toggleConcSelect = (id: string) => {
@@ -256,6 +341,7 @@ export default function DepositosManuais() {
     setConcSelected(new Set());
     setConcContaId('');
     loadDeposits();
+    loadAllDeposits();
   };
 
   const handleDesconciliar = async (id: string) => {
@@ -263,6 +349,7 @@ export default function DepositosManuais() {
     if (error) { toast.error('Erro: ' + error.message); return; }
     toast.success('Conciliação removida');
     loadDeposits();
+    loadAllDeposits();
   };
 
   const handleBulkCentroCusto = async () => {
@@ -279,6 +366,7 @@ export default function DepositosManuais() {
     toast.success(`Centro de custo aplicado em ${ids.length} depósito(s)`);
     setBulkCentroCusto('');
     loadDeposits();
+    loadAllDeposits();
   };
 
   const contaLabel = (c: ContaBancaria) => `${c.banco} - Ag ${c.agencia} / Cc ${c.conta}`;
@@ -312,6 +400,8 @@ export default function DepositosManuais() {
         </Button>
       </div>
 
+      <DateFilter preset={dfPreset} range={dfRange} onChange={setDfPreset} />
+
       {showForm && (
         <Card>
           <CardContent className="pt-4">
@@ -338,7 +428,7 @@ export default function DepositosManuais() {
                 </Select>
               </div>
               <div>
-                <label className="text-xs font-medium mb-1 block">Valor Lançado (R$)</label>
+                <label className="text-xs font-medium mb-1 block">Valor Avulso Caixa (R$)</label>
                 <Input value={formData.valor_lancado} onChange={e => setFormData({ ...formData, valor_lancado: e.target.value })} placeholder="0,00" required className="h-9" />
               </div>
               <div>
@@ -347,12 +437,36 @@ export default function DepositosManuais() {
               </div>
               <div>
                 <label className="text-xs font-medium mb-1 block">Observação</label>
-                <div className="flex gap-2">
-                  <Input value={formData.observacao} onChange={e => setFormData({ ...formData, observacao: e.target.value })} placeholder="Ex: SICREDI/JP" className="h-9" />
-                  <Button type="submit" size="sm" className="h-9 px-3">
-                    <Save className="w-4 h-4" />
+                <Input value={formData.observacao} onChange={e => setFormData({ ...formData, observacao: e.target.value })} placeholder="Ex: SICREDI/JP" className="h-9" />
+              </div>
+              <div className="sm:col-span-2 lg:col-span-5">
+                <label className="text-xs font-medium mb-1 block">Comprovante <span className="text-muted-foreground font-normal">(opcional)</span></label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  className="hidden"
+                  onChange={(e) => e.target.files?.[0] && setFormFile(e.target.files[0])}
+                />
+                {formFile ? (
+                  <div className="flex items-center gap-2 h-9 rounded-md border px-3 text-xs">
+                    <FileText className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                    <span className="truncate flex-1">{formFile.name}</span>
+                    <button type="button" onClick={() => { setFormFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}>
+                      <X className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
+                    </button>
+                  </div>
+                ) : (
+                  <Button type="button" variant="outline" size="sm" className="h-9 gap-1.5 text-xs" onClick={() => fileInputRef.current?.click()}>
+                    <Paperclip className="w-3.5 h-3.5" />
+                    Anexar arquivo
                   </Button>
-                </div>
+                )}
+              </div>
+              <div className="flex items-end">
+                <Button type="submit" size="sm" className="h-9 px-4 w-full">
+                  <Save className="w-4 h-4 mr-1" />Salvar
+                </Button>
               </div>
             </form>
           </CardContent>
@@ -369,7 +483,7 @@ export default function DepositosManuais() {
             <CardContent className="pt-4 flex flex-wrap items-center gap-3">
               <Landmark className="w-4 h-4 text-muted-foreground" />
               <span className="text-sm font-medium">{concSelected.size} selecionado(s)</span>
-              <Badge variant="secondary" className="text-xs">Lançado: {formatCurrency(somaLancado)}</Badge>
+              <Badge variant="secondary" className="text-xs">Avulso Caixa: {formatCurrency(somaLancado)}</Badge>
               <Badge variant="secondary" className="text-xs">Depositado: {formatCurrency(somaDepositado)}</Badge>
               {contas.length > 0 && (
                 <>
@@ -416,9 +530,9 @@ export default function DepositosManuais() {
                       <FilterableHead label="Data" sortActive={sortCol === 'data'} sortDir={sortCol === 'data' ? sortDir : null} onSort={() => toggleSort('data')} uniqueValues={uniqueData} selectedValues={filterData} onFilterChange={setFilterData} />
                       <FilterableHead label="Turno" sortActive={sortCol === 'turno'} sortDir={sortCol === 'turno' ? sortDir : null} onSort={() => toggleSort('turno')} uniqueValues={uniqueTurno} selectedValues={filterTurno} onFilterChange={setFilterTurno} />
                       <FilterableHead label="Centro de Custo" sortActive={sortCol === 'centro_custo'} sortDir={sortCol === 'centro_custo' ? sortDir : null} onSort={() => toggleSort('centro_custo')} uniqueValues={uniqueCentroCusto} selectedValues={filterCentroCusto} onFilterChange={setFilterCentroCusto} />
-                      <FilterableHead label="Valor Lançado" sortActive={sortCol === 'valor_lancado'} sortDir={sortCol === 'valor_lancado' ? sortDir : null} onSort={() => toggleSort('valor_lancado')} uniqueValues={[]} selectedValues={new Set()} onFilterChange={() => {}} className="text-right" />
+                      <FilterableHead label="Valor Avulso Caixa" sortActive={sortCol === 'valor_lancado'} sortDir={sortCol === 'valor_lancado' ? sortDir : null} onSort={() => toggleSort('valor_lancado')} uniqueValues={[]} selectedValues={new Set()} onFilterChange={() => {}} className="text-right" />
                       <FilterableHead label="Valor Depositado" sortActive={sortCol === 'valor_depositado'} sortDir={sortCol === 'valor_depositado' ? sortDir : null} onSort={() => toggleSort('valor_depositado')} uniqueValues={[]} selectedValues={new Set()} onFilterChange={() => {}} className="text-right" />
-                      <FilterableHead label="Saldo Pendente" sortActive={false} sortDir={null} onSort={() => {}} uniqueValues={[]} selectedValues={new Set()} onFilterChange={() => {}} className="text-right" />
+                      <FilterableHead label="Saldo Pendente Histórico" sortActive={false} sortDir={null} onSort={() => {}} uniqueValues={[]} selectedValues={new Set()} onFilterChange={() => {}} className="text-right" />
                       <FilterableHead label="Observação" sortActive={sortCol === 'observacao'} sortDir={sortCol === 'observacao' ? sortDir : null} onSort={() => toggleSort('observacao')} uniqueValues={uniqueObservacao} selectedValues={filterObservacao} onFilterChange={setFilterObservacao} />
                       <FilterableHead label="" sortActive={false} sortDir={null} onSort={() => {}} uniqueValues={[]} selectedValues={new Set()} onFilterChange={() => {}} />
                     </tr>
@@ -464,7 +578,35 @@ export default function DepositosManuais() {
                           </TableCell>
                           <TableCell className="text-xs">{d.observacao || ''}</TableCell>
                           <TableCell>
-                            <div className="flex gap-1">
+                            <div className="flex gap-1 items-center">
+                              {d.comprovante_path && (
+                                <HoverCard openDelay={200}>
+                                  <HoverCardTrigger asChild>
+                                    <div className="relative group/comp inline-flex">
+                                      <button
+                                        className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-muted"
+                                        onClick={() => setPreviewFile({ url: getStorageUrl(d.comprovante_path!), type: d.comprovante_type === 'image' ? 'image' : 'pdf' })}
+                                      >
+                                        <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="absolute -top-1 -right-1 hidden group-hover/comp:flex h-4 w-4 items-center justify-center rounded-full bg-destructive"
+                                        onClick={(e) => { e.stopPropagation(); setDeletingComprovanteId(d.id); }}
+                                      >
+                                        <X className="h-2.5 w-2.5 text-white" />
+                                      </button>
+                                    </div>
+                                  </HoverCardTrigger>
+                                  <HoverCardContent side="left" className="w-48 p-1">
+                                    {d.comprovante_type === 'image' ? (
+                                      <img src={getStorageUrl(d.comprovante_path)} className="w-full rounded object-cover" alt="" />
+                                    ) : (
+                                      <iframe src={getStorageUrl(d.comprovante_path)} className="w-full h-36 rounded" title="preview" />
+                                    )}
+                                  </HoverCardContent>
+                                </HoverCard>
+                              )}
                               <Button size="sm" variant="ghost" onClick={() => handleEdit(d)}><Pencil className="w-3 h-3" /></Button>
                               <Button size="sm" variant="ghost" onClick={() => handleDelete(d.id)}><Trash2 className="w-3 h-3" /></Button>
                             </div>
@@ -489,6 +631,43 @@ export default function DepositosManuais() {
           )}
         </CardContent>
       </Card>
+      {/* Preview modal */}
+      <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
+        <DialogContent className="max-w-3xl p-2">
+          {previewFile?.type === 'image' ? (
+            <img src={previewFile.url} className="w-full rounded" alt="" />
+          ) : (
+            <iframe src={previewFile?.url} className="w-full h-[70vh] rounded" title="Comprovante" />
+          )}
+          <div className="flex justify-end pt-1">
+            <a href={previewFile?.url} target="_blank" rel="noreferrer">
+              <Button variant="outline" size="sm" className="text-xs">Abrir em nova aba</Button>
+            </a>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete comprovante alert */}
+      <AlertDialog open={!!deletingComprovanteId} onOpenChange={() => setDeletingComprovanteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover comprovante?</AlertDialogTitle>
+            <AlertDialogDescription>O arquivo será excluído permanentemente.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90"
+              onClick={() => {
+                const d = deposits.find(dep => dep.id === deletingComprovanteId);
+                if (d) handleDeleteComprovante(d);
+              }}
+            >
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

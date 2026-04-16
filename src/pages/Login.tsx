@@ -8,16 +8,22 @@ import { toast } from 'sonner';
 import { Fuel } from 'lucide-react';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!username.trim() || !password) return;
     setLoading(true);
+
+    // If the user typed a full email (legacy admin), use it directly.
+    // Otherwise construct the internal email from username.
+    const email = username.includes('@') ? username.trim() : `${username.trim()}@posto.app`;
+
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
-      toast.error('Erro ao entrar: ' + error.message);
+      toast.error('Usuário ou senha incorretos.');
     }
     setLoading(false);
   };
@@ -35,13 +41,14 @@ export default function Login() {
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">E-mail</Label>
+              <Label htmlFor="username">Usuário</Label>
               <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="seu@email.com"
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="nome de usuário"
+                autoComplete="username"
                 required
               />
             </div>
@@ -51,8 +58,9 @@ export default function Login() {
                 id="password"
                 type="password"
                 value={password}
-                onChange={e => setPassword(e.target.value)}
+                onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
+                autoComplete="current-password"
                 required
               />
             </div>
