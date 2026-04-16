@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Fuel, LogOut, FileSpreadsheet, PenLine, BarChart3, Building2, Users, Landmark, Receipt, Wrench, Zap, LayoutDashboard, FileCheck2, ShoppingBag, UserCircle, Clock, Calculator, History } from 'lucide-react';
+import { Fuel, LogOut, FileSpreadsheet, PenLine, BarChart3, Building2, Users, Landmark, Receipt, Wrench, Zap, LayoutDashboard, FileCheck2, ShoppingBag, UserCircle, Clock, Calculator, History, ClipboardList, Package } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 interface NavItem {
@@ -50,6 +50,13 @@ const navGroups: NavGroup[] = [
       { to: '/postos',   label: 'Postos',            icon: Building2, permission: 'postos' },
       { to: '/usuarios', label: 'Usuários',           icon: Users,     permission: 'usuarios' },
       { to: '/bancos',   label: 'Contas Bancárias',   icon: Landmark,  permission: 'bancos' },
+    ],
+  },
+  {
+    label: 'Compras',
+    items: [
+      { to: '/compras/pedidos', label: 'Pedidos',             icon: Package,       permission: 'pedidos-compra' },
+      { to: '/compras/notas',   label: 'Lançamento de Notas', icon: ClipboardList, permission: 'lancamento-notas' },
     ],
   },
 ];

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,8 +9,9 @@ import {
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { Camera, Paperclip, Send, X, FileText } from 'lucide-react';
+import { Camera, Paperclip, Send, X, FileText, ExternalLink, CalendarDays, Building2, StickyNote } from 'lucide-react';
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,7 @@ type Tipo =
   | 'Depósito Manual'
   | 'Documento/Alvará'
   | 'Nota Fiscal/Garantia'
+  | 'Nota Fiscal de Compra'
   | 'Despesa'
   | 'Manutenção'
   | 'Outros';
@@ -49,6 +51,8 @@ interface FormState {
   nome_documento_custom: string;
   numero:       string;
   data_vencimento: string;
+  // nota fiscal de compra
+  data_chegada: string;
   // nota fiscal
   fornecedor:   string;
   descricao_item: string;
@@ -68,6 +72,7 @@ const emptyForm: FormState = {
   nome_documento_custom: '',
   numero:                '',
   data_vencimento:       '',
+  data_chegada:          '',
   fornecedor:            '',
   descricao_item:        '',
   data_compra:           '',
@@ -83,24 +88,69 @@ function parseMoney(v: string): number | null {
   return isNaN(n) ? null : n;
 }
 
+function formatDate(iso: string): string {
+  const d = iso.split('T')[0]; // "2026-04-16"
+  const [y, m, day] = d.split('-');
+  return `${day}/${m}/${y}`;
+}
+
 // ─── component ────────────────────────────────────────────────────────────────
 
 export default function EnvioRapido() {
-  const { selectedPostoId } = useAuth();
+  const { selectedPostoId, user, nome, username } = useAuth();
 
   const [tipo, setTipo]           = useState<Tipo>('Despesa');
   const [form, setForm]           = useState<FormState>(emptyForm);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedBoleto, setSelectedBoleto]         = useState<File | null>(null);
+  const [selectedMercadoria, setSelectedMercadoria] = useState<File | null>(null);
   const [loading, setLoading]     = useState(false);
 
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef   = useRef<HTMLInputElement>(null);
+  // ── pedidos pendentes (para Nota Fiscal de Compra) ────────────────────────
+  interface PedidoPendente {
+    id: string;
+    numero: string | null;
+    fornecedor: string | null;
+    observacoes: string | null;
+    arquivo_path: string | null;
+    arquivo_type: string | null;
+    created_at: string;
+  }
+  const [pedidosPendentes, setPedidosPendentes] = useState<PedidoPendente[]>([]);
+  const [selectedPedidoId, setSelectedPedidoId] = useState<string>('');
+
+  const cameraInputRef         = useRef<HTMLInputElement>(null);
+  const fileInputRef           = useRef<HTMLInputElement>(null);
+  const boletoCameraRef        = useRef<HTMLInputElement>(null);
+  const boletoFileRef          = useRef<HTMLInputElement>(null);
+  const mercadoriaCameraRef    = useRef<HTMLInputElement>(null);
+  const mercadoriaFileRef      = useRef<HTMLInputElement>(null);
 
   // ── flags ──────────────────────────────────────────────────────────────────
-  const isLegado = tipo === 'Despesa' || tipo === 'Manutenção' || tipo === 'Outros';
-  const isManual = tipo === 'Depósito Manual';
-  const isAlvara = tipo === 'Documento/Alvará';
-  const isNota   = tipo === 'Nota Fiscal/Garantia';
+  const isLegado      = tipo === 'Despesa' || tipo === 'Manutenção' || tipo === 'Outros';
+  const isManual      = tipo === 'Depósito Manual';
+  const isAlvara      = tipo === 'Documento/Alvará';
+  const isNota        = tipo === 'Nota Fiscal/Garantia';
+  const isNotaCompra  = tipo === 'Nota Fiscal de Compra';
+
+  // Carrega pedidos aguardando entrega quando tipo = Nota Fiscal de Compra
+  useEffect(() => {
+    if (tipo !== 'Nota Fiscal de Compra' || !selectedPostoId) {
+      setPedidosPendentes([]);
+      setSelectedPedidoId('');
+      return;
+    }
+    (supabase as any)
+      .from('pedidos_compra')
+      .select('id, numero, fornecedor, observacoes, arquivo_path, arquivo_type, created_at')
+      .eq('posto_id', selectedPostoId)
+      .eq('status', 'Aguardando Entrega')
+      .order('created_at', { ascending: false })
+      .then(({ data, error }: any) => {
+        if (error) { console.error('pedidos_compra query error:', error); return; }
+        setPedidosPendentes(data || []);
+      });
+  }, [tipo, selectedPostoId]);
 
   const field = (key: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
@@ -115,17 +165,29 @@ export default function EnvioRapido() {
     if (fileInputRef.current)   fileInputRef.current.value   = '';
   };
 
-  const uploadFile = async (bucket: string, folder: string) => {
-    if (!selectedFile) return null;
-    const safe = selectedFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const clearBoleto = () => {
+    setSelectedBoleto(null);
+    if (boletoCameraRef.current) boletoCameraRef.current.value = '';
+    if (boletoFileRef.current)   boletoFileRef.current.value   = '';
+  };
+
+  const clearMercadoria = () => {
+    setSelectedMercadoria(null);
+    if (mercadoriaCameraRef.current) mercadoriaCameraRef.current.value = '';
+    if (mercadoriaFileRef.current)   mercadoriaFileRef.current.value   = '';
+  };
+
+  const uploadFile = async (bucket: string, folder: string, file = selectedFile) => {
+    if (!file) return null;
+    const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
     const path = `${folder}/${Date.now()}-${safe}`;
     const { error } = await supabase.storage
       .from(bucket)
-      .upload(path, selectedFile, { upsert: false, contentType: selectedFile.type });
+      .upload(path, file, { upsert: false, contentType: file.type });
     if (error) throw error;
     return {
       path,
-      fileType: selectedFile.type.startsWith('image/') ? 'image' : 'pdf',
+      fileType: file.type.startsWith('image/') ? 'image' : 'pdf',
     };
   };
 
@@ -140,6 +202,7 @@ export default function EnvioRapido() {
       return nomeOk && !!selectedFile;
     }
     if (isNota) return !!form.fornecedor && !!form.descricao_item && !!selectedFile;
+    if (isNotaCompra) return !!form.fornecedor && !!form.data_chegada && !!selectedFile;
     return false;
   })();
 
@@ -244,11 +307,88 @@ export default function EnvioRapido() {
         toast.success('Nota fiscal enviada! Aparecerá em Notas Fiscais e Garantias.');
       }
 
+      // ── Nota Fiscal de Compra ────────────────────────────────────────────
+      else if (isNotaCompra) {
+        const nfUp = await uploadFile(
+          'documentos-comprovantes',
+          `notas-compra/${selectedPostoId}`,
+        );
+        if (!nfUp) throw new Error('Upload da NF falhou');
+
+        let boletoPath: string | null = null;
+        let boletoType: string | null = null;
+        if (selectedBoleto) {
+          const bUp = await uploadFile(
+            'documentos-comprovantes',
+            `notas-compra-boleto/${selectedPostoId}`,
+            selectedBoleto,
+          );
+          if (bUp) { boletoPath = bUp.path; boletoType = bUp.fileType; }
+        }
+
+        let mercadoriaPath: string | null = null;
+        let mercadoriaType: string | null = null;
+        if (selectedMercadoria) {
+          const mUp = await uploadFile(
+            'documentos-comprovantes',
+            `notas-compra-mercadoria/${selectedPostoId}`,
+            selectedMercadoria,
+          );
+          if (mUp) { mercadoriaPath = mUp.path; mercadoriaType = mUp.fileType; }
+        }
+
+        const enviadoPorNome = nome || username || user?.email || null;
+        const pedidoId = selectedPedidoId || null;
+        const { error } = await (supabase as any).from('notas_fiscais_compra').insert({
+          posto_id:           selectedPostoId,
+          enviado_por:        user?.id ?? null,
+          enviado_por_nome:   enviadoPorNome,
+          fornecedor:         form.fornecedor,
+          data_chegada:       form.data_chegada,
+          observacoes:        form.observacoes || null,
+          nf_path:            nfUp.path,
+          nf_type:            nfUp.fileType,
+          boleto_path:        boletoPath,
+          boleto_type:        boletoType,
+          mercadoria_path:    mercadoriaPath,
+          mercadoria_type:    mercadoriaType,
+          pedido_id:          pedidoId,
+          status:             'Pendente',
+        });
+        if (error) throw error;
+
+        // Se vinculou a um pedido, marca como Recebido automaticamente
+        if (pedidoId) {
+          const now = new Date().toISOString();
+          await (supabase as any)
+            .from('pedidos_compra')
+            .update({ status: 'Recebido', updated_at: now })
+            .eq('id', pedidoId);
+          await (supabase as any).from('pedidos_compra_historico').insert({
+            pedido_id:       pedidoId,
+            status_anterior: 'Aguardando Entrega',
+            status_novo:     'Recebido',
+            observacao:      'Nota fiscal de compra vinculada via Envio Rápido',
+            feito_por:       user?.id ?? null,
+            feito_por_nome:  enviadoPorNome,
+          });
+        }
+
+        toast.success('Nota fiscal de compra enviada! Aparecerá em Lançamento de Notas.');
+      }
+
       // reset
       setSelectedFile(null);
+      setSelectedBoleto(null);
+      setSelectedMercadoria(null);
+      setSelectedPedidoId('');
       setForm(emptyForm);
-      if (cameraInputRef.current) cameraInputRef.current.value = '';
-      if (fileInputRef.current)   fileInputRef.current.value   = '';
+      if (cameraInputRef.current)      cameraInputRef.current.value      = '';
+      if (fileInputRef.current)        fileInputRef.current.value        = '';
+      if (boletoCameraRef.current)     boletoCameraRef.current.value     = '';
+      if (boletoFileRef.current)       boletoFileRef.current.value       = '';
+      if (mercadoriaCameraRef.current) mercadoriaCameraRef.current.value = '';
+      if (mercadoriaFileRef.current)   mercadoriaFileRef.current.value   = '';
 
     } catch (err: any) {
       toast.error('Erro ao enviar: ' + (err.message || String(err)));
@@ -258,9 +398,13 @@ export default function EnvioRapido() {
   };
 
   // ── derived ────────────────────────────────────────────────────────────────
-  const previewUrl = selectedFile ? URL.createObjectURL(selectedFile) : null;
-  const isImage    = selectedFile?.type.startsWith('image/');
-  const fileRequired = !isManual; // manual: optional; all others: required
+  const previewUrl         = selectedFile       ? URL.createObjectURL(selectedFile)       : null;
+  const boletoPreview      = selectedBoleto     ? URL.createObjectURL(selectedBoleto)     : null;
+  const mercadoriaPreview  = selectedMercadoria ? URL.createObjectURL(selectedMercadoria) : null;
+  const isImage            = selectedFile?.type.startsWith('image/');
+  const isBoletoImage      = selectedBoleto?.type.startsWith('image/');
+  const isMercadoriaImage  = selectedMercadoria?.type.startsWith('image/');
+  const fileRequired  = !isManual && !isNotaCompra; // for isNotaCompra, NF is required but handled separately
 
   if (!selectedPostoId) {
     return (
@@ -277,7 +421,7 @@ export default function EnvioRapido() {
     <div className="mx-auto max-w-lg space-y-4 px-2 py-4">
       <h1 className="text-xl font-bold">Envio Rápido</h1>
 
-      {/* Hidden file inputs */}
+      {/* Hidden file inputs — NF / main file */}
       <input
         ref={cameraInputRef}
         type="file"
@@ -293,6 +437,38 @@ export default function EnvioRapido() {
         className="hidden"
         onChange={(e) => e.target.files?.[0] && setSelectedFile(e.target.files[0])}
       />
+      {/* Hidden file inputs — Boleto */}
+      <input
+        ref={boletoCameraRef}
+        type="file"
+        accept="image/*"
+        {...({ capture: 'environment' } as any)}
+        className="hidden"
+        onChange={(e) => e.target.files?.[0] && setSelectedBoleto(e.target.files[0])}
+      />
+      <input
+        ref={boletoFileRef}
+        type="file"
+        accept=".pdf,.jpg,.jpeg,.png"
+        className="hidden"
+        onChange={(e) => e.target.files?.[0] && setSelectedBoleto(e.target.files[0])}
+      />
+      {/* Hidden file inputs — Mercadoria */}
+      <input
+        ref={mercadoriaCameraRef}
+        type="file"
+        accept="image/*"
+        {...({ capture: 'environment' } as any)}
+        className="hidden"
+        onChange={(e) => e.target.files?.[0] && setSelectedMercadoria(e.target.files[0])}
+      />
+      <input
+        ref={mercadoriaFileRef}
+        type="file"
+        accept=".pdf,.jpg,.jpeg,.png"
+        className="hidden"
+        onChange={(e) => e.target.files?.[0] && setSelectedMercadoria(e.target.files[0])}
+      />
 
       <Card>
         <CardContent className="space-y-5 pt-6">
@@ -306,6 +482,9 @@ export default function EnvioRapido() {
                 setTipo(v as Tipo);
                 setForm(emptyForm);
                 clearFile();
+                clearBoleto();
+                clearMercadoria();
+                setSelectedPedidoId('');
               }}
             >
               <SelectTrigger className="h-12 text-sm">
@@ -322,70 +501,111 @@ export default function EnvioRapido() {
                   <SelectItem value="Nota Fiscal/Garantia">Nota Fiscal / Garantia</SelectItem>
                 </SelectGroup>
                 <SelectGroup>
-                  <SelectLabel className="text-xs text-muted-foreground">Comprovantes</SelectLabel>
+                  <SelectLabel className="text-xs text-muted-foreground">Lançamento de Notas</SelectLabel>
+                  <SelectItem value="Nota Fiscal de Compra">Nota Fiscal de Compra</SelectItem>
+                </SelectGroup>
+                <SelectGroup>
+                  <SelectLabel className="text-xs text-muted-foreground">Comprovante Caixa</SelectLabel>
                   <SelectItem value="Despesa">Despesa</SelectItem>
-                  <SelectItem value="Manutenção">Manutenção</SelectItem>
+                  <SelectItem value="Manutenção">Aferição</SelectItem>
                   <SelectItem value="Outros">Outros</SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>
           </div>
 
-          {/* ── Arquivo ── */}
-          <div className="space-y-2">
-            <Label>
-              Arquivo{' '}
-              {!fileRequired && (
-                <span className="text-muted-foreground font-normal text-xs">(opcional)</span>
-              )}
-            </Label>
-            {selectedFile ? (
-              <div className="flex items-center gap-3 rounded-lg border border-border p-3">
-                {isImage && previewUrl ? (
-                  <img
-                    src={previewUrl}
-                    className="h-16 w-16 shrink-0 rounded object-cover"
-                    alt=""
-                  />
-                ) : (
-                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded bg-muted">
-                    <FileText className="h-8 w-8 text-red-500" />
-                  </div>
+          {/* ── Arquivo(s) ── */}
+          {isNotaCompra ? (
+            <>
+              {/* NF obrigatória */}
+              <FilePickerField
+                label="Foto da Nota Fiscal *"
+                file={selectedFile}
+                previewUrl={previewUrl}
+                isImage={!!isImage}
+                onClear={clearFile}
+                onCamera={() => cameraInputRef.current?.click()}
+                onFile={() => fileInputRef.current?.click()}
+              />
+              {/* Boleto opcional */}
+              <FilePickerField
+                label="Foto do Boleto"
+                optional
+                file={selectedBoleto}
+                previewUrl={boletoPreview}
+                isImage={!!isBoletoImage}
+                onClear={clearBoleto}
+                onCamera={() => boletoCameraRef.current?.click()}
+                onFile={() => boletoFileRef.current?.click()}
+              />
+              {/* Mercadoria opcional */}
+              <FilePickerField
+                label="Foto da Mercadoria"
+                optional
+                file={selectedMercadoria}
+                previewUrl={mercadoriaPreview}
+                isImage={!!isMercadoriaImage}
+                onClear={clearMercadoria}
+                onCamera={() => mercadoriaCameraRef.current?.click()}
+                onFile={() => mercadoriaFileRef.current?.click()}
+              />
+            </>
+          ) : (
+            <div className="space-y-2">
+              <Label>
+                Arquivo{' '}
+                {!fileRequired && (
+                  <span className="text-muted-foreground font-normal text-xs">(opcional)</span>
                 )}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{selectedFile.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {(selectedFile.size / 1024).toFixed(0)} KB
-                  </p>
+              </Label>
+              {selectedFile ? (
+                <div className="flex items-center gap-3 rounded-lg border border-border p-3">
+                  {isImage && previewUrl ? (
+                    <img
+                      src={previewUrl}
+                      className="h-16 w-16 shrink-0 rounded object-cover"
+                      alt=""
+                    />
+                  ) : (
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded bg-muted">
+                      <FileText className="h-8 w-8 text-red-500" />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{selectedFile.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {(selectedFile.size / 1024).toFixed(0)} KB
+                    </p>
+                  </div>
+                  <button
+                    onClick={clearFile}
+                    className="shrink-0 rounded-full p-1.5 hover:bg-muted"
+                  >
+                    <X className="h-4 w-4 text-muted-foreground" />
+                  </button>
                 </div>
-                <button
-                  onClick={clearFile}
-                  className="shrink-0 rounded-full p-1.5 hover:bg-muted"
-                >
-                  <X className="h-4 w-4 text-muted-foreground" />
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                <Button
-                  variant="outline"
-                  className="h-20 flex-col gap-2 text-sm"
-                  onClick={() => cameraInputRef.current?.click()}
-                >
-                  <Camera className="h-6 w-6" />
-                  Tirar Foto
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-20 flex-col gap-2 text-sm"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Paperclip className="h-6 w-6" />
-                  Escolher Arquivo
-                </Button>
-              </div>
-            )}
-          </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <Button
+                    variant="outline"
+                    className="h-20 flex-col gap-2 text-sm"
+                    onClick={() => cameraInputRef.current?.click()}
+                  >
+                    <Camera className="h-6 w-6" />
+                    Tirar Foto
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="h-20 flex-col gap-2 text-sm"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Paperclip className="h-6 w-6" />
+                    Escolher Arquivo
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ══════════════════════════════════════════════════════════════
               CAMPOS DINÂMICOS
@@ -556,6 +776,124 @@ export default function EnvioRapido() {
             </>
           )}
 
+          {/* ── Nota Fiscal de Compra ── */}
+          {isNotaCompra && (
+            <>
+              <div className="space-y-2">
+                <Label>Data de Chegada *</Label>
+                <Input
+                  type="date"
+                  value={form.data_chegada}
+                  onChange={field('data_chegada')}
+                  className="h-12 text-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Fornecedor *</Label>
+                <Input
+                  value={form.fornecedor}
+                  onChange={field('fornecedor')}
+                  placeholder="Ex: Distribuidora ABC"
+                  className="h-12 text-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>
+                  Observações{' '}
+                  <span className="text-muted-foreground font-normal text-xs">(opcional)</span>
+                </Label>
+                <Textarea
+                  value={form.observacoes}
+                  onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))}
+                  placeholder="Informações adicionais sobre esta nota..."
+                  className="text-sm resize-none"
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>
+                  Vincular a Pedido{' '}
+                  <span className="text-muted-foreground font-normal text-xs">(opcional)</span>
+                </Label>
+                <Select
+                  value={selectedPedidoId || '__none__'}
+                  onValueChange={(v) => setSelectedPedidoId(v === '__none__' ? '' : v)}
+                >
+                  <SelectTrigger className="h-12 text-sm">
+                    <SelectValue placeholder="Sem vínculo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Sem vínculo</SelectItem>
+                    {pedidosPendentes.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.numero ? `#${p.numero}` : 'S/N'}
+                        {p.fornecedor ? ` — ${p.fornecedor}` : ''}
+                        {` — ${formatDate(p.created_at)}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {pedidosPendentes.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Nenhum pedido aguardando entrega neste posto.
+                  </p>
+                )}
+              </div>
+
+              {/* Card resumo do pedido selecionado */}
+              {selectedPedidoId && (() => {
+                const p = pedidosPendentes.find((x) => x.id === selectedPedidoId);
+                if (!p) return null;
+                return (
+                  <div className="rounded-lg border border-border bg-muted/40 p-3 space-y-2">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground uppercase tracking-wide">
+                      <StickyNote className="h-3.5 w-3.5 text-primary" />
+                      Resumo do Pedido
+                    </div>
+                    <div className="space-y-1.5 text-sm">
+                      <div className="flex items-start gap-2">
+                        <span className="text-muted-foreground min-w-[80px] shrink-0">Número</span>
+                        <span className="font-medium">{p.numero ? `#${p.numero}` : 'S/N'}</span>
+                      </div>
+                      {p.fornecedor && (
+                        <div className="flex items-start gap-2">
+                          <Building2 className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                          <span>{p.fornecedor}</span>
+                        </div>
+                      )}
+                      <div className="flex items-start gap-2">
+                        <CalendarDays className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                        <span>{formatDate(p.created_at)}</span>
+                      </div>
+                      {p.observacoes && (
+                        <div className="flex items-start gap-2">
+                          <span className="text-muted-foreground min-w-[80px] shrink-0">Obs.</span>
+                          <span className="text-muted-foreground">{p.observacoes}</span>
+                        </div>
+                      )}
+                    </div>
+                    {p.arquivo_path && (
+                      <button
+                        type="button"
+                        className="mt-1 flex items-center gap-1.5 text-xs text-primary hover:underline"
+                        onClick={async () => {
+                          const { data } = await supabase.storage
+                            .from('documentos-comprovantes')
+                            .createSignedUrl(p.arquivo_path!, 60);
+                          if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+                        }}
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        Ver PDF do pedido
+                        <ExternalLink className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+            </>
+          )}
+
           {/* ── Nota Fiscal / Garantia ── */}
           {isNota && (
             <>
@@ -645,6 +983,61 @@ export default function EnvioRapido() {
 
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+// ─── sub-component ─────────────────────────────────────────────────────────
+
+interface FilePickerFieldProps {
+  label: string;
+  optional?: boolean;
+  file: File | null;
+  previewUrl: string | null;
+  isImage: boolean;
+  onClear: () => void;
+  onCamera: () => void;
+  onFile: () => void;
+}
+
+function FilePickerField({ label, optional, file, previewUrl, isImage, onClear, onCamera, onFile }: FilePickerFieldProps) {
+  return (
+    <div className="space-y-2">
+      <Label>
+        {label}{' '}
+        {optional && (
+          <span className="text-muted-foreground font-normal text-xs">(opcional)</span>
+        )}
+      </Label>
+      {file ? (
+        <div className="flex items-center gap-3 rounded-lg border border-border p-3">
+          {isImage && previewUrl ? (
+            <img src={previewUrl} className="h-16 w-16 shrink-0 rounded object-cover" alt="" />
+          ) : (
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded bg-muted">
+              <FileText className="h-8 w-8 text-red-500" />
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{file.name}</p>
+            <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB</p>
+          </div>
+          <button onClick={onClear} className="shrink-0 rounded-full p-1.5 hover:bg-muted">
+            <X className="h-4 w-4 text-muted-foreground" />
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          <Button variant="outline" className="h-20 flex-col gap-2 text-sm" onClick={onCamera}>
+            <Camera className="h-6 w-6" />
+            Tirar Foto
+          </Button>
+          <Button variant="outline" className="h-20 flex-col gap-2 text-sm" onClick={onFile}>
+            <Paperclip className="h-6 w-6" />
+            Escolher Arquivo
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

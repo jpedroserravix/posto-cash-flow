@@ -21,6 +21,8 @@ import Funcionarios from "./pages/pessoal/Funcionarios";
 import PontoOcorrencias from "./pages/pessoal/PontoOcorrencias";
 import FechamentoMensal from "./pages/pessoal/FechamentoMensal";
 import HistoricoFuncionario from "./pages/pessoal/HistoricoFuncionario";
+import LancamentoNotas from "./pages/notas/LancamentoNotas";
+import Pedidos from "./pages/compras/Pedidos";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -88,7 +90,11 @@ function AppRoutes() {
       <Route path="/alvaras"       element={<ProtectedRoute permission="alvaras">      <Documentos /></ProtectedRoute>} />
       <Route path="/garantias"     element={<ProtectedRoute permission="garantias">    <Documentos /></ProtectedRoute>} />
       <Route path="/docs-empresa"  element={<ProtectedRoute permission="docs-empresa"> <Documentos /></ProtectedRoute>} />
-      <Route path="/envio-rapido" element={<ProtectedRoute permission="envio-rapido"><EnvioRapido /></ProtectedRoute>} />
+      <Route path="/envio-rapido"  element={<ProtectedRoute permission="envio-rapido">    <EnvioRapido /></ProtectedRoute>} />
+      <Route path="/compras/pedidos" element={<ProtectedRoute permission="pedidos-compra">   <Pedidos /></ProtectedRoute>} />
+      <Route path="/compras/notas"   element={<ProtectedRoute permission="lancamento-notas"> <LancamentoNotas /></ProtectedRoute>} />
+      {/* backward-compat redirect */}
+      <Route path="/notas"           element={<Navigate to="/compras/notas" replace />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

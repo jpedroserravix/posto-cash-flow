@@ -1,24 +1,26 @@
 export const ALL_PERMISSIONS = [
-  { key: 'dashboard',    label: 'Dashboard' },
-  { key: 'envio-rapido', label: 'Envio Rápido' },
-  { key: 'brinks',       label: 'Depósitos Brinks' },
-  { key: 'manuais',      label: 'Depósitos Manuais' },
-  { key: 'resumo',       label: 'Resumo Diário' },
-  { key: 'extrato',      label: 'Extrato Bancário' },
-  { key: 'alvaras',      label: 'Alvarás e Licenças' },
-  { key: 'garantias',    label: 'Notas e Garantias' },
-  { key: 'docs-empresa', label: 'Documentos da Empresa' },
-  { key: 'postos',       label: 'Postos' },
-  { key: 'usuarios',     label: 'Usuários' },
-  { key: 'bancos',       label: 'Contas Bancárias' },
-  { key: 'pessoal',      label: 'Pessoal' },
+  { key: 'dashboard',         label: 'Dashboard' },
+  { key: 'envio-rapido',      label: 'Envio Rápido' },
+  { key: 'brinks',            label: 'Depósitos Brinks' },
+  { key: 'manuais',           label: 'Depósitos Manuais' },
+  { key: 'resumo',            label: 'Resumo Diário' },
+  { key: 'extrato',           label: 'Extrato Bancário' },
+  { key: 'alvaras',           label: 'Alvarás e Licenças' },
+  { key: 'garantias',         label: 'Notas e Garantias' },
+  { key: 'docs-empresa',      label: 'Documentos da Empresa' },
+  { key: 'postos',            label: 'Postos' },
+  { key: 'usuarios',          label: 'Usuários' },
+  { key: 'bancos',            label: 'Contas Bancárias' },
+  { key: 'pessoal',           label: 'Pessoal' },
+  { key: 'lancamento-notas',  label: 'Lançamento de Notas' },
+  { key: 'pedidos-compra',    label: 'Pedidos de Compra' },
 ] as const;
 
 export type PermissionKey = (typeof ALL_PERMISSIONS)[number]['key'];
 
 export const PROFILE_PRESETS: Record<string, string[]> = {
   admin:     ALL_PERMISSIONS.map((p) => p.key),
-  gerente:   ['envio-rapido', 'brinks', 'manuais', 'resumo', 'pessoal', 'alvaras', 'garantias', 'docs-empresa'],
+  gerente:   ['envio-rapido', 'brinks', 'manuais', 'resumo', 'pessoal', 'alvaras', 'garantias', 'docs-empresa', 'pedidos-compra'],
   frentista: ['envio-rapido'],
 };
 
@@ -40,6 +42,8 @@ export const ROUTE_PERMISSION_MAP: { path: string; permission: string }[] = [
   { path: '/ponto',             permission: 'pessoal' },
   { path: '/fechamento',        permission: 'pessoal' },
   { path: '/historico-pessoal', permission: 'pessoal' },
+  { path: '/compras/pedidos',    permission: 'pedidos-compra' },
+  { path: '/compras/notas',     permission: 'lancamento-notas' },
 ];
 
 export function firstAllowedPath(hasPermission: (k: string) => boolean): string {
