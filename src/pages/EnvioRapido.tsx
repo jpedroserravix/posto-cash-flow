@@ -18,20 +18,8 @@ import { Camera, Paperclip, Send, X, FileText, ExternalLink, CalendarDays, Build
 const TURNOS_LEGADO = ['Turno 1', 'Turno 2', 'Turno 3'];
 const TURNOS_MANUAL = ['Turno 1', 'Turno 2'];
 const CENTROS_CUSTO = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO'];
-const NOMES_ALVARA  = [
-  'Alvará de Funcionamento',
-  'Licença Ambiental',
-  'AVCB',
-  'Certificado ANP',
-  'Licença Sanitária',
-  'Outros',
-];
-const PRAZOS = ['30', '60', '90'];
-
 type Tipo =
   | 'Depósito Manual'
-  | 'Documento/Alvará'
-  | 'Nota Fiscal/Garantia'
   | 'Nota Fiscal de Compra'
   | 'Despesa'
   | 'Manutenção'
@@ -44,41 +32,22 @@ interface FormState {
   data_caixa:  string;
   turno:       string;
   centro_custo: string;
-  // depósito manual + nota
+  // depósito manual
   valor:       string;
-  // alvará
-  nome_documento:        string;
-  nome_documento_custom: string;
-  numero:       string;
-  data_vencimento: string;
   // nota fiscal de compra
   data_chegada: string;
-  // nota fiscal
   fornecedor:   string;
-  descricao_item: string;
-  data_compra:  string;
-  vencimento_garantia: string;
-  // shared (alvará + nota)
-  prazo_lembrete_dias: string;
   observacoes: string;
 }
 
 const emptyForm: FormState = {
-  data_caixa:            '',
-  turno:                 '',
-  centro_custo:          'PISTA',
-  valor:                 '',
-  nome_documento:        '',
-  nome_documento_custom: '',
-  numero:                '',
-  data_vencimento:       '',
-  data_chegada:          '',
-  fornecedor:            '',
-  descricao_item:        '',
-  data_compra:           '',
-  vencimento_garantia:   '',
-  prazo_lembrete_dias:   '30',
-  observacoes:           '',
+  data_caixa:   '',
+  turno:        '',
+  centro_custo: 'PISTA',
+  valor:        '',
+  data_chegada: '',
+  fornecedor:   '',
+  observacoes:  '',
 };
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -127,11 +96,9 @@ export default function EnvioRapido() {
   const mercadoriaFileRef      = useRef<HTMLInputElement>(null);
 
   // ── flags ──────────────────────────────────────────────────────────────────
-  const isLegado      = tipo === 'Despesa' || tipo === 'Manutenção' || tipo === 'Outros';
-  const isManual      = tipo === 'Depósito Manual';
-  const isAlvara      = tipo === 'Documento/Alvará';
-  const isNota        = tipo === 'Nota Fiscal/Garantia';
-  const isNotaCompra  = tipo === 'Nota Fiscal de Compra';
+  const isLegado     = tipo === 'Despesa' || tipo === 'Manutenção' || tipo === 'Outros';
+  const isManual     = tipo === 'Depósito Manual';
+  const isNotaCompra = tipo === 'Nota Fiscal de Compra';
 
   // Carrega pedidos aguardando entrega quando tipo = Nota Fiscal de Compra
   useEffect(() => {
@@ -194,14 +161,8 @@ export default function EnvioRapido() {
   // ── canSubmit ──────────────────────────────────────────────────────────────
   const canSubmit = (() => {
     if (loading || !selectedPostoId) return false;
-    if (isLegado) return !!selectedFile && !!form.data_caixa && !!form.turno;
-    if (isManual) return !!form.valor && !!form.data_caixa && !!form.turno;
-    if (isAlvara) {
-      const nomeOk = !!form.nome_documento &&
-        (form.nome_documento !== 'Outros' || !!form.nome_documento_custom);
-      return nomeOk && !!selectedFile;
-    }
-    if (isNota) return !!form.fornecedor && !!form.descricao_item && !!selectedFile;
+    if (isLegado)     return !!selectedFile && !!form.data_caixa && !!form.turno;
+    if (isManual)     return !!form.valor && !!form.data_caixa && !!form.turno;
     if (isNotaCompra) return !!form.fornecedor && !!form.data_chegada && !!selectedFile;
     return false;
   })();
@@ -258,53 +219,6 @@ export default function EnvioRapido() {
         });
         if (error) throw error;
         toast.success('Depósito manual registrado! Aparecerá em Depósitos Manuais.');
-      }
-
-      // ── Documento / Alvará ───────────────────────────────────────────────
-      else if (isAlvara) {
-        const up = await uploadFile(
-          'documentos-comprovantes',
-          `alvaras/${selectedPostoId}`,
-        );
-        if (!up) throw new Error('Upload falhou');
-        const nomeDoc = form.nome_documento === 'Outros'
-          ? form.nome_documento_custom
-          : form.nome_documento;
-        const { error } = await (supabase as any).from('documentos_alvaras').insert({
-          posto_id:           selectedPostoId,
-          nome_documento:     nomeDoc,
-          numero:             form.numero || null,
-          data_vencimento:    form.data_vencimento || null,
-          prazo_lembrete_dias: parseInt(form.prazo_lembrete_dias) || 30,
-          observacoes:        form.observacoes || null,
-          arquivo_path:       up.path,
-          arquivo_type:       up.fileType,
-        });
-        if (error) throw error;
-        toast.success('Documento enviado! Aparecerá em Alvarás e Licenças.');
-      }
-
-      // ── Nota Fiscal / Garantia ───────────────────────────────────────────
-      else if (isNota) {
-        const up = await uploadFile(
-          'documentos-comprovantes',
-          `notas/${selectedPostoId}`,
-        );
-        if (!up) throw new Error('Upload falhou');
-        const { error } = await (supabase as any).from('notas_fiscais').insert({
-          posto_id:           selectedPostoId,
-          fornecedor:         form.fornecedor,
-          descricao_item:     form.descricao_item,
-          valor:              parseMoney(form.valor),
-          data_compra:        form.data_compra || null,
-          vencimento_garantia: form.vencimento_garantia || null,
-          prazo_lembrete_dias: parseInt(form.prazo_lembrete_dias) || 30,
-          observacoes:        form.observacoes || null,
-          arquivo_path:       up.path,
-          arquivo_type:       up.fileType,
-        });
-        if (error) throw error;
-        toast.success('Nota fiscal enviada! Aparecerá em Notas Fiscais e Garantias.');
       }
 
       // ── Nota Fiscal de Compra ────────────────────────────────────────────
@@ -492,16 +406,7 @@ export default function EnvioRapido() {
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectLabel className="text-xs text-muted-foreground">Financeiro</SelectLabel>
-                  <SelectItem value="Depósito Manual">Depósito Manual</SelectItem>
-                </SelectGroup>
-                <SelectGroup>
-                  <SelectLabel className="text-xs text-muted-foreground">Documentos</SelectLabel>
-                  <SelectItem value="Documento/Alvará">Documento / Alvará</SelectItem>
-                  <SelectItem value="Nota Fiscal/Garantia">Nota Fiscal / Garantia</SelectItem>
-                </SelectGroup>
-                <SelectGroup>
-                  <SelectLabel className="text-xs text-muted-foreground">Lançamento de Notas</SelectLabel>
+                  <SelectLabel className="text-xs text-muted-foreground">Compras</SelectLabel>
                   <SelectItem value="Nota Fiscal de Compra">Nota Fiscal de Compra</SelectItem>
                 </SelectGroup>
                 <SelectGroup>
@@ -509,6 +414,10 @@ export default function EnvioRapido() {
                   <SelectItem value="Despesa">Despesa</SelectItem>
                   <SelectItem value="Manutenção">Aferição</SelectItem>
                   <SelectItem value="Outros">Outros</SelectItem>
+                </SelectGroup>
+                <SelectGroup>
+                  <SelectLabel className="text-xs text-muted-foreground">Financeiro</SelectLabel>
+                  <SelectItem value="Depósito Manual">Depósito Manual</SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>
@@ -703,79 +612,6 @@ export default function EnvioRapido() {
             </>
           )}
 
-          {/* ── Documento / Alvará ── */}
-          {isAlvara && (
-            <>
-              <div className="space-y-2">
-                <Label>Nome do Documento *</Label>
-                <Select value={form.nome_documento} onValueChange={sel('nome_documento')}>
-                  <SelectTrigger className="h-12 text-sm">
-                    <SelectValue placeholder="Selecionar tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {NOMES_ALVARA.map((n) => (
-                      <SelectItem key={n} value={n}>{n}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {form.nome_documento === 'Outros' && (
-                <div className="space-y-2">
-                  <Label>Nome do Documento (descritivo) *</Label>
-                  <Input
-                    value={form.nome_documento_custom}
-                    onChange={field('nome_documento_custom')}
-                    placeholder="Ex: Licença de Publicidade"
-                    className="h-12 text-sm"
-                  />
-                </div>
-              )}
-              <div className="space-y-2">
-                <Label>Número do Documento</Label>
-                <Input
-                  value={form.numero}
-                  onChange={field('numero')}
-                  placeholder="Ex: 2024/1234"
-                  className="h-12 text-sm"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Data de Vencimento</Label>
-                <Input
-                  type="date"
-                  value={form.data_vencimento}
-                  onChange={field('data_vencimento')}
-                  className="h-12 text-sm"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Lembrete de Vencimento</Label>
-                <Select
-                  value={form.prazo_lembrete_dias}
-                  onValueChange={sel('prazo_lembrete_dias')}
-                >
-                  <SelectTrigger className="h-12 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PRAZOS.map((p) => (
-                      <SelectItem key={p} value={p}>{p} dias antes do vencimento</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Observações</Label>
-                <Input
-                  value={form.observacoes}
-                  onChange={field('observacoes')}
-                  placeholder="Observações opcionais"
-                  className="h-12 text-sm"
-                />
-              </div>
-            </>
-          )}
-
           {/* ── Nota Fiscal de Compra ── */}
           {isNotaCompra && (
             <>
@@ -891,83 +727,6 @@ export default function EnvioRapido() {
                   </div>
                 );
               })()}
-            </>
-          )}
-
-          {/* ── Nota Fiscal / Garantia ── */}
-          {isNota && (
-            <>
-              <div className="space-y-2">
-                <Label>Fornecedor *</Label>
-                <Input
-                  value={form.fornecedor}
-                  onChange={field('fornecedor')}
-                  placeholder="Ex: Electrolux, Schulz..."
-                  className="h-12 text-sm"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Descrição do Item *</Label>
-                <Input
-                  value={form.descricao_item}
-                  onChange={field('descricao_item')}
-                  placeholder="Ex: Compressor de ar 50L"
-                  className="h-12 text-sm"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Valor (R$)</Label>
-                <Input
-                  value={form.valor}
-                  onChange={field('valor')}
-                  placeholder="0,00"
-                  inputMode="decimal"
-                  className="h-12 text-sm"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Data da Compra</Label>
-                <Input
-                  type="date"
-                  value={form.data_compra}
-                  onChange={field('data_compra')}
-                  className="h-12 text-sm"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Vencimento da Garantia</Label>
-                <Input
-                  type="date"
-                  value={form.vencimento_garantia}
-                  onChange={field('vencimento_garantia')}
-                  className="h-12 text-sm"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Lembrete de Garantia</Label>
-                <Select
-                  value={form.prazo_lembrete_dias}
-                  onValueChange={sel('prazo_lembrete_dias')}
-                >
-                  <SelectTrigger className="h-12 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PRAZOS.map((p) => (
-                      <SelectItem key={p} value={p}>{p} dias antes do vencimento</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Observações</Label>
-                <Input
-                  value={form.observacoes}
-                  onChange={field('observacoes')}
-                  placeholder="Observações opcionais"
-                  className="h-12 text-sm"
-                />
-              </div>
             </>
           )}
 

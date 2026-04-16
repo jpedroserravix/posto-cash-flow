@@ -16,6 +16,10 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   HoverCard, HoverCardContent, HoverCardTrigger,
 } from '@/components/ui/hover-card';
 import {
@@ -30,7 +34,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import {
   ChevronDown, ChevronRight, MoreHorizontal, Paperclip,
-  ExternalLink, FileText, AlertCircle,
+  ExternalLink, FileText, AlertCircle, Trash2,
 } from 'lucide-react';
 
 // ─── types ──────────────────────────────────────────────────────────────────
@@ -162,7 +166,7 @@ function HistoricoItem({ h }: { h: Historico }) {
 // ─── main component ──────────────────────────────────────────────────────────
 
 export default function LancamentoNotas() {
-  const { user, nome, username, allPostos, selectedPostoId } = useAuth();
+  const { user, role, nome, username, allPostos, selectedPostoId } = useAuth();
   const showPostoFilter = allPostos.length > 0;
 
   const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter('thisMonth');
@@ -184,6 +188,10 @@ export default function LancamentoNotas() {
   const [statusDialog, setStatusDialog] = useState<{ nota: NotaCompra; target: StatusNota } | null>(null);
   const [statusObs, setStatusObs]       = useState('');
   const [statusLoading, setStatusLoading] = useState(false);
+
+  // delete
+  const [deletingId, setDeletingId]     = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // preview modal
   const [previewFile, setPreviewFile] = useState<PreviewFile | null>(null);
@@ -337,6 +345,59 @@ export default function LancamentoNotas() {
       setHistory((prev) => { const next = { ...prev }; delete next[nota.id]; return next; });
     } catch (err: any) {
       toast.error('Erro: ' + err.message);
+    }
+  };
+
+  // ── delete ─────────────────────────────────────────────────────────────────
+  const handleDelete = async () => {
+    if (!deletingId) return;
+    const nota = notas.find((n) => n.id === deletingId);
+    if (!nota) return;
+    setDeleteLoading(true);
+    try {
+      // 1. Remove storage files (best effort — don't block on errors)
+      const filePaths = [nota.nf_path, nota.boleto_path, nota.mercadoria_path].filter(Boolean) as string[];
+      if (filePaths.length > 0) {
+        await supabase.storage.from('documentos-comprovantes').remove(filePaths);
+      }
+
+      // 2. If linked to a pedido, revert it to Aguardando Entrega + insert historico
+      if (nota.pedido_id) {
+        const now = new Date().toISOString();
+        await (supabase as any)
+          .from('pedidos_compra')
+          .update({ status: 'Aguardando Entrega', updated_at: now })
+          .eq('id', nota.pedido_id);
+        await (supabase as any).from('pedidos_compra_historico').insert({
+          pedido_id:       nota.pedido_id,
+          status_anterior: 'Recebido',
+          status_novo:     'Aguardando Entrega',
+          observacao:      'Nota fiscal de compra excluída',
+          feito_por:       user?.id ?? null,
+          feito_por_nome:  nome || username || user?.email || null,
+        });
+      }
+
+      // 3. Delete historico rows (ON DELETE CASCADE should handle it, but be explicit)
+      await (supabase as any)
+        .from('notas_fiscais_compra_historico')
+        .delete()
+        .eq('nota_id', deletingId);
+
+      // 4. Delete the nota
+      const { error } = await (supabase as any)
+        .from('notas_fiscais_compra')
+        .delete()
+        .eq('id', deletingId);
+      if (error) throw error;
+
+      toast.success('Nota excluída com sucesso');
+      setNotas((prev) => prev.filter((n) => n.id !== deletingId));
+      setDeletingId(null);
+    } catch (err: any) {
+      toast.error('Erro ao excluir: ' + err.message);
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -545,8 +606,18 @@ export default function LancamentoNotas() {
                         {nota.observacoes || '—'}
                       </TableCell>
 
-                      {/* Actions dropdown */}
+                      {/* Actions */}
                       <TableCell className="px-2">
+                        <div className="flex items-center gap-0.5">
+                        {role === 'admin' && (
+                          <button
+                            className="p-1 rounded hover:bg-destructive/10 text-destructive"
+                            onClick={() => setDeletingId(nota.id)}
+                            title="Excluir nota"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
@@ -588,6 +659,7 @@ export default function LancamentoNotas() {
                             )}
                           </DropdownMenuContent>
                         </DropdownMenu>
+                        </div>
                       </TableCell>
                     </TableRow>
 
@@ -712,6 +784,35 @@ export default function LancamentoNotas() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deletingId} onOpenChange={(open) => { if (!open) setDeletingId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir nota fiscal</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>Tem certeza que deseja excluir esta nota? Esta ação não pode ser desfeita.</p>
+                {deletingId && notas.find((n) => n.id === deletingId)?.pedido_id && (
+                  <p className="text-amber-600 font-medium text-sm">
+                    Esta nota está vinculada a um pedido — o pedido voltará para "Aguardando Entrega".
+                  </p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90"
+              onClick={handleDelete}
+              disabled={deleteLoading}
+            >
+              {deleteLoading ? 'Excluindo...' : 'Excluir'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Preview modal */}
       <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
