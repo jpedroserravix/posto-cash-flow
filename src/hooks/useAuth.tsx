@@ -102,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .select('nome, username, perfil, posto_ids, permissoes, ativo')
         .eq('user_id', userId)
         .maybeSingle();
-      const profile = profileRaw as {
+      const profile = (profileRaw as unknown) as {
         nome: string; username: string; perfil: string;
         posto_ids: string[]; permissoes: string[]; ativo: boolean;
       } | null;
