@@ -3,7 +3,7 @@ export const ALL_PERMISSIONS = [
   { key: 'envio-rapido',      label: 'Envio Rápido' },
   { key: 'brinks',            label: 'Depósitos Brinks' },
   { key: 'manuais',           label: 'Depósitos Manuais' },
-  { key: 'resumo',            label: 'Resumo Diário' },
+  { key: 'resumo',            label: 'Resumo Diário / CAIXAS' },
   { key: 'extrato',           label: 'Extrato Bancário' },
   { key: 'alvaras',           label: 'Alvarás e Licenças' },
   { key: 'garantias',         label: 'Notas e Garantias' },
@@ -12,8 +12,9 @@ export const ALL_PERMISSIONS = [
   { key: 'usuarios',          label: 'Usuários' },
   { key: 'bancos',            label: 'Contas Bancárias' },
   { key: 'pessoal',           label: 'Pessoal' },
-  { key: 'lancamento-notas',  label: 'Lançamento de Notas' },
-  { key: 'pedidos-compra',    label: 'Pedidos de Compra' },
+  { key: 'lancamento-notas',      label: 'Lançamento de Notas' },
+  { key: 'pedidos-compra',        label: 'Pedidos de Compra' },
+  { key: 'cursos-treinamentos',   label: 'Cursos e Treinamentos' },
 ] as const;
 
 export type PermissionKey = (typeof ALL_PERMISSIONS)[number]['key'];
@@ -44,6 +45,7 @@ export const ROUTE_PERMISSION_MAP: { path: string; permission: string }[] = [
   { path: '/historico-pessoal', permission: 'pessoal' },
   { path: '/compras/pedidos',    permission: 'pedidos-compra' },
   { path: '/compras/notas',     permission: 'lancamento-notas' },
+  { path: '/cursos',            permission: 'cursos-treinamentos' },
 ];
 
 export function firstAllowedPath(hasPermission: (k: string) => boolean): string {

@@ -23,6 +23,7 @@ import FechamentoMensal from "./pages/pessoal/FechamentoMensal";
 import HistoricoFuncionario from "./pages/pessoal/HistoricoFuncionario";
 import LancamentoNotas from "./pages/notas/LancamentoNotas";
 import Pedidos from "./pages/compras/Pedidos";
+import Cursos from "./pages/Cursos";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -93,6 +94,7 @@ function AppRoutes() {
       <Route path="/envio-rapido"  element={<ProtectedRoute permission="envio-rapido">    <EnvioRapido /></ProtectedRoute>} />
       <Route path="/compras/pedidos" element={<ProtectedRoute permission="pedidos-compra">   <Pedidos /></ProtectedRoute>} />
       <Route path="/compras/notas"   element={<ProtectedRoute permission="lancamento-notas"> <LancamentoNotas /></ProtectedRoute>} />
+      <Route path="/cursos"           element={<ProtectedRoute permission="cursos-treinamentos"><Cursos /></ProtectedRoute>} />
       {/* backward-compat redirect */}
       <Route path="/notas"           element={<Navigate to="/compras/notas" replace />} />
       <Route path="*" element={<NotFound />} />

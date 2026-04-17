@@ -4,12 +4,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { Fuel } from 'lucide-react';
 
+const STORAGE_KEY = 'pi_saved_username';
+
 export default function Login() {
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState(() => localStorage.getItem(STORAGE_KEY) || '');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(() => !!localStorage.getItem(STORAGE_KEY));
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -24,6 +28,12 @@ export default function Login() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       toast.error('Usuário ou senha incorretos.');
+    } else {
+      if (rememberMe) {
+        localStorage.setItem(STORAGE_KEY, username.trim());
+      } else {
+        localStorage.removeItem(STORAGE_KEY);
+      }
     }
     setLoading(false);
   };
@@ -63,6 +73,16 @@ export default function Login() {
                 autoComplete="current-password"
                 required
               />
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="remember"
+                checked={rememberMe}
+                onCheckedChange={(v) => setRememberMe(!!v)}
+              />
+              <Label htmlFor="remember" className="text-sm font-normal cursor-pointer">
+                Lembrar meu usuário
+              </Label>
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Entrando...' : 'Entrar'}

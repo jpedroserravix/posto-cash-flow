@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, X, Save, Upload, FileText, UserX, UserCheck, Search } from 'lucide-react';
 import { openInNewTab } from '@/lib/utils';
+import FuncionarioTreinamentos from './FuncionarioTreinamentos';
 
 // ─── types ──────────────────────────────────────────────────────────────────
 
@@ -100,6 +101,22 @@ const EMPTY_FORM = {
   observacoes: '',
 };
 
+// ─── badge types ────────────────────────────────────────────────────────────
+
+interface CursoSummary {
+  id: string;
+  obrigatorio: boolean;
+  cargos_obrigatorios: string[];
+  validade_meses: number | null;
+}
+
+interface TreinamentoSummary {
+  funcionario_id: string;
+  curso_id: string;
+  data_conclusao: string | null;
+  data_vencimento: string | null;
+}
+
 // ─── CPF duplicate check warning ────────────────────────────────────────────
 
 interface CPFWarning {
@@ -158,7 +175,40 @@ export default function Funcionarios() {
   const [docUploading, setDocUploading] = useState(false);
   const docFileRef = useRef<HTMLInputElement>(null);
 
+  // training badge state
+  const [badgeCursos, setBadgeCursos] = useState<CursoSummary[]>([]);
+  const [badgeTreinamentos, setBadgeTreinamentos] = useState<TreinamentoSummary[]>([]);
+
   // ─── load ──────────────────────────────────────────────────────────────────
+
+  async function loadBadgeData(funcList: Funcionario[]) {
+    if (funcList.length === 0) { setBadgeCursos([]); setBadgeTreinamentos([]); return; }
+    const [{ data: cs }, { data: ts }] = await Promise.all([
+      (supabase as any).from('cursos').select('id, obrigatorio, cargos_obrigatorios, validade_meses'),
+      (supabase as any)
+        .from('funcionario_treinamentos')
+        .select('funcionario_id, curso_id, data_conclusao, data_vencimento')
+        .in('funcionario_id', funcList.map((f) => f.id)),
+    ]);
+    setBadgeCursos(cs ?? []);
+    setBadgeTreinamentos(ts ?? []);
+  }
+
+  function getPendingTotal(f: Funcionario): number {
+    const today = new Date().toISOString().slice(0, 10);
+    const required = badgeCursos.filter(
+      (c) => c.obrigatorio && c.cargos_obrigatorios?.includes(f.cargo)
+    );
+    let count = 0;
+    for (const curso of required) {
+      const t = badgeTreinamentos.find(
+        (t) => t.funcionario_id === f.id && t.curso_id === curso.id
+      );
+      if (!t || !t.data_conclusao) { count++; continue; }
+      if (t.data_vencimento && t.data_vencimento < today) count++;
+    }
+    return count;
+  }
 
   async function load() {
     if (!postoId) return;
@@ -169,7 +219,11 @@ export default function Funcionarios() {
       .eq('posto_id', postoId)
       .order('nome');
     if (error) { toast.error('Erro ao carregar funcionários'); }
-    else { setFuncionarios(data ?? []); }
+    else {
+      const funcList = data ?? [];
+      setFuncionarios(funcList);
+      await loadBadgeData(funcList);
+    }
     setLoading(false);
   }
 
@@ -466,12 +520,23 @@ export default function Funcionarios() {
                 {paginatedData.map((f) => (
                   <TableRow key={f.id} className="text-xs">
                     <TableCell>
-                      <button
-                        className="font-medium hover:underline text-left"
-                        onClick={() => openDetail(f)}
-                      >
-                        {f.nome}
-                      </button>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <button
+                          className="font-medium hover:underline text-left"
+                          onClick={() => openDetail(f)}
+                        >
+                          {f.nome}
+                        </button>
+                        {(() => {
+                          const total = getPendingTotal(f);
+                          if (total === 0) return null;
+                          return (
+                            <Badge className="bg-red-500 hover:bg-red-500 text-white text-[10px]">
+                              {total} {total === 1 ? 'pendente' : 'pendentes'}
+                            </Badge>
+                          );
+                        })()}
+                      </div>
                     </TableCell>
                     <TableCell>{formatCPF(f.cpf)}</TableCell>
                     <TableCell>{f.cargo}</TableCell>
@@ -656,16 +721,34 @@ export default function Funcionarios() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ── Detail Dialog (documentos) ────────────────────────────────────── */}
-      <Dialog open={!!detailTarget} onOpenChange={(o) => !o && setDetailTarget(null)}>
+      {/* ── Detail Dialog (documentos + treinamentos) ───────────────────── */}
+      <Dialog
+        open={!!detailTarget}
+        onOpenChange={(o) => {
+          if (!o) {
+            setDetailTarget(null);
+            loadBadgeData(funcionarios);
+          }
+        }}
+      >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{detailTarget?.nome} — Documentos</DialogTitle>
+            <DialogTitle>{detailTarget?.nome}</DialogTitle>
           </DialogHeader>
           <Tabs defaultValue="docs">
             <TabsList className="h-8">
               <TabsTrigger value="docs" className="text-xs">Documentos</TabsTrigger>
+              <TabsTrigger value="treinamentos" className="text-xs">Treinamentos</TabsTrigger>
             </TabsList>
+            <TabsContent value="treinamentos" className="mt-3">
+              {detailTarget && (
+                <FuncionarioTreinamentos
+                  funcionarioId={detailTarget.id}
+                  cargo={detailTarget.cargo}
+                  onUpdate={() => loadBadgeData(funcionarios)}
+                />
+              )}
+            </TabsContent>
             <TabsContent value="docs" className="mt-3">
               {/* upload form */}
               <div className="flex gap-2 flex-wrap items-end mb-4 p-3 bg-muted/40 rounded">

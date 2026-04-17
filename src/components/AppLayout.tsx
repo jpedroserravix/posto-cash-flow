@@ -4,8 +4,19 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Fuel, LogOut, FileSpreadsheet, PenLine, BarChart3, Building2, Users, Landmark, Receipt, Wrench, Zap, LayoutDashboard, FileCheck2, ShoppingBag, UserCircle, Clock, Calculator, History, ClipboardList, Package, Info, Copy, Check } from 'lucide-react';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Fuel, LogOut, FileSpreadsheet, PenLine, BarChart3, Building2, Users,
+  Landmark, Receipt, Zap, LayoutDashboard, FileCheck2, ShoppingBag,
+  UserCircle, Clock, Calculator, History, ClipboardList, Package,
+  Info, Copy, Check, GraduationCap, LayoutGrid,
+} from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
+
+// ─── Posto info popover ──────────────────────────────────────────────────────
 
 interface PostoFull {
   id: string;
@@ -44,6 +55,8 @@ function CopyRow({ label, value }: { label: string; value: string | null | undef
   );
 }
 
+// ─── Nav config ─────────────────────────────────────────────────────────────
+
 interface NavItem {
   to: string;
   label: string;
@@ -56,39 +69,24 @@ interface NavGroup {
   items: NavItem[];
 }
 
-const navGroups: NavGroup[] = [
+// Groups rendered in primary nav bar
+const primaryNavGroups: NavGroup[] = [
   {
     label: 'Financeiro',
     items: [
       { to: '/brinks',  label: 'Depósitos Brinks',  icon: FileSpreadsheet, permission: 'brinks' },
       { to: '/manuais', label: 'Depósitos Manuais', icon: PenLine,         permission: 'manuais' },
-      { to: '/resumo',  label: 'Resumo Diário',      icon: BarChart3,       permission: 'resumo' },
+      { to: '/resumo',  label: 'Resumo Diário / CAIXAS', icon: BarChart3, permission: 'resumo' },
       { to: '/extrato', label: 'Extrato Bancário',   icon: Receipt,         permission: 'extrato' },
     ],
   },
   {
     label: 'Pessoal',
     items: [
-      { to: '/funcionarios',       label: 'Funcionários',       icon: UserCircle,  permission: 'pessoal' },
-      { to: '/ponto',              label: 'Ponto e Ocorrências', icon: Clock,       permission: 'pessoal' },
-      { to: '/fechamento',         label: 'Fechamento Mensal',   icon: Calculator,  permission: 'pessoal' },
-      { to: '/historico-pessoal',  label: 'Histórico',           icon: History,     permission: 'pessoal' },
-    ],
-  },
-  {
-    label: 'Documentos',
-    items: [
-      { to: '/alvaras',      label: 'Alvarás e Licenças',       icon: FileCheck2,  permission: 'alvaras' },
-      { to: '/garantias',    label: 'Notas Fiscais e Garantias', icon: ShoppingBag, permission: 'garantias' },
-      { to: '/docs-empresa', label: 'Documentos da Empresa',    icon: Building2,   permission: 'docs-empresa' },
-    ],
-  },
-  {
-    label: 'Cadastros',
-    items: [
-      { to: '/postos',   label: 'Postos',            icon: Building2, permission: 'postos' },
-      { to: '/usuarios', label: 'Usuários',           icon: Users,     permission: 'usuarios' },
-      { to: '/bancos',   label: 'Contas Bancárias',   icon: Landmark,  permission: 'bancos' },
+      { to: '/funcionarios',      label: 'Funcionários',        icon: UserCircle, permission: 'pessoal' },
+      { to: '/ponto',             label: 'Ponto e Ocorrências', icon: Clock,      permission: 'pessoal' },
+      { to: '/fechamento',        label: 'Fechamento Mensal',   icon: Calculator, permission: 'pessoal' },
+      { to: '/historico-pessoal', label: 'Histórico',           icon: History,    permission: 'pessoal' },
     ],
   },
   {
@@ -100,8 +98,35 @@ const navGroups: NavGroup[] = [
   },
 ];
 
+// Groups rendered in the header (moved out of primary nav)
+const headerNavGroups: NavGroup[] = [
+  {
+    label: 'Documentos',
+    items: [
+      { to: '/alvaras',      label: 'Alvarás e Licenças',        icon: FileCheck2,  permission: 'alvaras' },
+      { to: '/garantias',    label: 'Notas Fiscais e Garantias', icon: ShoppingBag, permission: 'garantias' },
+      { to: '/docs-empresa', label: 'Documentos da Empresa',     icon: Building2,   permission: 'docs-empresa' },
+    ],
+  },
+  {
+    label: 'Cadastros',
+    items: [
+      { to: '/postos',   label: 'Postos',                icon: Building2,     permission: 'postos' },
+      { to: '/usuarios', label: 'Usuários',              icon: Users,         permission: 'usuarios' },
+      { to: '/bancos',   label: 'Contas Bancárias',      icon: Landmark,      permission: 'bancos' },
+      { to: '/cursos',   label: 'Cursos e Treinamentos', icon: GraduationCap, permission: 'cursos-treinamentos' },
+    ],
+  },
+];
+
+// All groups combined — used for secondary tab detection
+const allNavGroups: NavGroup[] = [...primaryNavGroups, ...headerNavGroups];
+
+// ─── Component ──────────────────────────────────────────────────────────────
+
 export default function AppLayout({ children }: { children: ReactNode }) {
-  const { role, postoNome, allPostos, selectedPostoId, setSelectedPostoId, signOut, hasPermission } = useAuth();
+  const { postoNome, allPostos, selectedPostoId, setSelectedPostoId, signOut, hasPermission, nome } = useAuth();
+  const firstName = nome ? nome.trim().split(' ')[0] : null;
   const location = useLocation();
   const [postoFull, setPostoFull] = useState<PostoFull | null>(null);
 
@@ -115,14 +140,21 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       .then(({ data }) => setPostoFull(data as PostoFull | null));
   }, [selectedPostoId]);
 
-  const visibleGroups = navGroups
-    .map((g) => ({
-      ...g,
-      visibleItems: g.items.filter((item) => hasPermission(item.permission)),
-    }))
+  // Filtered groups visible to the current user
+  const visiblePrimary = primaryNavGroups
+    .map((g) => ({ ...g, visibleItems: g.items.filter((i) => hasPermission(i.permission)) }))
     .filter((g) => g.visibleItems.length > 0);
 
-  const activeGroup = visibleGroups.find((g) =>
+  const visibleHeader = headerNavGroups
+    .map((g) => ({ ...g, visibleItems: g.items.filter((i) => hasPermission(i.permission)) }))
+    .filter((g) => g.visibleItems.length > 0);
+
+  // Secondary tabs: look across ALL groups
+  const allVisible = allNavGroups
+    .map((g) => ({ ...g, visibleItems: g.items.filter((i) => hasPermission(i.permission)) }))
+    .filter((g) => g.visibleItems.length > 0);
+
+  const activeGroup = allVisible.find((g) =>
     g.visibleItems.some((item) => location.pathname === item.to)
   );
 
@@ -131,20 +163,76 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="bg-card border-b sticky top-0 z-50">
-        <div className="container flex items-center justify-between h-14 gap-3">
-          <div className="flex items-center gap-2">
+        <div className="container flex items-center h-14 gap-2">
+
+          {/* Brand */}
+          <div className="flex items-center gap-2 shrink-0">
             <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
               <Fuel className="w-4 h-4 text-primary-foreground" />
             </div>
-            <span className="font-semibold text-sm hidden sm:block">POSTO INTELIGENTE</span>
+            <span className="font-semibold text-sm hidden md:block">POSTO INTELIGENTE</span>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Cadastros + Documentos — desktop: text buttons, mobile: dropdown */}
+          {visibleHeader.length > 0 && (
+            <>
+              {/* Desktop */}
+              <div className="hidden sm:flex items-center gap-1 ml-2">
+                {visibleHeader.map((group) => {
+                  const isActive = group.visibleItems.some((item) => location.pathname === item.to);
+                  return (
+                    <Link key={group.label} to={group.visibleItems[0].to}>
+                      <Button
+                        variant={isActive ? 'secondary' : 'ghost'}
+                        size="sm"
+                        className="text-xs whitespace-nowrap"
+                      >
+                        {group.label}
+                      </Button>
+                    </Link>
+                  );
+                })}
+              </div>
+
+              {/* Mobile: single dropdown */}
+              <div className="flex sm:hidden ml-1">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9" title="Cadastros e Documentos">
+                      <LayoutGrid className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-52">
+                    {visibleHeader.map((group, gi) => (
+                      <div key={group.label}>
+                        {gi > 0 && <DropdownMenuSeparator />}
+                        <DropdownMenuLabel className="text-xs">{group.label}</DropdownMenuLabel>
+                        {group.visibleItems.map((item) => (
+                          <DropdownMenuItem key={item.to} asChild>
+                            <Link to={item.to} className="flex items-center gap-2 text-xs">
+                              <item.icon className="w-3.5 h-3.5" />
+                              {item.label}
+                            </Link>
+                          </DropdownMenuItem>
+                        ))}
+                      </div>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </>
+          )}
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Posto selector / name + info + logout */}
+          <div className="flex items-center gap-1.5 min-w-0">
             {allPostos.length > 1 && (
               <Select value={selectedPostoId || ''} onValueChange={setSelectedPostoId}>
-                <SelectTrigger className="w-[180px] h-9 text-sm">
+                <SelectTrigger className="h-9 text-xs sm:text-sm w-auto min-w-[100px]">
                   <SelectValue placeholder="Selecionar posto" />
                 </SelectTrigger>
                 <SelectContent>
@@ -155,12 +243,14 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               </Select>
             )}
             {allPostos.length <= 1 && postoNome && (
-              <span className="text-sm text-muted-foreground">{postoNome}</span>
+              <span className="text-xs sm:text-sm text-muted-foreground font-medium whitespace-nowrap">
+                {postoNome}
+              </span>
             )}
             {postoFull && (
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-9 w-9" title="Informações do posto">
+                  <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" title="Informações do posto">
                     <Info className="w-4 h-4" />
                   </Button>
                 </PopoverTrigger>
@@ -175,14 +265,19 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 </PopoverContent>
               </Popover>
             )}
-            <Button variant="ghost" size="icon" onClick={signOut} title="Sair">
+            {firstName && (
+              <span className="text-xs font-medium text-muted-foreground whitespace-nowrap hidden sm:inline">
+                {firstName}
+              </span>
+            )}
+            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={signOut} title="Sair">
               <LogOut className="w-4 h-4" />
             </Button>
           </div>
         </div>
       </header>
 
-      {/* Primary navigation */}
+      {/* ── Primary navigation ─────────────────────────────────────────────── */}
       <nav className="bg-card border-b overflow-x-auto">
         <div className="container flex gap-1 py-1">
           {hasPermission('dashboard') && (
@@ -198,7 +293,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             </Link>
           )}
 
-          {visibleGroups.map((group) => {
+          {visiblePrimary.map((group) => {
             const isActive = group.visibleItems.some((item) => location.pathname === item.to);
             const firstTo = group.visibleItems[0].to;
             return (
@@ -231,7 +326,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         </div>
       </nav>
 
-      {/* Secondary navigation — tabs within active group */}
+      {/* ── Secondary navigation — sub-tabs within active group ────────────── */}
       {secondaryTabs && (
         <div className="bg-background border-b overflow-x-auto">
           <div className="container flex gap-0 py-0">
@@ -256,7 +351,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         </div>
       )}
 
-      {/* Content */}
+      {/* ── Content ────────────────────────────────────────────────────────── */}
       <main className="container py-4">{children}</main>
     </div>
   );

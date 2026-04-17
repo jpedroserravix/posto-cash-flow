@@ -1,0 +1,1827 @@
+[
+  {
+    "dia": 1,
+    "santo": "Santo Agostinho",
+    "frase": "Nosso coração está inquieto até que descanse em Ti, Senhor."
+  },
+  {
+    "dia": 2,
+    "santo": "São Francisco de Sales",
+    "frase": "Não há nada tão forte como a mansidão, nem tão doce quanto a força."
+  },
+  {
+    "dia": 3,
+    "santo": "São João Crisóstomo",
+    "frase": "A oração é a luz da alma e a verdadeira comunhão com Deus."
+  },
+  {
+    "dia": 4,
+    "santo": "São Bernardo de Claraval",
+    "frase": "A humildade é a mãe da salvação."
+  },
+  {
+    "dia": 5,
+    "santo": "São Tomás de Aquino",
+    "frase": "A graça não destrói a natureza, mas a aperfeiçoa."
+  },
+  {
+    "dia": 6,
+    "santo": "São João Bosco",
+    "frase": "O que começa com oração termina com alegria."
+  },
+  {
+    "dia": 7,
+    "santo": "São Vicente de Paulo",
+    "frase": "É preciso amar antes de ser amado."
+  },
+  {
+    "dia": 8,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "Ore, espere e não se preocupe. A ansiedade não ajuda; só prejudica."
+  },
+  {
+    "dia": 9,
+    "santo": "São Francisco de Assis",
+    "frase": "É dando que se recebe; é perdoando que se é perdoado."
+  },
+  {
+    "dia": 10,
+    "santo": "Santo Agostinho",
+    "frase": "Amai a Deus e fazei o que quiserdes."
+  },
+  {
+    "dia": 11,
+    "santo": "São Bento de Núrsia",
+    "frase": "Ora et Labora — Reza e trabalha. Eis o equilíbrio da vida cristã."
+  },
+  {
+    "dia": 12,
+    "santo": "São João Paulo II",
+    "frase": "A família é o caminho da Igreja, porque é o caminho do homem."
+  },
+  {
+    "dia": 13,
+    "santo": "São Tomás Moro",
+    "frase": "Sou servo do rei, mas primeiro servo de Deus."
+  },
+  {
+    "dia": 14,
+    "santo": "Santa Faustina Kowalska",
+    "frase": "Jesus, confio em Vós."
+  },
+  {
+    "dia": 15,
+    "santo": "São Filipe Néri",
+    "frase": "A alegria cristã é um dom de Deus que brota de um bom coração."
+  },
+  {
+    "dia": 16,
+    "santo": "São João Paulo II",
+    "frase": "O amor é a explicação da vida."
+  },
+  {
+    "dia": 17,
+    "santo": "São Inácio de Loyola",
+    "frase": "Trabalha como se tudo dependesse de ti; ora como se tudo dependesse de Deus."
+  },
+  {
+    "dia": 18,
+    "santo": "São Vicente de Paulo",
+    "frase": "A caridade não tem fronteiras."
+  },
+  {
+    "dia": 19,
+    "santo": "Santo Agostinho",
+    "frase": "O amor ao próximo começa dentro de casa."
+  },
+  {
+    "dia": 20,
+    "santo": "São João Crisóstomo",
+    "frase": "Se não podes encontrar Cristo no mendigo, não O encontrarás no altar."
+  },
+  {
+    "dia": 21,
+    "santo": "São Francisco de Sales",
+    "frase": "A paciência é a aceitação amorosa de tudo o que Deus permite."
+  },
+  {
+    "dia": 22,
+    "santo": "São Bernardo de Claraval",
+    "frase": "Quem serve aos pobres, serve ao próprio Cristo."
+  },
+  {
+    "dia": 23,
+    "santo": "São João Bosco",
+    "frase": "Alegria, estudo e piedade são as armas do cristão."
+  },
+  {
+    "dia": 24,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "A misericórdia de Deus é maior que qualquer pecado."
+  },
+  {
+    "dia": 25,
+    "santo": "São Paulo Apóstolo",
+    "frase": "Tudo posso naquele que me fortalece."
+  },
+  {
+    "dia": 26,
+    "santo": "São Tomás de Aquino",
+    "frase": "A fé diz respeito àquilo que não é visto; a esperança, àquilo que ainda não se tem."
+  },
+  {
+    "dia": 27,
+    "santo": "São João Paulo II",
+    "frase": "Não tenhais medo! Abri as portas a Cristo!"
+  },
+  {
+    "dia": 28,
+    "santo": "São Francisco de Assis",
+    "frase": "Começa fazendo o necessário, depois o possível e logo estarás fazendo o impossível."
+  },
+  {
+    "dia": 29,
+    "santo": "São Gregório Magno",
+    "frase": "A melhor pregação é o testemunho da vida."
+  },
+  {
+    "dia": 30,
+    "santo": "São Vicente de Paulo",
+    "frase": "Dar aos pobres é emprestar a Deus."
+  },
+  {
+    "dia": 31,
+    "santo": "Santo Agostinho",
+    "frase": "Tu nos fizeste para Ti, e o nosso coração anda inquieto enquanto não repousa em Ti."
+  },
+  {
+    "dia": 32,
+    "santo": "São João Paulo II",
+    "frase": "A família é a primeira escola do amor."
+  },
+  {
+    "dia": 33,
+    "santo": "São Francisco de Sales",
+    "frase": "Sê quem és e sê-o bem."
+  },
+  {
+    "dia": 34,
+    "santo": "São Bento de Núrsia",
+    "frase": "A ociosidade é inimiga da alma; por isso, os irmãos devem ocupar-se em trabalho manual."
+  },
+  {
+    "dia": 35,
+    "santo": "São Tomás de Aquino",
+    "frase": "Aquele que é ingrato aos benefícios humanos será ingrato aos divinos."
+  },
+  {
+    "dia": 36,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "Amar a Deus e servir ao próximo: eis a síntese do Evangelho."
+  },
+  {
+    "dia": 37,
+    "santo": "São João Crisóstomo",
+    "frase": "Uma família em oração é uma família em paz."
+  },
+  {
+    "dia": 38,
+    "santo": "São Leão Magno",
+    "frase": "Cristão, reconhece a tua dignidade."
+  },
+  {
+    "dia": 39,
+    "santo": "São Vicente de Paulo",
+    "frase": "O amor é inventivo até ao infinito."
+  },
+  {
+    "dia": 40,
+    "santo": "Santo Agostinho",
+    "frase": "A paciência é a companheira da sabedoria."
+  },
+  {
+    "dia": 41,
+    "santo": "São Francisco de Sales",
+    "frase": "Não nos aflijamos por nossas imperfeições; avancemos com humildade."
+  },
+  {
+    "dia": 42,
+    "santo": "São João Paulo II",
+    "frase": "O trabalho é um bem do homem porque por ele o homem transforma a natureza."
+  },
+  {
+    "dia": 43,
+    "santo": "São Inácio de Loyola",
+    "frase": "Para a maior glória de Deus — em tudo o que fazemos."
+  },
+  {
+    "dia": 44,
+    "santo": "São Bernardo de Claraval",
+    "frase": "O que buscas lá fora, está dentro de ti."
+  },
+  {
+    "dia": 45,
+    "santo": "São João Bosco",
+    "frase": "A educação é obra do coração."
+  },
+  {
+    "dia": 46,
+    "santo": "São Tomás Moro",
+    "frase": "O homem que abandona Deus não encontra a si mesmo."
+  },
+  {
+    "dia": 47,
+    "santo": "São Francisco de Assis",
+    "frase": "A verdadeira alegria não vem de fora, mas de dentro."
+  },
+  {
+    "dia": 48,
+    "santo": "São Paulo Apóstolo",
+    "frase": "Já não sou eu que vivo; é Cristo que vive em mim."
+  },
+  {
+    "dia": 49,
+    "santo": "São João Paulo II",
+    "frase": "O pai que reza com os filhos é o maior presente que pode dar à família."
+  },
+  {
+    "dia": 50,
+    "santo": "Santo Agostinho",
+    "frase": "A misericórdia de Deus é o que mais nos aproxima d'Ele."
+  },
+  {
+    "dia": 51,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "Recorre sempre a Deus, pois Ele nunca se cansa de te ouvir."
+  },
+  {
+    "dia": 52,
+    "santo": "São Bento de Núrsia",
+    "frase": "Prefere a nada a Cristo."
+  },
+  {
+    "dia": 53,
+    "santo": "São Vicente de Paulo",
+    "frase": "Os pobres são nossos senhores e mestres."
+  },
+  {
+    "dia": 54,
+    "santo": "São João Crisóstomo",
+    "frase": "O pai é o sacerdote do lar."
+  },
+  {
+    "dia": 55,
+    "santo": "São Francisco de Sales",
+    "frase": "Temos mais necessidade de ser humildes do que grandes."
+  },
+  {
+    "dia": 56,
+    "santo": "São Leão Magno",
+    "frase": "A misericórdia não diminui a justiça; aperfeiçoa-a."
+  },
+  {
+    "dia": 57,
+    "santo": "São João Paulo II",
+    "frase": "O futuro da humanidade passa pela família."
+  },
+  {
+    "dia": 58,
+    "santo": "Santo Agostinho",
+    "frase": "Nosso coração só encontra repouso quando repousa em Deus."
+  },
+  {
+    "dia": 59,
+    "santo": "São Tomás de Aquino",
+    "frase": "O amor é o motor de todas as coisas boas."
+  },
+  {
+    "dia": 60,
+    "santo": "São José",
+    "frase": "O silêncio do justo fala mais alto que mil palavras."
+  },
+  {
+    "dia": 61,
+    "santo": "São Francisco de Sales",
+    "frase": "Paciência com todos, mas sobretudo contigo mesmo."
+  },
+  {
+    "dia": 62,
+    "santo": "São João Paulo II",
+    "frase": "O homem não pode viver sem amor."
+  },
+  {
+    "dia": 63,
+    "santo": "São Gregório Magno",
+    "frase": "O pastor que cala diante do erro torna-se cúmplice."
+  },
+  {
+    "dia": 64,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "Cada sofrimento aceito com amor é uma oração."
+  },
+  {
+    "dia": 65,
+    "santo": "São Vicente de Paulo",
+    "frase": "Servir ao pobre é servir ao próprio Deus."
+  },
+  {
+    "dia": 66,
+    "santo": "Santo Agostinho",
+    "frase": "Ama e faz o que quiseres, pois quem ama não pode querer o mal."
+  },
+  {
+    "dia": 67,
+    "santo": "São João Bosco",
+    "frase": "O jovem que trabalha e reza tem tudo o que precisa."
+  },
+  {
+    "dia": 68,
+    "santo": "São Bernardo de Claraval",
+    "frase": "Deus ama cada um de nós como se houvesse apenas um de nós."
+  },
+  {
+    "dia": 69,
+    "santo": "São Bento de Núrsia",
+    "frase": "O trabalho manual é honra, não humilhação."
+  },
+  {
+    "dia": 70,
+    "santo": "São Tomás de Aquino",
+    "frase": "A gratidão é a memória do coração."
+  },
+  {
+    "dia": 71,
+    "santo": "São João Paulo II",
+    "frase": "A família fundada no amor é o coração da civilização."
+  },
+  {
+    "dia": 72,
+    "santo": "São Francisco de Assis",
+    "frase": "Onde há caridade e sabedoria, não há medo nem ignorância."
+  },
+  {
+    "dia": 73,
+    "santo": "São Inácio de Loyola",
+    "frase": "A paz de Deus supera todo entendimento humano."
+  },
+  {
+    "dia": 74,
+    "santo": "São João Crisóstomo",
+    "frase": "A casa onde se reza é fortaleza contra todo mal."
+  },
+  {
+    "dia": 75,
+    "santo": "São Patrício",
+    "frase": "Cristo comigo, Cristo à minha frente, Cristo atrás de mim."
+  },
+  {
+    "dia": 76,
+    "santo": "São Leão Magno",
+    "frase": "A misericórdia é o coração da justiça divina."
+  },
+  {
+    "dia": 77,
+    "santo": "São José",
+    "frase": "O trabalhador honesto glorifica a Deus com as mãos."
+  },
+  {
+    "dia": 78,
+    "santo": "Santo Agostinho",
+    "frase": "O perdão é a maior das forças."
+  },
+  {
+    "dia": 79,
+    "santo": "São Francisco de Sales",
+    "frase": "Sê generoso com todos, mas sobretudo com os da tua casa."
+  },
+  {
+    "dia": 80,
+    "santo": "São João Paulo II",
+    "frase": "Trabalho é participação na obra criadora de Deus."
+  },
+  {
+    "dia": 81,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "Nunca te esqueças: Deus está sempre contigo."
+  },
+  {
+    "dia": 82,
+    "santo": "São Vicente de Paulo",
+    "frase": "A misericórdia praticada é fé vivida."
+  },
+  {
+    "dia": 83,
+    "santo": "São Bernardo de Claraval",
+    "frase": "Não te queixes das tuas dificuldades; ofereça-as a Deus."
+  },
+  {
+    "dia": 84,
+    "santo": "São Tomás Moro",
+    "frase": "A família que ora unida permanece unida."
+  },
+  {
+    "dia": 85,
+    "santo": "São João Bosco",
+    "frase": "Um bom pai vale mais do que cem professores."
+  },
+  {
+    "dia": 86,
+    "santo": "São Bento de Núrsia",
+    "frase": "Recebe o hóspede como se recebesses o próprio Cristo."
+  },
+  {
+    "dia": 87,
+    "santo": "São Francisco de Assis",
+    "frase": "Onde há amor, não há trabalho pesado."
+  },
+  {
+    "dia": 88,
+    "santo": "São João Crisóstomo",
+    "frase": "A paciência do pai educa mais do que qualquer castigo."
+  },
+  {
+    "dia": 89,
+    "santo": "Santo Agostinho",
+    "frase": "A misericórdia de Deus é eterna; o nosso pecado é temporal."
+  },
+  {
+    "dia": 90,
+    "santo": "São João Paulo II",
+    "frase": "A oração em família é a chave da felicidade doméstica."
+  },
+  {
+    "dia": 91,
+    "santo": "São Francisco de Sales",
+    "frase": "Toda a nossa perfeição consiste em amar a Deus e ao próximo."
+  },
+  {
+    "dia": 92,
+    "santo": "São Tomás de Aquino",
+    "frase": "A misericórdia é a virtude que nos torna mais semelhantes a Deus."
+  },
+  {
+    "dia": 93,
+    "santo": "São João Paulo II",
+    "frase": "Amai os vossos filhos; eles são o futuro de Deus no mundo."
+  },
+  {
+    "dia": 94,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "Deus nunca abandona quem confia n'Ele."
+  },
+  {
+    "dia": 95,
+    "santo": "Santo Agostinho",
+    "frase": "O que é impossível ao homem é possível a Deus."
+  },
+  {
+    "dia": 96,
+    "santo": "São Vicente de Paulo",
+    "frase": "Não basta fazer o bem; é preciso fazê-lo bem."
+  },
+  {
+    "dia": 97,
+    "santo": "São João Crisóstomo",
+    "frase": "O pai que trabalha com honestidade ensina mais do que qualquer livro."
+  },
+  {
+    "dia": 98,
+    "santo": "São Bernardo de Claraval",
+    "frase": "A mansidão vence onde a força fracassa."
+  },
+  {
+    "dia": 99,
+    "santo": "São Bento de Núrsia",
+    "frase": "Tudo o que fazes, faz com amor."
+  },
+  {
+    "dia": 100,
+    "santo": "São Francisco de Assis",
+    "frase": "Senhor, fazei de mim um instrumento da vossa paz."
+  },
+  {
+    "dia": 101,
+    "santo": "São Leão Magno",
+    "frase": "Deus perdoa porque ama; ama porque é misericordioso."
+  },
+  {
+    "dia": 102,
+    "santo": "Santa Catarina de Sena",
+    "frase": "Sede quem sois e sereis santos."
+  },
+  {
+    "dia": 103,
+    "santo": "São João Paulo II",
+    "frase": "A solidariedade é a forma social da caridade."
+  },
+  {
+    "dia": 104,
+    "santo": "São Inácio de Loyola",
+    "frase": "Em tudo amar e servir a Deus."
+  },
+  {
+    "dia": 105,
+    "santo": "São Tomás Moro",
+    "frase": "Um homem vale pela sua integridade, não por sua riqueza."
+  },
+  {
+    "dia": 106,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "A misericórdia de Deus é um oceano sem fundo."
+  },
+  {
+    "dia": 107,
+    "santo": "São Vicente de Paulo",
+    "frase": "O pobre é o sacramento de Cristo."
+  },
+  {
+    "dia": 108,
+    "santo": "Santo Agostinho",
+    "frase": "Deus nos ama demais para nos deixar como somos."
+  },
+  {
+    "dia": 109,
+    "santo": "São João Bosco",
+    "frase": "A família é a primeira comunidade de amor."
+  },
+  {
+    "dia": 110,
+    "santo": "São Francisco de Sales",
+    "frase": "O coração do pai é a obra-prima de Deus."
+  },
+  {
+    "dia": 111,
+    "santo": "São Bernardo de Claraval",
+    "frase": "Fazer o bem hoje é plantar para a eternidade."
+  },
+  {
+    "dia": 112,
+    "santo": "São João Crisóstomo",
+    "frase": "Enriquece-te com a misericórdia, que não enferruja."
+  },
+  {
+    "dia": 113,
+    "santo": "São João Paulo II",
+    "frase": "O verdadeiro amor é dom de si mesmo."
+  },
+  {
+    "dia": 114,
+    "santo": "São Bento de Núrsia",
+    "frase": "A humildade no trabalho é caminho para a santidade."
+  },
+  {
+    "dia": 115,
+    "santo": "São Tomás de Aquino",
+    "frase": "Três coisas necessárias para a felicidade: saúde, amizade e Deus."
+  },
+  {
+    "dia": 116,
+    "santo": "São Francisco de Assis",
+    "frase": "Onde há tristeza, que eu leve a alegria."
+  },
+  {
+    "dia": 117,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "Confia em Deus; Ele sabe o que é melhor para ti."
+  },
+  {
+    "dia": 118,
+    "santo": "São Leão Magno",
+    "frase": "A fé sem obras é como o sol sem luz."
+  },
+  {
+    "dia": 119,
+    "santo": "São Vicente de Paulo",
+    "frase": "O coração de mãe é fundo sem fundo."
+  },
+  {
+    "dia": 120,
+    "santo": "Santo Agostinho",
+    "frase": "A família é a Igreja doméstica."
+  },
+  {
+    "dia": 121,
+    "santo": "São José Operário",
+    "frase": "O trabalho honesto santifica quem o oferece a Deus."
+  },
+  {
+    "dia": 122,
+    "santo": "São João Paulo II",
+    "frase": "O homem realiza-se pelo trabalho."
+  },
+  {
+    "dia": 123,
+    "santo": "São Francisco de Sales",
+    "frase": "A caridade começa em casa e se expande ao mundo."
+  },
+  {
+    "dia": 124,
+    "santo": "São Tomás de Aquino",
+    "frase": "O primeiro ato de amor é querer o bem do outro."
+  },
+  {
+    "dia": 125,
+    "santo": "São João Apóstolo",
+    "frase": "Deus é amor e quem permanece no amor permanece em Deus."
+  },
+  {
+    "dia": 126,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "Faze o bem agora; depois virá a eternidade."
+  },
+  {
+    "dia": 127,
+    "santo": "São Bernardo de Claraval",
+    "frase": "Mede o teu amor por Deus pelo teu amor ao próximo."
+  },
+  {
+    "dia": 128,
+    "santo": "São João Bosco",
+    "frase": "Dá aos jovens um lar e eles não buscarão a rua."
+  },
+  {
+    "dia": 129,
+    "santo": "Santo Agostinho",
+    "frase": "A família que perdoa é a família que cresce."
+  },
+  {
+    "dia": 130,
+    "santo": "São Vicente de Paulo",
+    "frase": "Quem trabalha com amor nunca está cansado."
+  },
+  {
+    "dia": 131,
+    "santo": "São Francisco de Assis",
+    "frase": "O que procuramos longe, Deus colocou perto de nós."
+  },
+  {
+    "dia": 132,
+    "santo": "São João Crisóstomo",
+    "frase": "A esmola não empobrece quem dá; enriquece."
+  },
+  {
+    "dia": 133,
+    "santo": "São Bento de Núrsia",
+    "frase": "Que nada seja preferido à obra de Deus."
+  },
+  {
+    "dia": 134,
+    "santo": "São João Paulo II",
+    "frase": "O trabalho é expressão da dignidade humana."
+  },
+  {
+    "dia": 135,
+    "santo": "São Isidoro Lavrador",
+    "frase": "A terra trabalhada com amor produz fruto abundante."
+  },
+  {
+    "dia": 136,
+    "santo": "São Leão Magno",
+    "frase": "A graça de Deus nunca abandona quem a busca."
+  },
+  {
+    "dia": 137,
+    "santo": "São Tomás Moro",
+    "frase": "A paz de espírito é fruto de uma consciência limpa."
+  },
+  {
+    "dia": 138,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "Uma família unida é bênção de Deus."
+  },
+  {
+    "dia": 139,
+    "santo": "São Francisco de Sales",
+    "frase": "Não podes mudar o vento, mas podes ajustar as velas."
+  },
+  {
+    "dia": 140,
+    "santo": "São Bernardino de Sena",
+    "frase": "O trabalho bem-feito é uma oração silenciosa."
+  },
+  {
+    "dia": 141,
+    "santo": "Santo Agostinho",
+    "frase": "Deus escreve certo por linhas tortas."
+  },
+  {
+    "dia": 142,
+    "santo": "São João Paulo II",
+    "frase": "Sejam vocês, pais, os primeiros evangelizadores dos filhos."
+  },
+  {
+    "dia": 143,
+    "santo": "São Filipe Néri",
+    "frase": "A alegria é sinal de que Deus habita no coração."
+  },
+  {
+    "dia": 144,
+    "santo": "São Bento de Núrsia",
+    "frase": "Ao hóspede que chega, receba-o como ao próprio Cristo."
+  },
+  {
+    "dia": 145,
+    "santo": "São Vicente de Paulo",
+    "frase": "A misericórdia é a mais bela das flores da caridade."
+  },
+  {
+    "dia": 146,
+    "santo": "São João Crisóstomo",
+    "frase": "O marido que ama a esposa ama a si mesmo."
+  },
+  {
+    "dia": 147,
+    "santo": "São Tomás de Aquino",
+    "frase": "A esperança é o desejo de uma coisa boa que ainda não se possui."
+  },
+  {
+    "dia": 148,
+    "santo": "São Francisco de Assis",
+    "frase": "Começa a trabalhar; Deus dará o crescimento."
+  },
+  {
+    "dia": 149,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "O Senhor prova os que ama; suporta com alegria a prova."
+  },
+  {
+    "dia": 150,
+    "santo": "Santa Joana D'Arc",
+    "frase": "Deus primeiro; depois o trabalho."
+  },
+  {
+    "dia": 151,
+    "santo": "São João Paulo II",
+    "frase": "A família é a célula fundamental da sociedade e da Igreja."
+  },
+  {
+    "dia": 152,
+    "santo": "São Justino Mártir",
+    "frase": "A verdade é um dom de Deus ao homem que a busca."
+  },
+  {
+    "dia": 153,
+    "santo": "São Francisco de Sales",
+    "frase": "Sede humildes nas coisas pequenas; Deus vos dará as grandes."
+  },
+  {
+    "dia": 154,
+    "santo": "São Norberto",
+    "frase": "Quem serve aos outros serve ao próprio Cristo."
+  },
+  {
+    "dia": 155,
+    "santo": "São Bonifácio",
+    "frase": "A semente do bem nunca cai em vão."
+  },
+  {
+    "dia": 156,
+    "santo": "São João Paulo II",
+    "frase": "O amor conjugal é reflexo do amor de Deus pela humanidade."
+  },
+  {
+    "dia": 157,
+    "santo": "São Bernardo de Claraval",
+    "frase": "Trabalha com fé e Deus abençoará teu esforço."
+  },
+  {
+    "dia": 158,
+    "santo": "Santo Agostinho",
+    "frase": "A misericórdia divina é mais forte que qualquer pecado."
+  },
+  {
+    "dia": 159,
+    "santo": "São Efrém da Síria",
+    "frase": "A gratidão abre o coração para receber mais bênçãos."
+  },
+  {
+    "dia": 160,
+    "santo": "São Columbano",
+    "frase": "Quem encontra Deus encontrou tudo."
+  },
+  {
+    "dia": 161,
+    "santo": "São Barnabé Apóstolo",
+    "frase": "O encorajamento é dom que constrói a comunidade."
+  },
+  {
+    "dia": 162,
+    "santo": "São João de Sahagún",
+    "frase": "A paz vem de dentro, não de fora."
+  },
+  {
+    "dia": 163,
+    "santo": "Santo Antônio de Pádua",
+    "frase": "O coração que ama não conhece distância."
+  },
+  {
+    "dia": 164,
+    "santo": "São Basílio Magno",
+    "frase": "O homem que teme a Deus não teme coisa alguma."
+  },
+  {
+    "dia": 165,
+    "santo": "São João Paulo II",
+    "frase": "Homens e mulheres foram criados um para o outro."
+  },
+  {
+    "dia": 166,
+    "santo": "São Francisco de Sales",
+    "frase": "Faze tudo por amor; nada por obrigação ou medo."
+  },
+  {
+    "dia": 167,
+    "santo": "São Inácio de Loyola",
+    "frase": "O trabalho bem feito é louvor a Deus."
+  },
+  {
+    "dia": 168,
+    "santo": "São Vicente de Paulo",
+    "frase": "A humildade no serviço é o caminho mais curto para Deus."
+  },
+  {
+    "dia": 169,
+    "santo": "São Bento de Núrsia",
+    "frase": "O trabalho em comum fortalece a fraternidade."
+  },
+  {
+    "dia": 170,
+    "santo": "Santo Agostinho",
+    "frase": "Deus dá onde encontra mãos abertas."
+  },
+  {
+    "dia": 171,
+    "santo": "São Luís Gonzaga",
+    "frase": "Cada dia é uma nova oportunidade de amar a Deus."
+  },
+  {
+    "dia": 172,
+    "santo": "São Paulino de Nola",
+    "frase": "Que o amor de Deus habite em nossos corações e lares."
+  },
+  {
+    "dia": 173,
+    "santo": "São João Paulo II",
+    "frase": "Não há amor sem cruz; não há cruz sem esperança."
+  },
+  {
+    "dia": 174,
+    "santo": "São João Batista",
+    "frase": "Preparai o caminho do Senhor em vossos corações e famílias."
+  },
+  {
+    "dia": 175,
+    "santo": "São Tomás de Aquino",
+    "frase": "Onde há paz, há Deus; onde há Deus, há paz."
+  },
+  {
+    "dia": 176,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "A família que sofre unida cresce unida."
+  },
+  {
+    "dia": 177,
+    "santo": "São Leão Magno",
+    "frase": "A bondade custa pouco e vale muito."
+  },
+  {
+    "dia": 178,
+    "santo": "São Ireneu de Lyon",
+    "frase": "A glória de Deus é o homem vivendo plenamente."
+  },
+  {
+    "dia": 179,
+    "santo": "São Pedro Apóstolo",
+    "frase": "Senhor, a quem iríamos? Só Tu tens palavras de vida eterna."
+  },
+  {
+    "dia": 180,
+    "santo": "São Paulo Apóstolo",
+    "frase": "O amor é paciente, é bondoso; o amor não tem inveja."
+  },
+  {
+    "dia": 181,
+    "santo": "São João Paulo II",
+    "frase": "A misericórdia de Deus alcança todo coração que se abre."
+  },
+  {
+    "dia": 182,
+    "santo": "São Francisco de Sales",
+    "frase": "A mansidão conquista mais do que a força."
+  },
+  {
+    "dia": 183,
+    "santo": "Santo Agostinho",
+    "frase": "Deus ama cada um como se houvesse somente um para amar."
+  },
+  {
+    "dia": 184,
+    "santo": "São Tomás Apóstolo",
+    "frase": "Meu Senhor e meu Deus! Esta é a fé que move montanhas."
+  },
+  {
+    "dia": 185,
+    "santo": "Santa Isabel de Portugal",
+    "frase": "A paz entre os homens começa dentro de cada família."
+  },
+  {
+    "dia": 186,
+    "santo": "São Bernardo de Claraval",
+    "frase": "Cada trabalho honesto é uma oferta digna a Deus."
+  },
+  {
+    "dia": 187,
+    "santo": "São João Paulo II",
+    "frase": "O perdão não é fraqueza; é coragem."
+  },
+  {
+    "dia": 188,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "Ama a todos como Deus te ama: sem condições."
+  },
+  {
+    "dia": 189,
+    "santo": "São João Crisóstomo",
+    "frase": "O lar cristão é a primeira escola do Evangelho."
+  },
+  {
+    "dia": 190,
+    "santo": "São Vicente de Paulo",
+    "frase": "A generosidade é o idioma que Deus mais entende."
+  },
+  {
+    "dia": 191,
+    "santo": "São Bento de Núrsia",
+    "frase": "O silêncio no trabalho é eloquência diante de Deus."
+  },
+  {
+    "dia": 192,
+    "santo": "São João Gualberto",
+    "frase": "O perdão ao inimigo é o maior dos heroísmos cristãos."
+  },
+  {
+    "dia": 193,
+    "santo": "São Tomás de Aquino",
+    "frase": "A esperança é a âncora da alma em meio às tempestades."
+  },
+  {
+    "dia": 194,
+    "santo": "São Camilo de Lelis",
+    "frase": "Servir ao doente é servir ao próprio Cristo."
+  },
+  {
+    "dia": 195,
+    "santo": "São Boaventura",
+    "frase": "O amor é o guia mais seguro para chegar a Deus."
+  },
+  {
+    "dia": 196,
+    "santo": "São Francisco de Sales",
+    "frase": "Não precisamos de grandes obras; precisamos de grande amor."
+  },
+  {
+    "dia": 197,
+    "santo": "Santo Agostinho",
+    "frase": "O coração humano foi feito para Deus e nele encontra seu repouso."
+  },
+  {
+    "dia": 198,
+    "santo": "São João Paulo II",
+    "frase": "A família é santuário da vida e do amor."
+  },
+  {
+    "dia": 199,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "Deus não manda fardos sem dar a força para carregá-los."
+  },
+  {
+    "dia": 200,
+    "santo": "São Camilo de Lelis",
+    "frase": "Ver em cada pessoa que sofre o próprio Cristo."
+  },
+  {
+    "dia": 201,
+    "santo": "São Leão Magno",
+    "frase": "A misericórdia não julga o passado; abre o futuro."
+  },
+  {
+    "dia": 202,
+    "santo": "São Bernardo de Claraval",
+    "frase": "O pai que ora pelos filhos vale mais que mil mestres."
+  },
+  {
+    "dia": 203,
+    "santo": "São Tiago Apóstolo",
+    "frase": "A fé sem obras é morta."
+  },
+  {
+    "dia": 204,
+    "santo": "Santos Ana e Joaquim",
+    "frase": "Os avós são raízes que sustentam toda a família."
+  },
+  {
+    "dia": 205,
+    "santo": "São João Paulo II",
+    "frase": "O trabalho é colaboração com Deus na construção do mundo."
+  },
+  {
+    "dia": 206,
+    "santo": "São Vicente de Paulo",
+    "frase": "Deus ama quem dá com alegria."
+  },
+  {
+    "dia": 207,
+    "santo": "Santa Marta",
+    "frase": "O serviço cotidiano é tão sagrado quanto a oração."
+  },
+  {
+    "dia": 208,
+    "santo": "São Francisco de Assis",
+    "frase": "Onde há amor, Deus está presente."
+  },
+  {
+    "dia": 209,
+    "santo": "São Pedro Crisólogo",
+    "frase": "O que a fé crê, o amor vive no dia a dia."
+  },
+  {
+    "dia": 210,
+    "santo": "São Inácio de Loyola",
+    "frase": "Age como se tudo dependesse de ti; confia como se tudo dependesse de Deus."
+  },
+  {
+    "dia": 211,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "A dificuldade de hoje é a bênção de amanhã."
+  },
+  {
+    "dia": 212,
+    "santo": "Santo Afonso de Ligório",
+    "frase": "O amor de Cristo é a única razão digna de viver."
+  },
+  {
+    "dia": 213,
+    "santo": "São João Paulo II",
+    "frase": "A família que perdoa vive na misericórdia de Deus."
+  },
+  {
+    "dia": 214,
+    "santo": "São Pedro Julião Eymard",
+    "frase": "Aproxima-te de Deus como o filho que volta para casa."
+  },
+  {
+    "dia": 215,
+    "santo": "Santo Agostinho",
+    "frase": "Ama e o que fizeres será bem feito."
+  },
+  {
+    "dia": 216,
+    "santo": "São João Maria Vianney",
+    "frase": "A oração é o melhor remédio para todos os males da família."
+  },
+  {
+    "dia": 217,
+    "santo": "São Caetano",
+    "frase": "Confiai na Providência de Deus em tudo."
+  },
+  {
+    "dia": 218,
+    "santo": "São Francisco de Sales",
+    "frase": "Cada amanhecer é um presente de Deus para recomeçar."
+  },
+  {
+    "dia": 219,
+    "santo": "São Domingos de Gusmão",
+    "frase": "A caridade é o coração da missão cristã."
+  },
+  {
+    "dia": 220,
+    "santo": "São Bernardo de Claraval",
+    "frase": "A família que ama a Deus, ama-se a si mesma."
+  },
+  {
+    "dia": 221,
+    "santo": "São João Paulo II",
+    "frase": "O matrimônio é vocação ao amor total e fiel."
+  },
+  {
+    "dia": 222,
+    "santo": "São Lourenço",
+    "frase": "Os pobres são o verdadeiro tesouro da Igreja."
+  },
+  {
+    "dia": 223,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "Trabalha com fé e Deus cuidará do resultado."
+  },
+  {
+    "dia": 224,
+    "santo": "São Vicente de Paulo",
+    "frase": "A misericórdia não olha para o mérito; olha para a necessidade."
+  },
+  {
+    "dia": 225,
+    "santo": "Santo Agostinho",
+    "frase": "Deus espera por nós com misericórdia infindável."
+  },
+  {
+    "dia": 226,
+    "santo": "São Maximiliano Kolbe",
+    "frase": "O amor não conta o custo; simplesmente dá."
+  },
+  {
+    "dia": 227,
+    "santo": "São João Paulo II",
+    "frase": "Maria, mãe de Deus, é modelo de toda mãe."
+  },
+  {
+    "dia": 228,
+    "santo": "São Bernardo de Claraval",
+    "frase": "Quem confia em Deus jamais será confundido."
+  },
+  {
+    "dia": 229,
+    "santo": "São Jacinto",
+    "frase": "Onde vai o cristão, leva Cristo consigo."
+  },
+  {
+    "dia": 230,
+    "santo": "São João Eudes",
+    "frase": "O amor de Deus pelo homem é eterno e incondicional."
+  },
+  {
+    "dia": 231,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "A oração em família é o alicerce da casa."
+  },
+  {
+    "dia": 232,
+    "santo": "São Pio X",
+    "frase": "Restaurar todas as coisas em Cristo começa no lar."
+  },
+  {
+    "dia": 233,
+    "santo": "São Francisco de Sales",
+    "frase": "Não percas a paz por nada que aconteça."
+  },
+  {
+    "dia": 234,
+    "santo": "São Filipe Benício",
+    "frase": "A humildade abre as portas que o orgulho fecha."
+  },
+  {
+    "dia": 235,
+    "santo": "São Bartolomeu Apóstolo",
+    "frase": "Seguir a Cristo é o único caminho que não desaponta."
+  },
+  {
+    "dia": 236,
+    "santo": "São Luís Rei",
+    "frase": "O cristão que governa com justiça serve a Deus."
+  },
+  {
+    "dia": 237,
+    "santo": "São João Paulo II",
+    "frase": "O amor conjugal exige fidelidade, totalidade e fecundidade."
+  },
+  {
+    "dia": 238,
+    "santo": "Santo Agostinho",
+    "frase": "A misericórdia de Deus é o coração do Evangelho."
+  },
+  {
+    "dia": 239,
+    "santo": "São Agostinho de Hipona",
+    "frase": "Tu nos fizeste para Ti, e o nosso coração não sossega enquanto não repousa em Ti."
+  },
+  {
+    "dia": 240,
+    "santo": "São Leão Magno",
+    "frase": "A paz no lar começa pela paz interior."
+  },
+  {
+    "dia": 241,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "Não há tempestade que Deus não possa acalmar."
+  },
+  {
+    "dia": 242,
+    "santo": "São Vicente de Paulo",
+    "frase": "O amor ao próximo não escolhe o momento oportuno."
+  },
+  {
+    "dia": 243,
+    "santo": "São Bernardo de Claraval",
+    "frase": "O trabalho com amor é semente de eternidade."
+  },
+  {
+    "dia": 244,
+    "santo": "São João Paulo II",
+    "frase": "Cada vida humana é sagrada desde o início até o fim."
+  },
+  {
+    "dia": 245,
+    "santo": "São Francisco de Sales",
+    "frase": "O verdadeiro amor é paciente e constante."
+  },
+  {
+    "dia": 246,
+    "santo": "São Gregório Magno",
+    "frase": "O servidor fiel é aquele que faz o bem sem esperança de recompensa."
+  },
+  {
+    "dia": 247,
+    "santo": "Santo Agostinho",
+    "frase": "Busca a Deus primeiro e tudo o mais te será dado."
+  },
+  {
+    "dia": 248,
+    "santo": "São Zacarias",
+    "frase": "Bem-aventurado quem acredita nas promessas de Deus."
+  },
+  {
+    "dia": 249,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "Confia em Deus; Ele jamais te deixará na mão."
+  },
+  {
+    "dia": 250,
+    "santo": "São Tomás de Aquino",
+    "frase": "O bem que fazemos aos outros reverte para nós em Deus."
+  },
+  {
+    "dia": 251,
+    "santo": "São Pedro Claver",
+    "frase": "Todo ser humano merece ser tratado com dignidade."
+  },
+  {
+    "dia": 252,
+    "santo": "São João Crisóstomo",
+    "frase": "A família é a menor Igreja; a maior escola de amor."
+  },
+  {
+    "dia": 253,
+    "santo": "São Nicolau de Tolentino",
+    "frase": "O pão partido com os pobres é partido com Cristo."
+  },
+  {
+    "dia": 254,
+    "santo": "São Vicente de Paulo",
+    "frase": "A esmola de hoje pode ser a bênção de amanhã."
+  },
+  {
+    "dia": 255,
+    "santo": "São Francisco de Sales",
+    "frase": "A gentileza é a linguagem que o surdo pode ouvir e o cego pode ver."
+  },
+  {
+    "dia": 256,
+    "santo": "São João Paulo II",
+    "frase": "O pai presente é o maior presente para os filhos."
+  },
+  {
+    "dia": 257,
+    "santo": "São Bernardo de Claraval",
+    "frase": "Na cruz de cada dia está a semente da ressurreição."
+  },
+  {
+    "dia": 258,
+    "santo": "São João Crisóstomo",
+    "frase": "Não adornes tua casa de ouro; adorna-a de misericórdia."
+  },
+  {
+    "dia": 259,
+    "santo": "Santo Agostinho",
+    "frase": "A misericórdia é a maior das obras que podemos fazer."
+  },
+  {
+    "dia": 260,
+    "santo": "São Roberto Belarmino",
+    "frase": "Deus criou o homem para ser feliz com Ele eternamente."
+  },
+  {
+    "dia": 261,
+    "santo": "São José de Cupertino",
+    "frase": "O mais simples trabalhador pode ser grande diante de Deus."
+  },
+  {
+    "dia": 262,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "Toda família tem sua cruz; carregá-la juntos a torna mais leve."
+  },
+  {
+    "dia": 263,
+    "santo": "São Kim André",
+    "frase": "A fé transmitida em família é herança que não perece."
+  },
+  {
+    "dia": 264,
+    "santo": "São Mateus Evangelista",
+    "frase": "Jesus passou e o chamou. Ele se levantou e O seguiu."
+  },
+  {
+    "dia": 265,
+    "santo": "São João Paulo II",
+    "frase": "A civilização do amor começa dentro de cada família."
+  },
+  {
+    "dia": 266,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "Quem ora, trabalha duplamente."
+  },
+  {
+    "dia": 267,
+    "santo": "São Cosme e Damião",
+    "frase": "Cuidar dos que sofrem é obra que agrada a Deus."
+  },
+  {
+    "dia": 268,
+    "santo": "São Vicente de Paulo",
+    "frase": "O pobre que atendemos hoje pode ser nosso intercessor amanhã."
+  },
+  {
+    "dia": 269,
+    "santo": "São Miguel Arcanjo",
+    "frase": "Deus enviou seus anjos para guardar cada família."
+  },
+  {
+    "dia": 270,
+    "santo": "São Jerônimo",
+    "frase": "Ignorar as Escrituras é ignorar Cristo, o centro de toda família."
+  },
+  {
+    "dia": 271,
+    "santo": "São Wenceslau",
+    "frase": "O governante cristão serve antes de mandar."
+  },
+  {
+    "dia": 272,
+    "santo": "São Francisco de Sales",
+    "frase": "Tratar bem a família é honrar a Deus."
+  },
+  {
+    "dia": 273,
+    "santo": "Santo Agostinho",
+    "frase": "A paz é obra da justiça e da caridade."
+  },
+  {
+    "dia": 274,
+    "santo": "São Tomás de Aquino",
+    "frase": "O amor bem ordenado começa dentro de casa."
+  },
+  {
+    "dia": 275,
+    "santo": "Santa Teresa do Menino Jesus",
+    "frase": "Minha vocação é o amor; farei o bem na terra e no céu."
+  },
+  {
+    "dia": 276,
+    "santo": "São João Paulo II",
+    "frase": "A família é o lugar onde se aprende a amar e a ser amado."
+  },
+  {
+    "dia": 277,
+    "santo": "São Francisco de Assis",
+    "frase": "Onde há amor, há Deus; onde há Deus, há paz."
+  },
+  {
+    "dia": 278,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "O sofrimento suportado com amor é o maior dos tesouros."
+  },
+  {
+    "dia": 279,
+    "santo": "São Bento de Núrsia",
+    "frase": "O trabalho em família fortalece laços que nada rompe."
+  },
+  {
+    "dia": 280,
+    "santo": "Santo Agostinho",
+    "frase": "O perdão liberta quem perdoa tanto quanto quem é perdoado."
+  },
+  {
+    "dia": 281,
+    "santo": "São Leão Magno",
+    "frase": "A misericórdia exercida retorna multiplicada."
+  },
+  {
+    "dia": 282,
+    "santo": "São Simeão",
+    "frase": "Quem recebe Christ recebe a plenitude de todo bem."
+  },
+  {
+    "dia": 283,
+    "santo": "São Luis Bertrand",
+    "frase": "A oração transforma o coração e o lar."
+  },
+  {
+    "dia": 284,
+    "santo": "São Daniel Comboni",
+    "frase": "O amor a Deus se mede pelo amor ao próximo."
+  },
+  {
+    "dia": 285,
+    "santo": "São Bruno",
+    "frase": "O silêncio compartilhado em família é oração."
+  },
+  {
+    "dia": 286,
+    "santo": "São João XXIII",
+    "frase": "Hoje começa tudo de novo; a misericórdia é sempre nova."
+  },
+  {
+    "dia": 287,
+    "santo": "Santa Teresa de Ávila",
+    "frase": "Que nada te turbe; quem tem a Deus nada lhe falta."
+  },
+  {
+    "dia": 288,
+    "santo": "São João Paulo II",
+    "frase": "Deus é Pai misericordioso que corre ao encontro do filho que volta."
+  },
+  {
+    "dia": 289,
+    "santo": "São Margarida Maria",
+    "frase": "O coração de Deus ama cada família com amor infinito."
+  },
+  {
+    "dia": 290,
+    "santo": "Santa Edwiges",
+    "frase": "O serviço aos humildes é a porta para o reino de Deus."
+  },
+  {
+    "dia": 291,
+    "santo": "São Lucas Evangelista",
+    "frase": "A misericórdia de Deus não tem limites para quem a busca."
+  },
+  {
+    "dia": 292,
+    "santo": "São Pedro de Alcântara",
+    "frase": "A pobreza voluntária liberta o coração para amar mais."
+  },
+  {
+    "dia": 293,
+    "santo": "São João de Capistrano",
+    "frase": "Nenhuma dificuldade vence quem confia em Deus."
+  },
+  {
+    "dia": 294,
+    "santo": "Santo Antônio Maria Claret",
+    "frase": "O amor a Deus transforma o trabalho em missão."
+  },
+  {
+    "dia": 295,
+    "santo": "São Judas Tadeu",
+    "frase": "Conservai-vos no amor de Deus; aí está a família forte."
+  },
+  {
+    "dia": 296,
+    "santo": "São João Paulo II",
+    "frase": "A família que reza unida permanece unida."
+  },
+  {
+    "dia": 297,
+    "santo": "São Francisco de Sales",
+    "frase": "A paciência com os filhos é oração contínua."
+  },
+  {
+    "dia": 298,
+    "santo": "São Bento de Núrsia",
+    "frase": "Faz de cada tarefa um ato de amor a Deus."
+  },
+  {
+    "dia": 299,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "Deus usa os nossos sofrimentos para nos moldar à Sua imagem."
+  },
+  {
+    "dia": 300,
+    "santo": "Santo Agostinho",
+    "frase": "A família cristã é luz no meio do mundo."
+  },
+  {
+    "dia": 301,
+    "santo": "São Vicente de Paulo",
+    "frase": "A misericórdia praticada unge quem a recebe e quem a dá."
+  },
+  {
+    "dia": 302,
+    "santo": "São João Crisóstomo",
+    "frase": "Enriquece tua família com amor; nada mais dura."
+  },
+  {
+    "dia": 303,
+    "santo": "São João Paulo II",
+    "frase": "Família, sede o que sois: santuário da vida e do amor."
+  },
+  {
+    "dia": 304,
+    "santo": "São Bernardo de Claraval",
+    "frase": "A bondade diária constrói o que nenhum dinheiro compra."
+  },
+  {
+    "dia": 305,
+    "santo": "São Ireneu de Lyon",
+    "frase": "A glória de Deus é o homem vivo; a vida do homem é ver a Deus."
+  },
+  {
+    "dia": 306,
+    "santo": "Todos os Santos",
+    "frase": "Os santos mostram que a santidade é possível para todos."
+  },
+  {
+    "dia": 307,
+    "santo": "São João Paulo II",
+    "frase": "A morte é passagem, não fim; a saudade é amor que persiste."
+  },
+  {
+    "dia": 308,
+    "santo": "São Martinho de Porres",
+    "frase": "Todos somos filhos do mesmo Pai; todos somos irmãos."
+  },
+  {
+    "dia": 309,
+    "santo": "São Carlos Borromeu",
+    "frase": "Quem não reza não tem força para suportar as provações."
+  },
+  {
+    "dia": 310,
+    "santo": "São Leão Magno",
+    "frase": "O cristão verdadeiro serve antes de ser servido."
+  },
+  {
+    "dia": 311,
+    "santo": "São Francisco de Sales",
+    "frase": "O amor suporta tudo porque tudo vê em Deus."
+  },
+  {
+    "dia": 312,
+    "santo": "São Tomás de Aquino",
+    "frase": "A família unida pelo amor supera qualquer adversidade."
+  },
+  {
+    "dia": 313,
+    "santo": "São Leão Magno",
+    "frase": "A bondade custa pouco e rende muito no reino de Deus."
+  },
+  {
+    "dia": 314,
+    "santo": "Santo Agostinho",
+    "frase": "A misericórdia é o sorriso de Deus sobre o pecador arrependido."
+  },
+  {
+    "dia": 315,
+    "santo": "São Alberto Magno",
+    "frase": "A razão e a fé caminham juntas quando o coração é reto."
+  },
+  {
+    "dia": 316,
+    "santo": "Santa Gertrudes",
+    "frase": "O amor de Deus é oceano onde todos os pecados se dissolvem."
+  },
+  {
+    "dia": 317,
+    "santo": "São João Paulo II",
+    "frase": "O respeito ao idoso é sinal de uma família civilizada."
+  },
+  {
+    "dia": 318,
+    "santo": "Santo Odo de Cluny",
+    "frase": "A reforma do lar começa pela reforma do coração."
+  },
+  {
+    "dia": 319,
+    "santo": "São Edmundo",
+    "frase": "Quem age com justiça encontra paz de espírito."
+  },
+  {
+    "dia": 320,
+    "santo": "São Francisco de Assis",
+    "frase": "Deixai entrar o amor de Deus em vossas casas."
+  },
+  {
+    "dia": 321,
+    "santo": "Santa Isabel da Hungria",
+    "frase": "Dar ao pobre de coração aberto é dar ao próprio Cristo."
+  },
+  {
+    "dia": 322,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "A família que perdoa reflete o rosto misericordioso de Deus."
+  },
+  {
+    "dia": 323,
+    "santo": "Santa Cecília",
+    "frase": "A música e o trabalho partilhados em família são louvor a Deus."
+  },
+  {
+    "dia": 324,
+    "santo": "São Clemente I",
+    "frase": "A unidade da família é don do Espírito Santo."
+  },
+  {
+    "dia": 325,
+    "santo": "São João Paulo II",
+    "frase": "O amor que une os esposos é participação no amor de Deus."
+  },
+  {
+    "dia": 326,
+    "santo": "Santa Catarina de Alexandria",
+    "frase": "Nenhuma sabedoria humana supera a sabedoria do amor."
+  },
+  {
+    "dia": 327,
+    "santo": "São Bernardo de Claraval",
+    "frase": "Abandonar-se à vontade de Deus é a maior das liberdades."
+  },
+  {
+    "dia": 328,
+    "santo": "São Vicente de Paulo",
+    "frase": "Sirva ao próximo hoje; não espere condições perfeitas."
+  },
+  {
+    "dia": 329,
+    "santo": "São João Crisóstomo",
+    "frase": "A casa que acolhe o estranho acolhe o próprio Cristo."
+  },
+  {
+    "dia": 330,
+    "santo": "Santo Agostinho",
+    "frase": "O coração que busca Deus sempre O encontra."
+  },
+  {
+    "dia": 331,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "A cruz que carregamos com amor torna-se coroa."
+  },
+  {
+    "dia": 332,
+    "santo": "São Pedro de Alexandria",
+    "frase": "A fé transmitida de pais para filhos é o maior legado."
+  },
+  {
+    "dia": 333,
+    "santo": "São Francisco de Sales",
+    "frase": "Ser bom pai e boa mãe é santo caminho para o céu."
+  },
+  {
+    "dia": 334,
+    "santo": "São João Paulo II",
+    "frase": "A misericórdia é o nome mais belo de Deus."
+  },
+  {
+    "dia": 335,
+    "santo": "São Tomás de Aquino",
+    "frase": "O bem feito à família é bem feito à sociedade inteira."
+  },
+  {
+    "dia": 336,
+    "santo": "São Colomba",
+    "frase": "Em todo lugar onde há amor, há pátria."
+  },
+  {
+    "dia": 337,
+    "santo": "São Francisco Xavier",
+    "frase": "Dai mais; o Senhor sempre compensa."
+  },
+  {
+    "dia": 338,
+    "santo": "São João Paulo II",
+    "frase": "A Encarnação revelou a dignidade de todo ser humano."
+  },
+  {
+    "dia": 339,
+    "santo": "São Francisco de Sales",
+    "frase": "O advento é tempo de renovar o amor em família."
+  },
+  {
+    "dia": 340,
+    "santo": "Santo Agostinho",
+    "frase": "Deus veio ao mundo para mostrar o quanto nos ama."
+  },
+  {
+    "dia": 341,
+    "santo": "São Saba",
+    "frase": "A espera paciente é oração."
+  },
+  {
+    "dia": 342,
+    "santo": "São Nicolau de Bari",
+    "frase": "Dar em segredo é dar ao próprio Deus."
+  },
+  {
+    "dia": 343,
+    "santo": "Santo Ambrósio de Milão",
+    "frase": "O amor de Deus se revela na ternura com que cuida de nós."
+  },
+  {
+    "dia": 344,
+    "santo": "São João Paulo II",
+    "frase": "Maria é modelo de toda mãe que acolhe e cuida."
+  },
+  {
+    "dia": 345,
+    "santo": "São Pedro Fourier",
+    "frase": "Educar com amor é a mais nobre das missões."
+  },
+  {
+    "dia": 346,
+    "santo": "São Bernardo de Claraval",
+    "frase": "O lar onde há amor é antecipação do paraíso."
+  },
+  {
+    "dia": 347,
+    "santo": "São Dâmaso I",
+    "frase": "A Palavra de Deus é pão que sustenta toda família."
+  },
+  {
+    "dia": 348,
+    "santo": "São Francisco de Assis",
+    "frase": "Onde entrar a paz de Deus, nenhum mal prevalece."
+  },
+  {
+    "dia": 349,
+    "santo": "Santa Lúcia",
+    "frase": "A luz da fé ilumina toda a casa onde habita."
+  },
+  {
+    "dia": 350,
+    "santo": "São João da Cruz",
+    "frase": "Na escuridão da vida, Deus nos conduz com amor."
+  },
+  {
+    "dia": 351,
+    "santo": "São Pio de Pietrelcina",
+    "frase": "Não há sofrimento que o amor de Deus não possa transformar."
+  },
+  {
+    "dia": 352,
+    "santo": "São Francisco de Sales",
+    "frase": "O Natal é Deus vindo nos encontrar onde estamos."
+  },
+  {
+    "dia": 353,
+    "santo": "Santo Agostinho",
+    "frase": "Deus se fez pequeno para que o homem pudesse tornar-se grande."
+  },
+  {
+    "dia": 354,
+    "santo": "São Pedro Canísio",
+    "frase": "A fé bem vivida em família é herança para gerações."
+  },
+  {
+    "dia": 355,
+    "santo": "São João Paulo II",
+    "frase": "Em Cristo, toda família encontra seu fundamento."
+  },
+  {
+    "dia": 356,
+    "santo": "São João Apóstolo",
+    "frase": "Deus é amor; quem ama conhece a Deus."
+  },
+  {
+    "dia": 357,
+    "santo": "São Estêvão Protomártir",
+    "frase": "O perdão ao inimigo é o fruto mais belo do amor cristão."
+  },
+  {
+    "dia": 358,
+    "santo": "São João Evangelista",
+    "frase": "Amai-vos uns aos outros como Eu vos amei."
+  },
+  {
+    "dia": 359,
+    "santo": "São Tomás Becket",
+    "frase": "A integridade no trabalho é testemunho de fé."
+  },
+  {
+    "dia": 360,
+    "santo": "Santa Família",
+    "frase": "Nazaré ensina que o lar, o trabalho e a oração são sagrados."
+  },
+  {
+    "dia": 361,
+    "santo": "São Francisco de Sales",
+    "frase": "O último dia do ano é convite a perdoar e recomeçar."
+  },
+  {
+    "dia": 362,
+    "santo": "São João Paulo II",
+    "frase": "A gratidão é a memória do coração."
+  },
+  {
+    "dia": 363,
+    "santo": "São Bernardo de Claraval",
+    "frase": "O ano que passa foi escola de amor; o que chega é nova chance."
+  },
+  {
+    "dia": 364,
+    "santo": "Santo Agostinho",
+    "frase": "Deus é sempre maior do que nossos erros e menores do que Seu amor."
+  },
+  {
+    "dia": 365,
+    "santo": "São Silvestre I",
+    "frase": "Cada novo ano é um novo convite de Deus para amar mais e melhor."
+  }
+]
