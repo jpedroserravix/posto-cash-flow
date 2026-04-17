@@ -53,7 +53,7 @@ export default function Login() {
             <Fuel className="w-6 h-6 text-primary-foreground" />
           </div>
           <CardTitle className="text-2xl font-bold">POSTO INTELIGENTE</CardTitle>
-          <p className="text-muted-foreground text-sm">Rede de Postos de Combustível</p>
+          <p className="text-muted-foreground text-sm">Created by J</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
