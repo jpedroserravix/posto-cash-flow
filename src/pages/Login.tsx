@@ -9,11 +9,13 @@ import { toast } from 'sonner';
 import { Fuel } from 'lucide-react';
 
 const STORAGE_KEY = 'pi_saved_username';
+const PASSWORD_KEY = 'pi_saved_password';
 
 export default function Login() {
   const [username, setUsername] = useState(() => localStorage.getItem(STORAGE_KEY) || '');
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState(() => localStorage.getItem(PASSWORD_KEY) || '');
   const [rememberMe, setRememberMe] = useState(() => !!localStorage.getItem(STORAGE_KEY));
+  const [rememberPassword, setRememberPassword] = useState(() => !!localStorage.getItem(PASSWORD_KEY));
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -33,6 +35,11 @@ export default function Login() {
         localStorage.setItem(STORAGE_KEY, username.trim());
       } else {
         localStorage.removeItem(STORAGE_KEY);
+      }
+      if (rememberPassword) {
+        localStorage.setItem(PASSWORD_KEY, password);
+      } else {
+        localStorage.removeItem(PASSWORD_KEY);
       }
     }
     setLoading(false);
