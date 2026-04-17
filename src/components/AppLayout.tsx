@@ -164,15 +164,15 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-background">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="bg-card border-b sticky top-0 z-50">
+      <header className="bg-card/90 backdrop-blur-md border-b border-border/70 sticky top-0 z-50 shadow-sm">
         <div className="container flex items-center h-14 gap-2">
 
           {/* Brand */}
           <div className="flex items-center gap-2 shrink-0">
-            <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center shadow-sm ring-1 ring-primary/20">
               <Fuel className="w-4 h-4 text-primary-foreground" />
             </div>
-            <span className="font-semibold text-sm hidden md:block">POSTO INTELIGENTE</span>
+            <span className="font-semibold text-sm tracking-tight hidden md:block">POSTO INTELIGENTE</span>
           </div>
 
           {/* Cadastros + Documentos — desktop: text buttons, mobile: dropdown */}
@@ -328,22 +328,27 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
       {/* ── Secondary navigation — sub-tabs within active group ────────────── */}
       {secondaryTabs && (
-        <div className="bg-background border-b overflow-x-auto">
+        <div className="bg-background border-b border-border/70 overflow-x-auto">
           <div className="container flex gap-0 py-0">
             {secondaryTabs.map((item) => {
               const isActive = location.pathname === item.to;
               return (
-                <Link key={item.to} to={item.to}>
+                <Link key={item.to} to={item.to} className="relative">
                   <button
-                    className={`flex items-center gap-1.5 px-3 py-2 text-xs whitespace-nowrap border-b-2 transition-colors ${
+                    className={`flex items-center gap-1.5 px-3 py-2.5 text-xs whitespace-nowrap transition-all duration-200 ${
                       isActive
-                        ? 'border-primary text-primary font-medium'
-                        : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground'
+                        ? 'text-primary font-semibold'
+                        : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
                     <item.icon className="w-3.5 h-3.5" />
                     {item.label}
                   </button>
+                  <span
+                    className={`absolute bottom-0 left-2 right-2 h-0.5 rounded-full transition-all duration-300 ${
+                      isActive ? 'bg-primary opacity-100' : 'bg-primary opacity-0'
+                    }`}
+                  />
                 </Link>
               );
             })}
