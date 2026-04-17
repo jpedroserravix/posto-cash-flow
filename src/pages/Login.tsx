@@ -81,15 +81,32 @@ export default function Login() {
                 required
               />
             </div>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="remember"
-                checked={rememberMe}
-                onCheckedChange={(v) => setRememberMe(!!v)}
-              />
-              <Label htmlFor="remember" className="text-sm font-normal cursor-pointer">
-                Lembrar meu usuário
-              </Label>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="remember"
+                  checked={rememberMe}
+                  onCheckedChange={(v) => setRememberMe(!!v)}
+                />
+                <Label htmlFor="remember" className="text-sm font-normal cursor-pointer">
+                  Lembrar meu usuário
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="remember-password"
+                  checked={rememberPassword}
+                  onCheckedChange={(v) => setRememberPassword(!!v)}
+                />
+                <Label htmlFor="remember-password" className="text-sm font-normal cursor-pointer">
+                  Lembrar minha senha
+                </Label>
+              </div>
+              {rememberPassword && (
+                <p className="text-xs text-muted-foreground pl-6">
+                  ⚠ Não recomendado em computador compartilhado
+                </p>
+              )}
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Entrando...' : 'Entrar'}
