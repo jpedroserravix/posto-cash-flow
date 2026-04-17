@@ -61,7 +61,7 @@ export default function Usuarios() {
       .from('user_profiles' as any)
       .select('id, user_id, nome, username, perfil, posto_ids, permissoes, ativo')
       .order('nome');
-    if (!error) setUsers((data as UserProfile[]) || []);
+    if (!error) setUsers(((data as unknown) as UserProfile[]) || []);
   }, []);
 
   const loadPostos = useCallback(async () => {

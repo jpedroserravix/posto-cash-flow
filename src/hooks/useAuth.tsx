@@ -97,11 +97,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loadUserData = useCallback(
     async (userId: string) => {
       // Try new user_profiles table first
-      const { data: profile } = await supabase
+      const { data: profileRaw } = await supabase
         .from('user_profiles' as any)
         .select('nome, username, perfil, posto_ids, permissoes, ativo')
         .eq('user_id', userId)
         .maybeSingle();
+      const profile = (profileRaw as unknown) as {
+        nome: string; username: string; perfil: string;
+        posto_ids: string[]; permissoes: string[]; ativo: boolean;
+      } | null;
 
       if (profile) {
         if (!profile.ativo) {
