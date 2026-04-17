@@ -271,19 +271,28 @@ export type Database = {
         Row: {
           cnpj: string
           created_at: string
+          email: string | null
+          endereco: string | null
           id: string
+          inscricao_estadual: string | null
           nome: string
         }
         Insert: {
           cnpj: string
           created_at?: string
+          email?: string | null
+          endereco?: string | null
           id?: string
+          inscricao_estadual?: string | null
           nome: string
         }
         Update: {
           cnpj?: string
           created_at?: string
+          email?: string | null
+          endereco?: string | null
           id?: string
+          inscricao_estadual?: string | null
           nome?: string
         }
         Relationships: []

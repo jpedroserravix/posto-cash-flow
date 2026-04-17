@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, X, Save, Upload, FileText, UserX, UserCheck, Search } from 'lucide-react';
+import { openInNewTab } from '@/lib/utils';
 
 // ─── types ──────────────────────────────────────────────────────────────────
 
@@ -352,9 +353,9 @@ export default function Funcionarios() {
     if (detailTarget) await loadDocs(detailTarget.id);
   }
 
-  async function getDocUrl(path: string) {
+  function getDocUrl(path: string) {
     const { data } = supabase.storage.from('pessoal-documentos').getPublicUrl(path);
-    window.open(data.publicUrl, '_blank');
+    openInNewTab(data.publicUrl);
   }
 
   // ─── open dialog helpers ───────────────────────────────────────────────────

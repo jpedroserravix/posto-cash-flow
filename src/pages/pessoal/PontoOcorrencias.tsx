@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, Save, FileText } from 'lucide-react';
+import { openInNewTab } from '@/lib/utils';
 
 // ─── types ──────────────────────────────────────────────────────────────────
 
@@ -258,9 +259,9 @@ export default function PontoOcorrencias() {
     else { toast.success('Ocorrência excluída'); setDeleteTarget(null); await load(); }
   }
 
-  async function getFileUrl(path: string) {
+  function getFileUrl(path: string) {
     const { data } = supabase.storage.from('pessoal-documentos').getPublicUrl(path);
-    window.open(data.publicUrl, '_blank');
+    openInNewTab(data.publicUrl);
   }
 
   // ─── open dialog ───────────────────────────────────────────────────────────

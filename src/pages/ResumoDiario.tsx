@@ -12,6 +12,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { Save, Upload, FileText, X, ExternalLink, Paperclip } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { openInNewTab } from '@/lib/utils';
 import { usePagination } from '@/hooks/usePagination';
 import { PaginationControls } from '@/components/PaginationControls';
 import { useDateFilter } from '@/hooks/useDateFilter';
@@ -60,6 +62,7 @@ interface PreviewFile {
 
 export default function ResumoDiario() {
   const { selectedPostoId } = useAuth();
+  const isMobile = useIsMobile();
   const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter();
   const [groups, setGroups] = useState<GroupData[]>([]);
 
@@ -451,7 +454,10 @@ export default function ResumoDiario() {
                           <HoverCardTrigger asChild>
                             <button
                               className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-all hover:scale-105 hover:border-primary hover:text-foreground"
-                              onClick={() => setPreviewFile({ url: pdfUrl, label: `PDF Quality — ${new Date(`${group.data}T00:00:00`).toLocaleDateString('pt-BR')}`, fileType: 'pdf' })}
+                              onClick={() => {
+                                if (isMobile) { openInNewTab(pdfUrl); return; }
+                                setPreviewFile({ url: pdfUrl, label: `PDF Quality — ${new Date(`${group.data}T00:00:00`).toLocaleDateString('pt-BR')}`, fileType: 'pdf' });
+                              }}
                             >
                               <FileText className="h-3.5 w-3.5 text-red-500" />
                               <span>PDF Quality</span>
@@ -518,7 +524,10 @@ export default function ResumoDiario() {
                                 <HoverCardTrigger asChild>
                                   <button
                                     className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-all hover:scale-105 hover:border-primary hover:text-foreground"
-                                    onClick={() => setPreviewFile({ url: compUrl, label: comp.file_name, fileType: comp.file_type })}
+                                    onClick={() => {
+                                      if (comp.file_type !== 'image' && isMobile) { openInNewTab(compUrl); return; }
+                                      setPreviewFile({ url: compUrl, label: comp.file_name, fileType: comp.file_type });
+                                    }}
                                   >
                                     {comp.file_type === 'image' ? (
                                       <img src={compUrl} className="h-4 w-4 rounded object-cover shrink-0" alt="" />
@@ -613,7 +622,7 @@ export default function ResumoDiario() {
               variant="ghost"
               size="sm"
               className="h-7 gap-1.5 text-xs shrink-0"
-              onClick={() => window.open(previewFile?.url, '_blank')}
+              onClick={() => openInNewTab(previewFile?.url ?? '')}
             >
               <ExternalLink className="h-3.5 w-3.5" />
               Abrir em nova aba
@@ -626,6 +635,20 @@ export default function ResumoDiario() {
                 alt={previewFile.label}
                 className="max-w-full max-h-full object-contain rounded"
               />
+            </div>
+          ) : isMobile ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8 bg-muted/30 text-center">
+              <FileText className="w-14 h-14 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                Pré-visualização de PDF não disponível no celular.
+              </p>
+              <Button
+                className="gap-2"
+                onClick={() => openInNewTab(previewFile?.url ?? '')}
+              >
+                <ExternalLink className="w-4 h-4" />
+                Abrir PDF
+              </Button>
             </div>
           ) : (
             <iframe

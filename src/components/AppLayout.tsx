@@ -1,9 +1,48 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Fuel, LogOut, FileSpreadsheet, PenLine, BarChart3, Building2, Users, Landmark, Receipt, Wrench, Zap, LayoutDashboard, FileCheck2, ShoppingBag, UserCircle, Clock, Calculator, History, ClipboardList, Package } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Fuel, LogOut, FileSpreadsheet, PenLine, BarChart3, Building2, Users, Landmark, Receipt, Wrench, Zap, LayoutDashboard, FileCheck2, ShoppingBag, UserCircle, Clock, Calculator, History, ClipboardList, Package, Info, Copy, Check } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
+
+interface PostoFull {
+  id: string;
+  nome: string;
+  cnpj: string | null;
+  inscricao_estadual: string | null;
+  endereco: string | null;
+  email: string | null;
+}
+
+function CopyRow({ label, value }: { label: string; value: string | null | undefined }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    if (!value) return;
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <div className="flex items-center justify-between gap-3 py-1.5">
+      <div className="min-w-0">
+        <div className="text-[10px] text-muted-foreground leading-none mb-0.5">{label}</div>
+        <div className="text-xs font-medium break-all">{value || '—'}</div>
+      </div>
+      <Button
+        size="icon"
+        variant="ghost"
+        className="h-6 w-6 shrink-0"
+        onClick={copy}
+        disabled={!value}
+        title="Copiar"
+      >
+        {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+      </Button>
+    </div>
+  );
+}
 
 interface NavItem {
   to: string;
@@ -64,6 +103,17 @@ const navGroups: NavGroup[] = [
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { role, postoNome, allPostos, selectedPostoId, setSelectedPostoId, signOut, hasPermission } = useAuth();
   const location = useLocation();
+  const [postoFull, setPostoFull] = useState<PostoFull | null>(null);
+
+  useEffect(() => {
+    if (!selectedPostoId) { setPostoFull(null); return; }
+    supabase
+      .from('postos')
+      .select('id, nome, cnpj, inscricao_estadual, endereco, email')
+      .eq('id', selectedPostoId)
+      .single()
+      .then(({ data }) => setPostoFull(data as PostoFull | null));
+  }, [selectedPostoId]);
 
   const visibleGroups = navGroups
     .map((g) => ({
@@ -106,6 +156,24 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             )}
             {allPostos.length <= 1 && postoNome && (
               <span className="text-sm text-muted-foreground">{postoNome}</span>
+            )}
+            {postoFull && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-9 w-9" title="Informações do posto">
+                    <Info className="w-4 h-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72 p-3" align="end">
+                  <div className="font-semibold text-sm mb-1">{postoFull.nome}</div>
+                  <div className="divide-y divide-border">
+                    <CopyRow label="CNPJ" value={postoFull.cnpj} />
+                    <CopyRow label="Inscrição Estadual" value={postoFull.inscricao_estadual} />
+                    <CopyRow label="Endereço" value={postoFull.endereco} />
+                    <CopyRow label="E-mail" value={postoFull.email} />
+                  </div>
+                </PopoverContent>
+              </Popover>
             )}
             <Button variant="ghost" size="icon" onClick={signOut} title="Sair">
               <LogOut className="w-4 h-4" />

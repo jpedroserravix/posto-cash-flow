@@ -12,7 +12,9 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/h
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Save, X, FilterX, Check, Landmark, Paperclip, FileText } from 'lucide-react';
+import { Plus, Pencil, Trash2, Save, X, FilterX, Check, Landmark, Paperclip, FileText, ExternalLink } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { openInNewTab } from '@/lib/utils';
 import { FilterableHead } from '@/components/FilterableHead';
 import { HorizontalScrollSync } from '@/components/HorizontalScrollSync';
 import { cn } from '@/lib/utils';
@@ -54,6 +56,7 @@ interface ContaBancaria {
 
 export default function DepositosManuais() {
   const { selectedPostoId, role } = useAuth();
+  const isMobile = useIsMobile();
   const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter();
   const [deposits, setDeposits] = useState<ManualDeposit[]>([]);
   const [allDeposits, setAllDeposits] = useState<ManualDeposit[]>([]);
@@ -585,7 +588,12 @@ export default function DepositosManuais() {
                                     <div className="relative group/comp inline-flex">
                                       <button
                                         className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-muted"
-                                        onClick={() => setPreviewFile({ url: getStorageUrl(d.comprovante_path!), type: d.comprovante_type === 'image' ? 'image' : 'pdf' })}
+                                        onClick={() => {
+                                          const url = getStorageUrl(d.comprovante_path!);
+                                          const type = d.comprovante_type === 'image' ? 'image' : 'pdf';
+                                          if (type === 'pdf' && isMobile) { openInNewTab(url); return; }
+                                          setPreviewFile({ url, type });
+                                        }}
                                       >
                                         <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
                                       </button>
@@ -636,6 +644,19 @@ export default function DepositosManuais() {
         <DialogContent className="max-w-3xl p-2">
           {previewFile?.type === 'image' ? (
             <img src={previewFile.url} className="w-full rounded" alt="" />
+          ) : isMobile ? (
+            <div className="flex flex-col items-center justify-center gap-4 py-12 bg-muted/30 rounded">
+              <FileText className="w-14 h-14 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground text-center px-4">
+                Pré-visualização de PDF não disponível no celular.
+              </p>
+              <a href={previewFile?.url} target="_blank" rel="noreferrer">
+                <Button className="gap-2">
+                  <ExternalLink className="w-4 h-4" />
+                  Abrir PDF
+                </Button>
+              </a>
+            </div>
           ) : (
             <iframe src={previewFile?.url} className="w-full h-[70vh] rounded" title="Comprovante" />
           )}

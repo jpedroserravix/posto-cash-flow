@@ -36,6 +36,8 @@ import {
   Plus, Pencil, Trash2, ChevronDown, ChevronRight, MoreHorizontal,
   Paperclip, ExternalLink, FileText, X, Save,
 } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { openInNewTab } from '@/lib/utils';
 
 // ─── types ──────────────────────────────────────────────────────────────────
 
@@ -126,14 +128,19 @@ function FilePreviewButton({
   label: string;
   onOpen: (f: PreviewFile) => void;
 }) {
+  const isMobile = useIsMobile();
   const isImg = type === 'image';
   const url = getPublicUrl(path);
+  const handleClick = () => {
+    if (!isImg && isMobile) { openInNewTab(url); return; }
+    onOpen({ url, label, type: isImg ? 'image' : 'pdf' });
+  };
   return (
     <HoverCard openDelay={200}>
       <HoverCardTrigger asChild>
         <button
           className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-muted"
-          onClick={() => onOpen({ url, label, type: isImg ? 'image' : 'pdf' })}
+          onClick={handleClick}
           title={label}
         >
           <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
@@ -176,6 +183,7 @@ function HistoricoItem({ h }: { h: PedidoHistorico }) {
 
 export default function Pedidos() {
   const { user, nome, username, allPostos, selectedPostoId } = useAuth();
+  const isMobile = useIsMobile();
   const showPostoFilter = allPostos.length > 0;
 
   const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter('thisMonth');
@@ -939,6 +947,19 @@ export default function Pedidos() {
             <>
               {previewFile.type === 'image' ? (
                 <img src={previewFile.url} className="w-full rounded" alt={previewFile.label} />
+              ) : isMobile ? (
+                <div className="flex flex-col items-center justify-center gap-4 py-12 bg-muted/30 rounded">
+                  <FileText className="w-14 h-14 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground text-center px-4">
+                    Pré-visualização de PDF não disponível no celular.
+                  </p>
+                  <a href={previewFile.url} target="_blank" rel="noreferrer">
+                    <Button className="gap-2">
+                      <ExternalLink className="w-4 h-4" />
+                      Abrir PDF
+                    </Button>
+                  </a>
+                </div>
               ) : (
                 <iframe src={previewFile.url} className="w-full h-[70vh] rounded" title={previewFile.label} />
               )}

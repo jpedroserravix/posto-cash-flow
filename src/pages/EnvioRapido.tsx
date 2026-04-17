@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { Camera, Paperclip, Send, X, FileText, ExternalLink, CalendarDays, Building2, StickyNote } from 'lucide-react';
+import { openInNewTab } from '@/lib/utils';
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,29 @@ type Tipo =
   | 'Despesa'
   | 'Manutenção'
   | 'Outros';
+
+// Ordem dos grupos e itens no seletor de tipo.
+// O primeiro item do primeiro grupo é o padrão ao abrir a tela.
+const TIPO_GROUPS: { label: string; items: { value: Tipo; label: string }[] }[] = [
+  {
+    label: 'Compras',
+    items: [{ value: 'Nota Fiscal de Compra', label: 'Nota Fiscal de Compra' }],
+  },
+  {
+    label: 'Comprovante Caixa',
+    items: [
+      { value: 'Despesa',    label: 'Despesa' },
+      { value: 'Manutenção', label: 'Aferição' },
+      { value: 'Outros',     label: 'Outros' },
+    ],
+  },
+  {
+    label: 'Financeiro',
+    items: [{ value: 'Depósito Manual', label: 'Depósito Manual' }],
+  },
+];
+
+const TIPO_DEFAULT: Tipo = TIPO_GROUPS[0].items[0].value;
 
 // ─── form state ───────────────────────────────────────────────────────────────
 
@@ -68,7 +92,7 @@ function formatDate(iso: string): string {
 export default function EnvioRapido() {
   const { selectedPostoId, user, nome, username } = useAuth();
 
-  const [tipo, setTipo]           = useState<Tipo>('Despesa');
+  const [tipo, setTipo]           = useState<Tipo>(TIPO_DEFAULT);
   const [form, setForm]           = useState<FormState>(emptyForm);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedBoleto, setSelectedBoleto]         = useState<File | null>(null);
@@ -405,20 +429,14 @@ export default function EnvioRapido() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectGroup>
-                  <SelectLabel className="text-xs text-muted-foreground">Compras</SelectLabel>
-                  <SelectItem value="Nota Fiscal de Compra">Nota Fiscal de Compra</SelectItem>
-                </SelectGroup>
-                <SelectGroup>
-                  <SelectLabel className="text-xs text-muted-foreground">Comprovante Caixa</SelectLabel>
-                  <SelectItem value="Despesa">Despesa</SelectItem>
-                  <SelectItem value="Manutenção">Aferição</SelectItem>
-                  <SelectItem value="Outros">Outros</SelectItem>
-                </SelectGroup>
-                <SelectGroup>
-                  <SelectLabel className="text-xs text-muted-foreground">Financeiro</SelectLabel>
-                  <SelectItem value="Depósito Manual">Depósito Manual</SelectItem>
-                </SelectGroup>
+                {TIPO_GROUPS.map((group) => (
+                  <SelectGroup key={group.label}>
+                    <SelectLabel className="text-xs text-muted-foreground">{group.label}</SelectLabel>
+                    {group.items.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -712,11 +730,11 @@ export default function EnvioRapido() {
                       <button
                         type="button"
                         className="mt-1 flex items-center gap-1.5 text-xs text-primary hover:underline"
-                        onClick={async () => {
-                          const { data } = await supabase.storage
+                        onClick={() => {
+                          const url = supabase.storage
                             .from('documentos-comprovantes')
-                            .createSignedUrl(p.arquivo_path!, 60);
-                          if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+                            .getPublicUrl(p.arquivo_path!).data.publicUrl;
+                          openInNewTab(url);
                         }}
                       >
                         <FileText className="h-3.5 w-3.5" />

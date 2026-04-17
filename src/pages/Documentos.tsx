@@ -13,7 +13,9 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/h
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Copy, Paperclip, FileText, X, Save } from 'lucide-react';
+import { Plus, Pencil, Trash2, Copy, Paperclip, FileText, X, Save, ExternalLink } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { openInNewTab } from '@/lib/utils';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -133,6 +135,7 @@ export default function Documentos() {
   const isEmpresa = location.pathname === '/docs-empresa';
 
   const { role, allPostos, selectedPostoId } = useAuth();
+  const isMobile = useIsMobile();
   const isAdmin = role === 'admin';
   // show posto selector when admin or multi-posto user
   const showPostoSelector = allPostos.length > 0;
@@ -1133,6 +1136,19 @@ export default function Documentos() {
         <DialogContent className="max-w-3xl p-2">
           {previewFile?.type === 'image' ? (
             <img src={previewFile.url} className="w-full rounded" alt="" />
+          ) : isMobile ? (
+            <div className="flex flex-col items-center justify-center gap-4 py-12 bg-muted/30 rounded">
+              <FileText className="w-14 h-14 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground text-center px-4">
+                Pré-visualização de PDF não disponível no celular.
+              </p>
+              <a href={previewFile?.url} target="_blank" rel="noreferrer">
+                <Button className="gap-2">
+                  <ExternalLink className="w-4 h-4" />
+                  Abrir PDF
+                </Button>
+              </a>
+            </div>
           ) : (
             <iframe src={previewFile?.url} className="w-full h-[70vh] rounded" title="Documento" />
           )}
@@ -1183,14 +1199,19 @@ function FilePreviewButton({
   getUrl: (p: string) => string;
   onOpen: (f: PreviewFile) => void;
 }) {
+  const isMobile = useIsMobile();
   const isImage = type === 'image';
   const url = getUrl(path);
+  const handleClick = () => {
+    if (!isImage && isMobile) { openInNewTab(url); return; }
+    onOpen({ url, type: isImage ? 'image' : 'pdf' });
+  };
   return (
     <HoverCard openDelay={200}>
       <HoverCardTrigger asChild>
         <button
           className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-muted"
-          onClick={() => onOpen({ url, type: isImage ? 'image' : 'pdf' })}
+          onClick={handleClick}
           title="Ver arquivo"
         >
           <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
