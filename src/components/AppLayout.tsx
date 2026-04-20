@@ -2,8 +2,11 @@ import { ReactNode, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
@@ -12,9 +15,10 @@ import {
   Fuel, LogOut, FileSpreadsheet, PenLine, BarChart3, Building2, Users,
   Landmark, Receipt, Zap, LayoutDashboard, FileCheck2, ShoppingBag,
   UserCircle, Clock, Calculator, History, ClipboardList, Package,
-  Info, Copy, Check, GraduationCap, LayoutGrid,
+  Info, Copy, Check, GraduationCap, LayoutGrid, Settings, KeyRound, ChevronDown,
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
+import { toast } from 'sonner';
 
 // ─── Posto info popover ──────────────────────────────────────────────────────
 
@@ -114,7 +118,9 @@ const headerNavGroups: NavGroup[] = [
       { to: '/postos',   label: 'Postos',                icon: Building2,     permission: 'postos' },
       { to: '/usuarios', label: 'Usuários',              icon: Users,         permission: 'usuarios' },
       { to: '/bancos',   label: 'Contas Bancárias',      icon: Landmark,      permission: 'bancos' },
-      { to: '/cursos',   label: 'Cursos e Treinamentos', icon: GraduationCap, permission: 'cursos-treinamentos' },
+      { to: '/cursos',          label: 'Cursos e Treinamentos', icon: GraduationCap, permission: 'cursos-treinamentos' },
+      { to: '/configuracoes',   label: 'Configurações',         icon: Settings,      permission: 'configuracoes' },
+      { to: '/acessos-senhas',  label: 'Acessos e Senhas',      icon: KeyRound,      permission: 'acessos-senhas' },
     ],
   },
 ];
@@ -122,13 +128,140 @@ const headerNavGroups: NavGroup[] = [
 // All groups combined — used for secondary tab detection
 const allNavGroups: NavGroup[] = [...primaryNavGroups, ...headerNavGroups];
 
+// ─── Alterar Senha Modal ─────────────────────────────────────────────────────
+
+const EMPTY_PWD = { atual: '', nova: '', confirmar: '' };
+
+function AlterarSenhaModal({
+  open,
+  onClose,
+  userEmail,
+  onSuccess,
+}: {
+  open: boolean;
+  onClose: () => void;
+  userEmail: string;
+  onSuccess: () => void;
+}) {
+  const [form, setForm] = useState(EMPTY_PWD);
+  const [loading, setLoading] = useState(false);
+
+  function reset() { setForm(EMPTY_PWD); }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (form.nova.length < 6) {
+      toast.error('A nova senha deve ter pelo menos 6 caracteres');
+      return;
+    }
+    if (form.nova !== form.confirmar) {
+      toast.error('A confirmação não coincide com a nova senha');
+      return;
+    }
+
+    setLoading(true);
+
+    // 1 — Verify current password by re-authenticating
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email: userEmail,
+      password: form.atual,
+    });
+    if (authError) {
+      toast.error('Senha atual incorreta');
+      setLoading(false);
+      return;
+    }
+
+    // 2 — Update password
+    const { error: updateError } = await supabase.auth.updateUser({ password: form.nova });
+    if (updateError) {
+      toast.error(`Erro ao alterar senha: ${updateError.message}`);
+      setLoading(false);
+      return;
+    }
+
+    toast.success('Senha alterada com sucesso! Você será deslogado.');
+    setLoading(false);
+    onClose();
+    reset();
+
+    // Small delay so the user reads the toast, then sign out
+    setTimeout(() => { onSuccess(); }, 1500);
+  }
+
+  function handleClose() {
+    if (loading) return;
+    reset();
+    onClose();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <KeyRound className="w-4 h-4" />
+            Alterar Senha
+          </DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 pt-1">
+          <div className="space-y-1">
+            <Label className="text-xs">Senha atual</Label>
+            <Input
+              type="password"
+              value={form.atual}
+              onChange={(e) => setForm((f) => ({ ...f, atual: e.target.value }))}
+              autoComplete="current-password"
+              disabled={loading}
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Nova senha</Label>
+            <Input
+              type="password"
+              value={form.nova}
+              onChange={(e) => setForm((f) => ({ ...f, nova: e.target.value }))}
+              autoComplete="new-password"
+              placeholder="Mínimo 6 caracteres"
+              disabled={loading}
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Confirmar nova senha</Label>
+            <Input
+              type="password"
+              value={form.confirmar}
+              onChange={(e) => setForm((f) => ({ ...f, confirmar: e.target.value }))}
+              autoComplete="new-password"
+              disabled={loading}
+              required
+            />
+          </div>
+          <DialogFooter className="pt-2">
+            <Button type="button" variant="ghost" size="sm" onClick={handleClose} disabled={loading}>
+              Cancelar
+            </Button>
+            <Button type="submit" size="sm" disabled={loading || !form.atual || !form.nova || !form.confirmar}>
+              {loading ? 'Salvando...' : 'Alterar senha'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function AppLayout({ children }: { children: ReactNode }) {
-  const { postoNome, allPostos, selectedPostoId, setSelectedPostoId, signOut, hasPermission, nome } = useAuth();
+  const { user, postoNome, allPostos, selectedPostoId, setSelectedPostoId, signOut, hasPermission, nome } = useAuth();
   const firstName = nome ? nome.trim().split(' ')[0] : null;
   const location = useLocation();
   const [postoFull, setPostoFull] = useState<PostoFull | null>(null);
+  const [pwdModalOpen, setPwdModalOpen] = useState(false);
 
   useEffect(() => {
     if (!selectedPostoId) { setPostoFull(null); return; }
@@ -265,14 +398,35 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 </PopoverContent>
               </Popover>
             )}
-            {firstName && (
-              <span className="text-xs font-medium text-muted-foreground whitespace-nowrap hidden sm:inline">
-                {firstName}
-              </span>
-            )}
-            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={signOut} title="Sair">
-              <LogOut className="w-4 h-4" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 shrink-0">
+                  {firstName && (
+                    <span className="text-xs font-medium hidden sm:inline">{firstName}</span>
+                  )}
+                  <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                {user?.email && (
+                  <>
+                    <DropdownMenuLabel className="text-xs font-normal text-muted-foreground truncate">
+                      {user.email}
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                <DropdownMenuItem onClick={() => setPwdModalOpen(true)} className="gap-2 text-xs cursor-pointer">
+                  <KeyRound className="w-3.5 h-3.5" />
+                  Alterar senha
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={signOut} className="gap-2 text-xs cursor-pointer text-red-600 focus:text-red-600">
+                  <LogOut className="w-3.5 h-3.5" />
+                  Sair
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>
@@ -358,6 +512,14 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
       {/* ── Content ────────────────────────────────────────────────────────── */}
       <main className="container py-4">{children}</main>
+
+      {/* ── Alterar Senha Modal ─────────────────────────────────────────────── */}
+      <AlterarSenhaModal
+        open={pwdModalOpen}
+        onClose={() => setPwdModalOpen(false)}
+        userEmail={user?.email ?? ''}
+        onSuccess={signOut}
+      />
     </div>
   );
 }

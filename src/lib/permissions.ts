@@ -15,6 +15,8 @@ export const ALL_PERMISSIONS = [
   { key: 'lancamento-notas',      label: 'Lançamento de Notas' },
   { key: 'pedidos-compra',        label: 'Pedidos de Compra' },
   { key: 'cursos-treinamentos',   label: 'Cursos e Treinamentos' },
+  { key: 'configuracoes',         label: 'Configurações' },
+  { key: 'acessos-senhas',        label: 'Acessos e Senhas' },
 ] as const;
 
 export type PermissionKey = (typeof ALL_PERMISSIONS)[number]['key'];
@@ -46,6 +48,8 @@ export const ROUTE_PERMISSION_MAP: { path: string; permission: string }[] = [
   { path: '/compras/pedidos',    permission: 'pedidos-compra' },
   { path: '/compras/notas',     permission: 'lancamento-notas' },
   { path: '/cursos',            permission: 'cursos-treinamentos' },
+  { path: '/configuracoes',    permission: 'configuracoes' },
+  { path: '/acessos-senhas',   permission: 'acessos-senhas' },
 ];
 
 export function firstAllowedPath(hasPermission: (k: string) => boolean): string {

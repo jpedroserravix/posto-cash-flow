@@ -24,6 +24,8 @@ import HistoricoFuncionario from "./pages/pessoal/HistoricoFuncionario";
 import LancamentoNotas from "./pages/notas/LancamentoNotas";
 import Pedidos from "./pages/compras/Pedidos";
 import Cursos from "./pages/Cursos";
+import Configuracoes from "./pages/Configuracoes";
+import AcessosSenhas from "./pages/AcessosSenhas";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -95,6 +97,8 @@ function AppRoutes() {
       <Route path="/compras/pedidos" element={<ProtectedRoute permission="pedidos-compra">   <Pedidos /></ProtectedRoute>} />
       <Route path="/compras/notas"   element={<ProtectedRoute permission="lancamento-notas"> <LancamentoNotas /></ProtectedRoute>} />
       <Route path="/cursos"           element={<ProtectedRoute permission="cursos-treinamentos"><Cursos /></ProtectedRoute>} />
+      <Route path="/configuracoes"    element={<ProtectedRoute permission="configuracoes"><Configuracoes /></ProtectedRoute>} />
+      <Route path="/acessos-senhas"   element={<ProtectedRoute permission="acessos-senhas"><AcessosSenhas /></ProtectedRoute>} />
       {/* backward-compat redirect */}
       <Route path="/notas"           element={<Navigate to="/compras/notas" replace />} />
       <Route path="*" element={<NotFound />} />

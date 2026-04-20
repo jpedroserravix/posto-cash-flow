@@ -22,6 +22,7 @@ import { usePagination } from '@/hooks/usePagination';
 import { PaginationControls } from '@/components/PaginationControls';
 import { useDateFilter } from '@/hooks/useDateFilter';
 import { DateFilter } from '@/components/DateFilter';
+import { useListaConfig } from '@/hooks/useListaConfig';
 
 type SortDir = 'asc' | 'desc' | null;
 
@@ -53,7 +54,7 @@ interface DepositoCompleto {
   conciliado_forcado: boolean;
 }
 
-const CENTROS_CUSTO = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO'];
+const CENTROS_CUSTO_FALLBACK = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO'];
 
 const TURNOS = ['TURNO 1', 'TURNO 2', 'TURNO 3'];
 
@@ -209,6 +210,8 @@ function rowKey(r: { data_deposito: string; valor: number; depositante: string; 
 }
 
 export default function DepositosBrinks() {
+  const centrosCusto = useListaConfig('centros_custo', CENTROS_CUSTO_FALLBACK);
+
   const { selectedPostoId, role } = useAuth();
   const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter();
   const [importRows, setImportRows] = useState<BrinksRow[]>([]);
@@ -727,7 +730,7 @@ export default function DepositosBrinks() {
                         <SelectTrigger className="h-8 text-xs w-36"><SelectValue placeholder="Centro Custo" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="__empty__">(Em branco)</SelectItem>
-                          {CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                          {centrosCusto.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </TableCell>
@@ -941,7 +944,7 @@ export default function DepositosBrinks() {
                                 <SelectTrigger className="h-8 text-xs w-36"><SelectValue placeholder="Centro Custo" /></SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="__empty__">(Em branco)</SelectItem>
-                                  {CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                  {centrosCusto.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                                 </SelectContent>
                               </Select>
                             </TableCell>

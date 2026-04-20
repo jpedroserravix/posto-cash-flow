@@ -22,9 +22,10 @@ import { usePagination } from '@/hooks/usePagination';
 import { PaginationControls } from '@/components/PaginationControls';
 import { useDateFilter } from '@/hooks/useDateFilter';
 import { DateFilter } from '@/components/DateFilter';
+import { useListaConfig } from '@/hooks/useListaConfig';
 
 const TURNOS = ['TURNO 1', 'TURNO 2', 'TURNO 3'];
-const CENTROS_CUSTO = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO'];
+const CENTROS_CUSTO_FALLBACK = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO'];
 
 type SortDir = 'asc' | 'desc' | null;
 
@@ -55,6 +56,8 @@ interface ContaBancaria {
 }
 
 export default function DepositosManuais() {
+  const centrosCusto = useListaConfig('centros_custo', CENTROS_CUSTO_FALLBACK);
+
   const { selectedPostoId, role } = useAuth();
   const isMobile = useIsMobile();
   const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter();
@@ -426,7 +429,7 @@ export default function DepositosManuais() {
                   <SelectTrigger className="h-9"><SelectValue placeholder="Selecionar" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__empty__">(Em branco)</SelectItem>
-                    {CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    {centrosCusto.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -507,7 +510,7 @@ export default function DepositosManuais() {
                 <SelectTrigger className="h-8 w-48 text-xs"><SelectValue placeholder="Centro de Custo" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__empty__">(Em branco)</SelectItem>
-                  {CENTROS_CUSTO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  {centrosCusto.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Button size="sm" className="h-8" onClick={handleBulkCentroCusto} disabled={!bulkCentroCusto}>

@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, Copy, Paperclip, FileText, X, Save, ExternalLink } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { openInNewTab } from '@/lib/utils';
+import { useListaConfig } from '@/hooks/useListaConfig';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -104,14 +105,14 @@ interface PreviewFile {
   type: 'image' | 'pdf';
 }
 
-const TIPOS_EMPRESA = [
+const TIPOS_EMPRESA_FALLBACK = [
   'Cartão CNPJ',
   'Contrato Social',
   'Inscrição Estadual',
   'Inscrição Municipal',
   'Certidão Negativa',
   'Outros',
-] as const;
+];
 
 const emptyAlvForm = {
   posto_id: '', nome_documento: '', numero: '',
@@ -130,6 +131,8 @@ const emptyEmpForm = {
 // ─── main component ──────────────────────────────────────────────────────────
 
 export default function Documentos() {
+  const tiposEmpresa = useListaConfig('tipos_doc_empresa', TIPOS_EMPRESA_FALLBACK);
+
   const location = useLocation();
   const isAlvaras = location.pathname === '/alvaras';
   const isEmpresa = location.pathname === '/docs-empresa';
@@ -1084,7 +1087,7 @@ export default function Documentos() {
                   <SelectValue placeholder="Selecionar tipo" />
                 </SelectTrigger>
                 <SelectContent>
-                  {TIPOS_EMPRESA.map((t) => (
+                  {tiposEmpresa.map((t) => (
                     <SelectItem key={t} value={t}>{t}</SelectItem>
                   ))}
                 </SelectContent>

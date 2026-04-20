@@ -27,7 +27,7 @@ interface Recado {
 
 interface AlertaItem {
   id: string;
-  tipo: 'alvara' | 'treinamento';
+  tipo: 'alvara' | 'treinamento' | 'contrato';
   nome: string;
   detalhe: string;
   postoNome: string;
@@ -59,6 +59,12 @@ function daysUntil(dateStr: string): number {
   const today = new Date(new Date().toISOString().split('T')[0] + 'T00:00:00');
   const exp = new Date(dateStr + 'T00:00:00');
   return Math.ceil((exp.getTime() - today.getTime()) / 86_400_000);
+}
+
+function addDaysToDate(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
 }
 
 function calcExpiracao(opt: string): string | null {
@@ -136,7 +142,7 @@ export default function Dashboard() {
     future.setDate(future.getDate() + 90);
     const futureStr = future.toISOString().split('T')[0];
 
-    const [{ data: alvaras }, { data: treinamentosRaw }] = await Promise.all([
+    const [{ data: alvaras }, { data: treinamentosRaw }, { data: contratos }] = await Promise.all([
       (supabase as any)
         .from('documentos_alvaras')
         .select('id, nome_documento, posto_id, data_vencimento')
@@ -150,6 +156,14 @@ export default function Dashboard() {
         .not('data_vencimento', 'is', null)
         .gte('data_vencimento', past)
         .lte('data_vencimento', futureStr),
+      (supabase as any)
+        .from('pessoal_funcionarios')
+        .select('id, nome, posto_id, prazo_experiencia, inicio_experiencia, renovavel, prazo_renovacao, experiencia_efetivado')
+        .in('posto_id', postoIds)
+        .eq('em_experiencia', true)
+        .eq('status', 'ativo')
+        .not('inicio_experiencia', 'is', null)
+        .not('prazo_experiencia', 'is', null),
     ]);
 
     const items: AlertaItem[] = [];
@@ -181,6 +195,35 @@ export default function Dashboard() {
         postoNome,
         dias: daysUntil(t.data_vencimento),
         dataVencimento: t.data_vencimento,
+      });
+    });
+
+    // ── contratos de experiência (janela: vencendo em ≤7 dias ou já vencidos) ──
+    (contratos ?? []).forEach((c: any) => {
+      if (c.experiencia_efetivado) return;
+      const fim1 = addDaysToDate(c.inicio_experiencia, c.prazo_experiencia - 1);
+      const fim2 = c.renovavel && c.prazo_renovacao ? addDaysToDate(fim1, c.prazo_renovacao) : null;
+      const todayStr = new Date().toISOString().split('T')[0];
+      let fimAtual: string;
+      let periodoLabel: string;
+      if (todayStr <= fim1) {
+        fimAtual = fim1; periodoLabel = '1º período';
+      } else if (fim2) {
+        fimAtual = fim2; periodoLabel = '2º período';
+      } else {
+        fimAtual = fim1; periodoLabel = '1º período';
+      }
+      const dias = daysUntil(fimAtual);
+      if (dias > 7) return; // só alertar nos próximos 7 dias ou vencidos
+      const postoNome = allPostos.find((p) => p.id === c.posto_id)?.nome ?? '';
+      items.push({
+        id: c.id,
+        tipo: 'contrato',
+        nome: `Contrato de Experiência — ${periodoLabel}`,
+        detalhe: c.nome,
+        postoNome,
+        dias,
+        dataVencimento: fimAtual,
       });
     });
 
@@ -411,6 +454,8 @@ export default function Dashboard() {
                   <div className="shrink-0 mt-0.5">
                     {a.tipo === 'treinamento' ? (
                       <GraduationCap className={`w-4 h-4 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
+                    ) : a.tipo === 'contrato' ? (
+                      <Clock className={`w-4 h-4 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
                     ) : (
                       <FileWarning className={`w-4 h-4 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
                     )}

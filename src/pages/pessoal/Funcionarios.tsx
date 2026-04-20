@@ -15,9 +15,11 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, X, Save, Upload, FileText, UserX, UserCheck, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Save, Upload, FileText, UserX, UserCheck, Search, BadgeCheck } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { openInNewTab } from '@/lib/utils';
 import FuncionarioTreinamentos from './FuncionarioTreinamentos';
+import { useListaConfig } from '@/hooks/useListaConfig';
 
 // ─── types ──────────────────────────────────────────────────────────────────
 
@@ -36,6 +38,16 @@ interface Funcionario {
   observacoes: string | null;
   status: FuncStatus;
   created_at: string;
+  em_experiencia?: boolean | null;
+  prazo_experiencia?: number | null;
+  inicio_experiencia?: string | null;
+  renovavel?: boolean | null;
+  prazo_renovacao?: number | null;
+  experiencia_efetivado?: boolean | null;
+  emergencia_nome?: string | null;
+  emergencia_telefone?: string | null;
+  emergencia_parentesco?: string | null;
+  emergencia_parentesco_outro?: string | null;
 }
 
 interface Desligamento {
@@ -77,7 +89,43 @@ function formatDate(str: string | null) {
   return `${d}/${m}/${y}`;
 }
 
-const CARGOS = [
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
+function daysFromToday(dateStr: string): number {
+  const today = new Date(new Date().toISOString().split('T')[0] + 'T00:00:00');
+  const exp = new Date(dateStr + 'T00:00:00');
+  return Math.ceil((exp.getTime() - today.getTime()) / 86_400_000);
+}
+
+interface ExperienciaInfo {
+  fim1: string;
+  fim2: string | null;
+  periodo: 1 | 2;
+  diasRestantes: number;
+  vencido: boolean;
+}
+
+function calcExperiencia(f: Funcionario): ExperienciaInfo | null {
+  if (!f.em_experiencia || f.experiencia_efetivado) return null;
+  if (!f.inicio_experiencia || !f.prazo_experiencia) return null;
+  const fim1 = addDays(f.inicio_experiencia, f.prazo_experiencia - 1);
+  const fim2 = f.renovavel && f.prazo_renovacao ? addDays(fim1, f.prazo_renovacao) : null;
+  const today = new Date().toISOString().split('T')[0];
+  if (today <= fim1) {
+    return { fim1, fim2, periodo: 1, diasRestantes: daysFromToday(fim1), vencido: false };
+  }
+  if (fim2) {
+    const dias = daysFromToday(fim2);
+    return { fim1, fim2, periodo: 2, diasRestantes: dias, vencido: dias < 0 };
+  }
+  return { fim1, fim2: null, periodo: 1, diasRestantes: daysFromToday(fim1), vencido: true };
+}
+
+const CARGOS_FALLBACK = [
   'Auxiliar Administrativo',
   'Chefe de Pista',
   'Frentista',
@@ -88,7 +136,7 @@ const CARGOS = [
   'Trocador de Óleo',
   'Outros',
 ];
-const TIPOS_DOC = ['RG', 'CPF', 'CNH', 'Carteira de Trabalho', 'Contrato de Experiência', 'Atestado Médico', 'Outros'];
+const TIPOS_DOC_FALLBACK = ['RG', 'CPF', 'CNH', 'Carteira de Trabalho', 'Contrato de Experiência', 'Ficha de Registro', 'Atestado Médico', 'Outros'];
 
 const EMPTY_FORM = {
   nome: '',
@@ -99,6 +147,15 @@ const EMPTY_FORM = {
   telefone: '',
   email: '',
   observacoes: '',
+  em_experiencia: false,
+  prazo_experiencia: '',
+  inicio_experiencia: '',
+  renovavel: false,
+  prazo_renovacao: '',
+  emergencia_nome: '',
+  emergencia_telefone: '',
+  emergencia_parentesco: '',
+  emergencia_parentesco_outro: '',
 };
 
 // ─── badge types ────────────────────────────────────────────────────────────
@@ -127,6 +184,9 @@ interface CPFWarning {
 // ─── main component ─────────────────────────────────────────────────────────
 
 export default function Funcionarios() {
+  const cargos   = useListaConfig('cargos',                CARGOS_FALLBACK);
+  const tiposDoc = useListaConfig('tipos_doc_funcionario', TIPOS_DOC_FALLBACK);
+
   const { selectedPostoId, allPostos, hasPermission } = useAuth();
 
   // Admin can pick posto
@@ -290,6 +350,15 @@ export default function Funcionarios() {
       telefone: form.telefone || null,
       email: form.email || null,
       observacoes: form.observacoes || null,
+      em_experiencia: form.em_experiencia,
+      prazo_experiencia: form.em_experiencia && form.prazo_experiencia ? Number(form.prazo_experiencia) : null,
+      inicio_experiencia: form.em_experiencia && form.inicio_experiencia ? form.inicio_experiencia : null,
+      renovavel: form.em_experiencia ? form.renovavel : null,
+      prazo_renovacao: form.em_experiencia && form.renovavel && form.prazo_renovacao ? Number(form.prazo_renovacao) : null,
+      emergencia_nome: form.emergencia_nome || null,
+      emergencia_telefone: form.emergencia_telefone || null,
+      emergencia_parentesco: form.emergencia_parentesco || null,
+      emergencia_parentesco_outro: form.emergencia_parentesco === 'Outro' ? (form.emergencia_parentesco_outro || null) : null,
     };
 
     let error;
@@ -348,6 +417,15 @@ export default function Funcionarios() {
       .from('pessoal_funcionarios').update({ status: 'ativo' }).eq('id', reativarTarget.id);
     if (error) { toast.error('Erro ao reativar'); }
     else { toast.success('Funcionário reativado'); setReativarTarget(null); await load(); }
+  }
+
+  // ─── efetivar contrato de experiência ─────────────────────────────────────
+
+  async function handleEfetivar(f: Funcionario) {
+    const { error } = await (supabase as any)
+      .from('pessoal_funcionarios').update({ experiencia_efetivado: true }).eq('id', f.id);
+    if (error) { toast.error('Erro ao efetivar'); }
+    else { toast.success(`${f.nome} efetivado(a) com sucesso`); await load(); }
   }
 
   // ─── delete ────────────────────────────────────────────────────────────────
@@ -432,6 +510,15 @@ export default function Funcionarios() {
       telefone: f.telefone ?? '',
       email: f.email ?? '',
       observacoes: f.observacoes ?? '',
+      em_experiencia: !!f.em_experiencia,
+      prazo_experiencia: f.prazo_experiencia ? String(f.prazo_experiencia) : '',
+      inicio_experiencia: f.inicio_experiencia ?? '',
+      renovavel: !!f.renovavel,
+      prazo_renovacao: f.prazo_renovacao ? String(f.prazo_renovacao) : '',
+      emergencia_nome: f.emergencia_nome ?? '',
+      emergencia_telefone: f.emergencia_telefone ?? '',
+      emergencia_parentesco: f.emergencia_parentesco ?? '',
+      emergencia_parentesco_outro: f.emergencia_parentesco_outro ?? '',
     });
     setCpfWarning({ show: false, funcionarios: [] });
     setDialogOpen(true);
@@ -536,6 +623,19 @@ export default function Funcionarios() {
                             </Badge>
                           );
                         })()}
+                        {(() => {
+                          const exp = calcExperiencia(f);
+                          if (!exp) return null;
+                          const cls = exp.vencido
+                            ? 'bg-red-500 hover:bg-red-500'
+                            : exp.diasRestantes <= 7
+                            ? 'bg-yellow-500 hover:bg-yellow-500'
+                            : 'bg-green-600 hover:bg-green-600';
+                          const label = exp.vencido
+                            ? `Exp vencida ${Math.abs(exp.diasRestantes)}d atrás`
+                            : `Exp ${exp.periodo}º — ${exp.diasRestantes}d`;
+                          return <Badge className={`${cls} text-white text-[10px]`}>{label}</Badge>;
+                        })()}
                       </div>
                     </TableCell>
                     <TableCell>{formatCPF(f.cpf)}</TableCell>
@@ -561,6 +661,11 @@ export default function Funcionarios() {
                             <UserCheck className="w-3.5 h-3.5" />
                           </Button>
                         )}
+                        {f.em_experiencia && !f.experiencia_efetivado && f.status === 'ativo' && (
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-blue-600" onClick={() => handleEfetivar(f)} title="Efetivar contrato de experiência">
+                            <BadgeCheck className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(f)} title="Excluir">
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
@@ -582,10 +687,11 @@ export default function Funcionarios() {
 
       {/* ── New/Edit Dialog ───────────────────────────────────────────────── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{editTarget ? 'Editar Funcionário' : 'Novo Funcionário'}</DialogTitle>
           </DialogHeader>
+          <div className="overflow-y-auto flex-1 pr-1">
           <div className="grid gap-3 py-2">
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2 space-y-1">
@@ -611,7 +717,7 @@ export default function Funcionarios() {
                 <Select value={form.cargo} onValueChange={(v) => setForm((f) => ({ ...f, cargo: v }))}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar" /></SelectTrigger>
                   <SelectContent>
-                    {CARGOS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    {cargos.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -635,7 +741,112 @@ export default function Funcionarios() {
                 <Label className="text-xs">Observações</Label>
                 <Textarea className="text-xs min-h-[60px]" value={form.observacoes} onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))} />
               </div>
+
+              {/* ── Contato de Emergência ───────────────────────────────── */}
+              <div className="col-span-2 border rounded-md p-3 space-y-3 bg-muted/30">
+                <p className="text-xs font-medium">Contato de Emergência</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Nome</Label>
+                    <Input className="h-8 text-xs" value={form.emergencia_nome} onChange={(e) => setForm((f) => ({ ...f, emergencia_nome: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Telefone</Label>
+                    <Input className="h-8 text-xs" value={form.emergencia_telefone} onChange={(e) => setForm((f) => ({ ...f, emergencia_telefone: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Grau de parentesco</Label>
+                    <Select value={form.emergencia_parentesco} onValueChange={(v) => setForm((f) => ({ ...f, emergencia_parentesco: v, emergencia_parentesco_outro: v !== 'Outro' ? '' : f.emergencia_parentesco_outro }))}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                      <SelectContent>
+                        {['Amigo(a)', 'Avô(ó)', 'Esposo(a)', 'Filho(a)', 'Irmão(ã)', 'Mãe', 'Namorado(a)', 'Pai', 'Tio(a)', 'Outro'].map((p) => (
+                          <SelectItem key={p} value={p}>{p}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {form.emergencia_parentesco === 'Outro' && (
+                    <div className="space-y-1">
+                      <Label className="text-xs">Especificar</Label>
+                      <Input className="h-8 text-xs" value={form.emergencia_parentesco_outro} onChange={(e) => setForm((f) => ({ ...f, emergencia_parentesco_outro: e.target.value }))} />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Contrato de Experiência ─────────────────────────────── */}
+              <div className="col-span-2 border rounded-md p-3 space-y-3 bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="em_experiencia"
+                    checked={form.em_experiencia}
+                    onCheckedChange={(v) => setForm((f) => ({
+                      ...f,
+                      em_experiencia: !!v,
+                      inicio_experiencia: !!v && !f.inicio_experiencia ? f.data_admissao : f.inicio_experiencia,
+                    }))}
+                  />
+                  <Label htmlFor="em_experiencia" className="text-xs cursor-pointer font-medium">Em contrato de experiência</Label>
+                </div>
+
+                {form.em_experiencia && (
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Prazo do contrato *</Label>
+                      <Select value={form.prazo_experiencia} onValueChange={(v) => setForm((f) => ({ ...f, prazo_experiencia: v }))}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="30">30 dias</SelectItem>
+                          <SelectItem value="45">45 dias</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Data de início *</Label>
+                      <Input type="date" className="h-8 text-xs" value={form.inicio_experiencia} onChange={(e) => setForm((f) => ({ ...f, inicio_experiencia: e.target.value }))} />
+                    </div>
+
+                    {form.inicio_experiencia && form.prazo_experiencia && (
+                      <div className="col-span-2 text-xs text-muted-foreground">
+                        Vencimento 1º período: <span className="font-medium text-foreground">{formatDate(addDays(form.inicio_experiencia, Number(form.prazo_experiencia) - 1))}</span>
+                      </div>
+                    )}
+
+                    <div className="col-span-2 flex items-center gap-2">
+                      <Checkbox
+                        id="renovavel"
+                        checked={form.renovavel}
+                        onCheckedChange={(v) => setForm((f) => ({ ...f, renovavel: !!v }))}
+                      />
+                      <Label htmlFor="renovavel" className="text-xs cursor-pointer">Renovável?</Label>
+                    </div>
+
+                    {form.renovavel && (
+                      <>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Prazo da renovação *</Label>
+                          <Select value={form.prazo_renovacao} onValueChange={(v) => setForm((f) => ({ ...f, prazo_renovacao: v }))}>
+                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="30">30 dias</SelectItem>
+                              <SelectItem value="45">45 dias</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {form.inicio_experiencia && form.prazo_experiencia && form.prazo_renovacao && (
+                          <div className="flex items-end pb-1">
+                            <div className="text-xs text-muted-foreground">
+                              Vencimento 2º período: <span className="font-medium text-foreground">{formatDate(addDays(addDays(form.inicio_experiencia, Number(form.prazo_experiencia) - 1), Number(form.prazo_renovacao)))}</span>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
+          </div>
           </div>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>Cancelar</Button>
@@ -757,7 +968,7 @@ export default function Funcionarios() {
                   <Select value={docUploadTipo} onValueChange={setDocUploadTipo}>
                     <SelectTrigger className="h-8 text-xs w-44"><SelectValue placeholder="Selecionar" /></SelectTrigger>
                     <SelectContent>
-                      {TIPOS_DOC.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                      {tiposDoc.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>

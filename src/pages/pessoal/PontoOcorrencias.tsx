@@ -31,12 +31,13 @@ type OcorrenciaTipo =
   | 'Atraso'
   | 'Bonificação'
   | 'Dano/Prejuízo'
-  | 'Desconto'
+  | 'Desconto Quebra de Caixa'
   | 'Falta'
   | 'Hora Extra'
   | 'Observação'
-  | 'Quebra de Caixa'
-  | 'Suspensão';
+  | 'Quebra de Caixa (Crédito)'
+  | 'Suspensão'
+  | 'Vale Funcionário';
 
 interface Ocorrencia {
   id: string;
@@ -71,33 +72,35 @@ const TIPOS: OcorrenciaTipo[] = [
   'Atraso',
   'Bonificação',
   'Dano/Prejuízo',
-  'Desconto',
+  'Desconto Quebra de Caixa',
   'Falta',
   'Hora Extra',
   'Observação',
-  'Quebra de Caixa',
+  'Quebra de Caixa (Crédito)',
   'Suspensão',
+  'Vale Funcionário',
 ];
 
 // Types that require a BRL value
-const FINANCIAL_TIPOS: OcorrenciaTipo[] = ['Bonificação', 'Dano/Prejuízo', 'Desconto', 'Quebra de Caixa'];
+const FINANCIAL_TIPOS: OcorrenciaTipo[] = ['Bonificação', 'Dano/Prejuízo', 'Desconto Quebra de Caixa', 'Quebra de Caixa (Crédito)', 'Vale Funcionário'];
 
 function isFinanceiro(tipo: OcorrenciaTipo | ''): boolean {
   return FINANCIAL_TIPOS.includes(tipo as OcorrenciaTipo);
 }
 
 const TIPO_COLORS: Record<OcorrenciaTipo, string> = {
-  'Advertência':   'bg-yellow-500',
-  'Atestado':      'bg-purple-500',
-  'Atraso':        'bg-orange-400',
-  'Bonificação':   'bg-green-500',
-  'Dano/Prejuízo': 'bg-red-600',
-  'Desconto':      'bg-red-400',
-  'Falta':         'bg-red-500',
-  'Hora Extra':    'bg-blue-500',
-  'Observação':    'bg-gray-400',
-  'Quebra de Caixa': 'bg-orange-600',
-  'Suspensão':     'bg-red-700',
+  'Advertência':              'bg-yellow-500',
+  'Atestado':                 'bg-purple-500',
+  'Atraso':                   'bg-orange-400',
+  'Bonificação':              'bg-green-500',
+  'Dano/Prejuízo':            'bg-red-600',
+  'Desconto Quebra de Caixa': 'bg-orange-600',
+  'Falta':                    'bg-red-500',
+  'Hora Extra':               'bg-blue-500',
+  'Observação':               'bg-gray-400',
+  'Quebra de Caixa (Crédito)':'bg-teal-600',
+  'Suspensão':                'bg-red-700',
+  'Vale Funcionário':         'bg-red-400',
 };
 
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
@@ -389,7 +392,7 @@ export default function PontoOcorrencias() {
                     </TableCell>
                     <TableCell>
                       {o.horas != null && <span>{o.horas}h</span>}
-                      {o.valor != null && <span className={o.tipo === 'Bonificação' ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>{formatBRL(o.valor)}</span>}
+                      {o.valor != null && <span className={(o.tipo === 'Bonificação' || o.tipo === 'Quebra de Caixa (Crédito)') ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>{formatBRL(o.valor)}</span>}
                       {o.horas == null && o.valor == null && '—'}
                     </TableCell>
                     <TableCell className="max-w-[200px] truncate">{o.descricao ?? '—'}</TableCell>
@@ -469,8 +472,9 @@ export default function PontoOcorrencias() {
               <div className="space-y-1">
                 <Label className="text-xs">
                   Valor (R$) *
-                  {form.tipo === 'Bonificação' && <span className="ml-1 text-green-600">(positivo — vai para Premiação)</span>}
-                  {(form.tipo === 'Desconto' || form.tipo === 'Quebra de Caixa' || form.tipo === 'Dano/Prejuízo') && (
+                  {form.tipo === 'Bonificação' && <span className="ml-1 text-green-600">(vai para Premiação)</span>}
+                  {form.tipo === 'Quebra de Caixa (Crédito)' && <span className="ml-1 text-teal-600">(crédito — vai para Quebra de Caixa)</span>}
+                  {(form.tipo === 'Vale Funcionário' || form.tipo === 'Desconto Quebra de Caixa' || form.tipo === 'Dano/Prejuízo') && (
                     <span className="ml-1 text-red-600">(vai para Descontos)</span>
                   )}
                 </Label>

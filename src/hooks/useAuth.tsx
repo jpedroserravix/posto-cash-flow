@@ -121,7 +121,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUsername(profile.username);
         setPerfil(p);
         setRole(derivedRole);
-        setPermissoes((profile.permissoes as string[]) || []);
+        // Admins always get all permissions defined in the codebase,
+        // so new permission keys work automatically without DB migrations.
+        const dbPerms = (profile.permissoes as string[]) || [];
+        setPermissoes(p === 'admin' ? PROFILE_PRESETS.admin : dbPerms);
         await loadPostoData(p === 'admin', (profile.posto_ids as string[]) || []);
         return;
       }
