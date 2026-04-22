@@ -5,13 +5,9 @@ import { usePagination } from '@/hooks/usePagination';
 import { PaginationControls } from '@/components/PaginationControls';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { Save, Lock, Unlock, Download } from 'lucide-react';
 
@@ -27,15 +23,13 @@ interface Funcionario {
 interface OcorrenciaStats {
   funcionario_id: string;
   faltas: number;
-  atrasos: number;        // total de HORAS de atraso (não quantidade)
+  atrasos: number;
   horas_extra: number;
   atestados: number;
   advertencias: number;
   suspensoes: number;
-  // auto-computed from financial ocorrências
   auto_descontos: number;       // Vale Funcionário + Desconto Quebra de Caixa + Dano/Prejuízo
-  auto_premiacao: number;       // Bonificação
-  auto_quebra_credito: number;  // Quebra de Caixa (Crédito)
+  auto_quebra_credito: number;  // Quebra de Caixa (Crédito) — read-only display
 }
 
 interface Fechamento {
@@ -68,14 +62,15 @@ function formatBRL(val: number) {
 }
 
 // ─── edit row state per employee ─────────────────────────────────────────────
+// Premiação e Vale Transporte foram removidos da UI (mantidos no DB com valor 0 para compat.)
 
 interface EditRow {
-  premiacao: string;
-  descontos: string;
-  vale_transporte: string;
-  quebra_caixa: string;
+  descontos: string;    // UI label: "Vale Funcionário"
+  quebra_caixa: string; // UI label: "Desconto Quebra de Caixa"
   observacoes: string;
 }
+
+const EMPTY_EDIT: EditRow = { descontos: '0', quebra_caixa: '0', observacoes: '' };
 
 // ─── main component ─────────────────────────────────────────────────────────
 
@@ -116,7 +111,6 @@ export default function FechamentoMensal() {
     const mes = Number(filterMes);
     const ano = Number(filterAno);
 
-    // Load ocorrencias for the month to compute stats
     const startDate = `${filterAno}-${String(mes).padStart(2, '0')}-01`;
     const lastDay = new Date(ano, mes, 0).getDate();
     const endDate = `${filterAno}-${String(mes).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
@@ -143,7 +137,7 @@ export default function FechamentoMensal() {
         statsMap[o.funcionario_id] = {
           funcionario_id: o.funcionario_id,
           faltas: 0, atrasos: 0, horas_extra: 0, atestados: 0, advertencias: 0, suspensoes: 0,
-          auto_descontos: 0, auto_premiacao: 0, auto_quebra_credito: 0,
+          auto_descontos: 0, auto_quebra_credito: 0,
         };
       }
       const s = statsMap[o.funcionario_id];
@@ -154,32 +148,27 @@ export default function FechamentoMensal() {
       else if (o.tipo === 'Advertência') s.advertencias += 1;
       else if (o.tipo === 'Suspensão') s.suspensoes += 1;
       else if (o.tipo === 'Vale Funcionário' || o.tipo === 'Desconto Quebra de Caixa' || o.tipo === 'Dano/Prejuízo') s.auto_descontos += (o.valor ?? 0);
-      else if (o.tipo === 'Bonificação') s.auto_premiacao += (o.valor ?? 0);
       else if (o.tipo === 'Quebra de Caixa (Crédito)') s.auto_quebra_credito += (o.valor ?? 0);
     });
 
     setStats(Object.values(statsMap));
     setFechamentos(fechData ?? []);
 
-    // init editRows: saved fechamentos take priority; otherwise pre-populate from ocorrências
+    // init editRows: saved fechamentos take priority
     const newEditRows: Record<string, EditRow> = {};
     (fechData ?? []).forEach((f: Fechamento) => {
       newEditRows[f.funcionario_id] = {
-        premiacao: String(f.premiacao),
         descontos: String(f.descontos),
-        vale_transporte: String(f.vale_transporte),
         quebra_caixa: String(f.quebra_caixa),
         observacoes: f.observacoes ?? '',
       };
     });
-    // For employees without a fechamento, pre-fill from financial ocorrências
+    // Pre-fill from ocorrências for employees without a fechamento
     Object.values(statsMap).forEach((s) => {
       if (!newEditRows[s.funcionario_id]) {
         newEditRows[s.funcionario_id] = {
-          premiacao: s.auto_premiacao > 0 ? String(s.auto_premiacao) : '0',
           descontos: s.auto_descontos > 0 ? String(s.auto_descontos) : '0',
-          vale_transporte: '0',
-          quebra_caixa: s.auto_quebra_credito > 0 ? String(s.auto_quebra_credito) : '0',
+          quebra_caixa: '0',
           observacoes: '',
         };
       }
@@ -199,14 +188,12 @@ export default function FechamentoMensal() {
       .map((f) => {
         const st = stats.find((s) => s.funcionario_id === f.id) ?? {
           funcionario_id: f.id, faltas: 0, atrasos: 0, horas_extra: 0, atestados: 0, advertencias: 0, suspensoes: 0,
-          auto_descontos: 0, auto_premiacao: 0, auto_quebra_credito: 0,
+          auto_descontos: 0, auto_quebra_credito: 0,
         };
         const fech = fechamentos.find((fe) => fe.funcionario_id === f.id);
         const edit = editRows[f.id] ?? {
-          premiacao: st.auto_premiacao > 0 ? String(st.auto_premiacao) : '0',
           descontos: st.auto_descontos > 0 ? String(st.auto_descontos) : '0',
-          vale_transporte: '0',
-          quebra_caixa: st.auto_quebra_credito > 0 ? String(st.auto_quebra_credito) : '0',
+          quebra_caixa: '0',
           observacoes: '',
         };
         return { funcionario: f, stats: st, fech, edit };
@@ -221,7 +208,7 @@ export default function FechamentoMensal() {
   function setEditField(funcId: string, field: keyof EditRow, value: string) {
     setEditRows((prev) => ({
       ...prev,
-      [funcId]: { ...(prev[funcId] ?? { premiacao: '0', descontos: '0', vale_transporte: '0', quebra_caixa: '0', observacoes: '' }), [field]: value },
+      [funcId]: { ...(prev[funcId] ?? EMPTY_EDIT), [field]: value },
     }));
   }
 
@@ -245,9 +232,9 @@ export default function FechamentoMensal() {
       atestados: st.atestados,
       advertencias: st.advertencias,
       suspensoes: st.suspensoes,
-      premiacao: parseFloat(edit.premiacao) || 0,
+      premiacao: 0,           // removed from UI; kept at 0 for DB compat
       descontos: parseFloat(edit.descontos) || 0,
-      vale_transporte: parseFloat(edit.vale_transporte) || 0,
+      vale_transporte: 0,     // removed from UI; kept at 0 for DB compat
       quebra_caixa: parseFloat(edit.quebra_caixa) || 0,
       observacoes: edit.observacoes || null,
       fechado: false,
@@ -277,7 +264,10 @@ export default function FechamentoMensal() {
   function exportCSV() {
     const mes = Number(filterMes);
     const ano = Number(filterAno);
-    const header = ['Nome','Cargo','Faltas','Atrasos','Horas Extra','Atestados','Advertências','Suspensões','Premiação','Descontos','Vale Transporte','Quebra de Caixa','Observações'];
+    const header = [
+      'Nome', 'Cargo', 'Faltas', 'Atrasos (h)', 'Horas Extra', 'Atestados', 'Advertências', 'Suspensões',
+      'Vale Funcionário', 'Desc. Quebra de Caixa', 'Créd. Quebra de Caixa', 'Observações',
+    ];
     const csvRows = rows.map(({ funcionario, stats: st, fech, edit }) => [
       funcionario.nome,
       funcionario.cargo,
@@ -287,10 +277,9 @@ export default function FechamentoMensal() {
       st.atestados,
       st.advertencias,
       st.suspensoes,
-      fech ? fech.premiacao : (parseFloat(edit.premiacao) || 0),
-      fech ? fech.descontos : (parseFloat(edit.descontos) || 0),
-      fech ? fech.vale_transporte : (parseFloat(edit.vale_transporte) || 0),
+      fech ? fech.descontos    : (parseFloat(edit.descontos)    || 0),
       fech ? fech.quebra_caixa : (parseFloat(edit.quebra_caixa) || 0),
+      st.auto_quebra_credito,
       fech?.observacoes ?? edit.observacoes,
     ]);
     const csv = '\ufeff' + [header, ...csvRows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\r\n');
@@ -349,20 +338,19 @@ export default function FechamentoMensal() {
                   <TableHead className="text-xs text-center">Atestados</TableHead>
                   <TableHead className="text-xs text-center">Advert.</TableHead>
                   <TableHead className="text-xs text-center">Susp.</TableHead>
-                  <TableHead className="text-xs">Premiação (R$)</TableHead>
-                  <TableHead className="text-xs">Descontos (R$)</TableHead>
-                  <TableHead className="text-xs">V. Transporte (R$)</TableHead>
-                  <TableHead className="text-xs">Quebra Caixa (R$)</TableHead>
+                  <TableHead className="text-xs">Vale Funcionário (R$)</TableHead>
+                  <TableHead className="text-xs">Desc. Quebra Caixa (R$)</TableHead>
+                  <TableHead className="text-xs">Créd. Quebra Caixa (R$)</TableHead>
                   <TableHead className="text-xs">Obs.</TableHead>
                   <TableHead className="text-xs w-[80px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading && (
-                  <TableRow><TableCell colSpan={13} className="text-center text-xs text-muted-foreground py-8">Carregando...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={12} className="text-center text-xs text-muted-foreground py-8">Carregando...</TableCell></TableRow>
                 )}
                 {!loading && paginatedData.length === 0 && (
-                  <TableRow><TableCell colSpan={13} className="text-center text-xs text-muted-foreground py-8">Nenhum funcionário ativo.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={12} className="text-center text-xs text-muted-foreground py-8">Nenhum funcionário ativo.</TableCell></TableRow>
                 )}
                 {paginatedData.map(({ funcionario, stats: st, fech, edit }) => {
                   const locked = fech?.fechado ?? false;
@@ -389,18 +377,8 @@ export default function FechamentoMensal() {
                       <TableCell className="text-center">
                         <span className={st.suspensoes > 0 ? 'text-red-700 font-bold' : ''}>{st.suspensoes}</span>
                       </TableCell>
-                      <TableCell>
-                        <Input
-                          type="number" step="0.01" min="0"
-                          className="h-7 text-xs w-24"
-                          disabled={locked}
-                          value={edit.premiacao}
-                          onChange={(e) => setEditField(funcionario.id, 'premiacao', e.target.value)}
-                        />
-                        {st.auto_premiacao > 0 && (
-                          <div className="text-[10px] text-green-600 mt-0.5">{formatBRL(st.auto_premiacao)} (ocorr.)</div>
-                        )}
-                      </TableCell>
+
+                      {/* Vale Funcionário (= descontos no DB) */}
                       <TableCell>
                         <Input
                           type="number" step="0.01" min="0"
@@ -413,15 +391,8 @@ export default function FechamentoMensal() {
                           <div className="text-[10px] text-red-600 mt-0.5">{formatBRL(st.auto_descontos)} (ocorr.)</div>
                         )}
                       </TableCell>
-                      <TableCell>
-                        <Input
-                          type="number" step="0.01" min="0"
-                          className="h-7 text-xs w-24"
-                          disabled={locked}
-                          value={edit.vale_transporte}
-                          onChange={(e) => setEditField(funcionario.id, 'vale_transporte', e.target.value)}
-                        />
-                      </TableCell>
+
+                      {/* Desconto Quebra de Caixa (= quebra_caixa no DB) */}
                       <TableCell>
                         <Input
                           type="number" step="0.01" min="0"
@@ -430,10 +401,17 @@ export default function FechamentoMensal() {
                           value={edit.quebra_caixa}
                           onChange={(e) => setEditField(funcionario.id, 'quebra_caixa', e.target.value)}
                         />
-                        {st.auto_quebra_credito > 0 && (
-                          <div className="text-[10px] text-teal-600 mt-0.5">{formatBRL(st.auto_quebra_credito)} (ocorr.)</div>
+                      </TableCell>
+
+                      {/* Crédito Quebra de Caixa — read-only, auto-computed from ocorrências */}
+                      <TableCell className="text-center">
+                        {st.auto_quebra_credito > 0 ? (
+                          <span className="text-teal-700 font-medium">{formatBRL(st.auto_quebra_credito)}</span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
+
                       <TableCell>
                         <Input
                           className="h-7 text-xs w-32"

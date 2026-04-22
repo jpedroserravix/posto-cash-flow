@@ -13,6 +13,7 @@ import { usePagination } from '@/hooks/usePagination';
 import { PaginationControls } from '@/components/PaginationControls';
 import { useDateFilter } from '@/hooks/useDateFilter';
 import { DateFilter } from '@/components/DateFilter';
+import { ObsTooltip } from '@/components/ObsTooltip';
 
 interface ExtratoRow {
   id: string;
@@ -320,7 +321,9 @@ export default function ExtratoBancario() {
                     <TableCell className={cn('text-xs text-right whitespace-nowrap font-medium', row.valor < 0 ? 'text-destructive' : 'text-green-700')}>
                       {formatBRL(row.valor)}
                     </TableCell>
-                    <TableCell className="text-xs max-w-[300px] truncate">{row.memo}</TableCell>
+                    <TableCell className="text-xs max-w-[300px]">
+                      <ObsTooltip text={row.memo} maxWidth="max-w-[300px]" emptyLabel="" />
+                    </TableCell>
                     <TableCell className="text-xs">{row.tipo}</TableCell>
                     <TableCell className="text-xs text-center">
                       <Badge variant={row.conciliado ? 'default' : 'secondary'} className={cn('text-[10px]', row.conciliado && 'bg-green-600')}>

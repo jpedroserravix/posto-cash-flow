@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { Plus, Trash2, Pencil } from 'lucide-react';
+import { ObsTooltip } from '@/components/ObsTooltip';
 
 interface Posto {
   id: string;
@@ -129,7 +130,9 @@ export default function Postos() {
                   <TableCell className="font-medium">{p.nome}</TableCell>
                   <TableCell className="text-sm">{p.cnpj}</TableCell>
                   <TableCell className="text-sm hidden md:table-cell">{p.inscricao_estadual || '—'}</TableCell>
-                  <TableCell className="text-sm hidden lg:table-cell max-w-[200px] truncate">{p.endereco || '—'}</TableCell>
+                  <TableCell className="text-sm hidden lg:table-cell max-w-[200px]">
+                    <ObsTooltip text={p.endereco} maxWidth="max-w-[200px]" />
+                  </TableCell>
                   <TableCell className="text-sm hidden lg:table-cell">{p.email || '—'}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">

@@ -15,7 +15,7 @@ import {
   Fuel, LogOut, FileSpreadsheet, PenLine, BarChart3, Building2, Users,
   Landmark, Receipt, Zap, LayoutDashboard, FileCheck2, ShoppingBag,
   UserCircle, Clock, Calculator, History, ClipboardList, Package,
-  Info, Copy, Check, GraduationCap, LayoutGrid, Settings, KeyRound, ChevronDown,
+  Info, Copy, Check, GraduationCap, LayoutGrid, Settings, KeyRound, ChevronDown, ShieldCheck,
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -257,7 +257,7 @@ function AlterarSenhaModal({
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function AppLayout({ children }: { children: ReactNode }) {
-  const { user, postoNome, allPostos, selectedPostoId, setSelectedPostoId, signOut, hasPermission, nome } = useAuth();
+  const { user, postoNome, allPostos, selectedPostoId, setSelectedPostoId, signOut, hasPermission, nome, isMaster } = useAuth();
   const firstName = nome ? nome.trim().split(' ')[0] : null;
   const location = useLocation();
   const [postoFull, setPostoFull] = useState<PostoFull | null>(null);
@@ -401,6 +401,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 shrink-0">
+                  {isMaster && <ShieldCheck className="w-3.5 h-3.5 text-purple-500 shrink-0" />}
                   {firstName && (
                     <span className="text-xs font-medium hidden sm:inline">{firstName}</span>
                   )}

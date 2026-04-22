@@ -16,8 +16,8 @@ import { openInNewTab } from '@/lib/utils';
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
-const TURNOS_LEGADO = ['Turno 1', 'Turno 2', 'Turno 3'];
-const TURNOS_MANUAL = ['Turno 1', 'Turno 2'];
+const TURNOS_LEGADO = ['Turno 1', 'Turno 2', 'Turno 3', 'Turno 4'];
+const TURNOS_MANUAL = ['Turno 1', 'Turno 2', 'Turno 3', 'Turno 4'];
 const CENTROS_CUSTO = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO'];
 type Tipo =
   | 'Depósito Manual'

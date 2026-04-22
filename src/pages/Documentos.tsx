@@ -17,6 +17,7 @@ import { Plus, Pencil, Trash2, Copy, Paperclip, FileText, X, Save, ExternalLink 
 import { useIsMobile } from '@/hooks/use-mobile';
 import { openInNewTab } from '@/lib/utils';
 import { useListaConfig } from '@/hooks/useListaConfig';
+import { ObsTooltip } from '@/components/ObsTooltip';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -651,8 +652,8 @@ export default function Documentos() {
                       <TableCell className="px-3">
                         <StatusBadge status={d.status} />
                       </TableCell>
-                      <TableCell className="text-xs px-3 max-w-[160px] truncate">
-                        {d.observacoes || <span className="text-muted-foreground">—</span>}
+                      <TableCell className="text-xs px-3 max-w-[160px]">
+                        <ObsTooltip text={d.observacoes} />
                       </TableCell>
                       <TableCell className="px-3">
                         <div className="flex items-center gap-1">
@@ -717,11 +718,8 @@ export default function Documentos() {
                   {processedNotas.map((d) => (
                     <TableRow key={d.id} className={rowBg(d.status)}>
                       <TableCell className="text-xs font-medium px-3 whitespace-nowrap">{d.fornecedor}</TableCell>
-                      <TableCell
-                        className="text-xs px-3 max-w-[200px] truncate"
-                        title={d.descricao_item}
-                      >
-                        {d.descricao_item}
+                      <TableCell className="text-xs px-3 max-w-[200px]">
+                        <ObsTooltip text={d.descricao_item} maxWidth="max-w-[200px]" emptyLabel="" />
                       </TableCell>
                       <TableCell className="text-xs px-3 font-medium whitespace-nowrap">
                         {formatCurrency(d.valor)}
@@ -829,8 +827,8 @@ export default function Documentos() {
                           {postoNomeMap[d.posto_id] || '—'}
                         </TableCell>
                       )}
-                      <TableCell className="text-xs px-3 max-w-[200px] truncate">
-                        {d.observacoes || <span className="text-muted-foreground">—</span>}
+                      <TableCell className="text-xs px-3 max-w-[200px]">
+                        <ObsTooltip text={d.observacoes} maxWidth="max-w-[200px]" />
                       </TableCell>
                       <TableCell className="px-3">
                         <div className="flex items-center gap-1">

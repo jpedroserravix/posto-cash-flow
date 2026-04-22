@@ -56,7 +56,7 @@ interface DepositoCompleto {
 
 const CENTROS_CUSTO_FALLBACK = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO'];
 
-const TURNOS = ['TURNO 1', 'TURNO 2', 'TURNO 3'];
+const TURNOS = ['TURNO 1', 'TURNO 2', 'TURNO 3', 'TURNO 4'];
 
 function parseCSV(text: string): BrinksRow[] {
   const lines = text.trim().split('\n');

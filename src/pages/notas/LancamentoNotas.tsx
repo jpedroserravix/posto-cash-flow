@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { openInNewTab } from '@/lib/utils';
+import { ObsTooltip } from '@/components/ObsTooltip';
 
 // ─── types ──────────────────────────────────────────────────────────────────
 
@@ -610,8 +611,8 @@ export default function LancamentoNotas() {
                         <StatusBadge status={nota.status} />
                       </TableCell>
 
-                      <TableCell className="text-xs px-3 max-w-[160px] truncate text-muted-foreground">
-                        {nota.observacoes || '—'}
+                      <TableCell className="text-xs px-3 max-w-[160px] text-muted-foreground">
+                        <ObsTooltip text={nota.observacoes} />
                       </TableCell>
 
                       {/* Actions */}

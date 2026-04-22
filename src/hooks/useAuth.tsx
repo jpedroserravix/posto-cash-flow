@@ -7,6 +7,7 @@ interface AuthContextType {
   user: User | null;
   role: 'admin' | 'funcionario' | null; // kept for backward-compat with existing page code
   perfil: string | null;
+  isMaster: boolean;
   nome: string | null;
   username: string | null;
   postoId: string | null;
@@ -116,16 +117,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         const p = profile.perfil as string;
-        const derivedRole = p === 'admin' ? 'admin' : 'funcionario';
+        const isAdminOrMaster = p === 'admin' || p === 'master';
+        const derivedRole = isAdminOrMaster ? 'admin' : 'funcionario';
         setNome(profile.nome);
         setUsername(profile.username);
         setPerfil(p);
         setRole(derivedRole);
-        // Admins always get all permissions defined in the codebase,
+        // Admins and Masters always get all permissions defined in the codebase,
         // so new permission keys work automatically without DB migrations.
         const dbPerms = (profile.permissoes as string[]) || [];
-        setPermissoes(p === 'admin' ? PROFILE_PRESETS.admin : dbPerms);
-        await loadPostoData(p === 'admin', (profile.posto_ids as string[]) || []);
+        setPermissoes(isAdminOrMaster ? PROFILE_PRESETS.admin : dbPerms);
+        await loadPostoData(isAdminOrMaster, (profile.posto_ids as string[]) || []);
         return;
       }
 
@@ -204,6 +206,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => { await supabase.auth.signOut(); };
 
+  const isMaster = perfil === 'master';
+
   const hasPermission = useCallback(
     (key: string) => permissoes.includes(key),
     [permissoes]
@@ -211,7 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, role, perfil, nome, username,
+      user, role, perfil, isMaster, nome, username,
       postoId, postoNome, allPostos,
       selectedPostoId,
       setSelectedPostoId: setSelectedPostoIdState as (id: string) => void,

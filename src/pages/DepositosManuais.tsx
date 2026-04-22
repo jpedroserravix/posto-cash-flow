@@ -18,13 +18,14 @@ import { openInNewTab } from '@/lib/utils';
 import { FilterableHead } from '@/components/FilterableHead';
 import { HorizontalScrollSync } from '@/components/HorizontalScrollSync';
 import { cn } from '@/lib/utils';
+import { ObsTooltip } from '@/components/ObsTooltip';;
 import { usePagination } from '@/hooks/usePagination';
 import { PaginationControls } from '@/components/PaginationControls';
 import { useDateFilter } from '@/hooks/useDateFilter';
 import { DateFilter } from '@/components/DateFilter';
 import { useListaConfig } from '@/hooks/useListaConfig';
 
-const TURNOS = ['TURNO 1', 'TURNO 2', 'TURNO 3'];
+const TURNOS = ['TURNO 1', 'TURNO 2', 'TURNO 3', 'TURNO 4'];
 const CENTROS_CUSTO_FALLBACK = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO'];
 
 type SortDir = 'asc' | 'desc' | null;
@@ -566,7 +567,7 @@ export default function DepositosManuais() {
                                 <Badge variant="default" className="text-[10px] bg-green-600 hover:bg-green-700 cursor-pointer" onClick={() => role === 'admin' && handleDesconciliar(d.id)}>
                                   Recebido
                                 </Badge>
-                                <p className="text-[9px] text-muted-foreground truncate max-w-[120px]">{getContaName(d.conciliado_banco_id)}</p>
+                                <ObsTooltip text={getContaName(d.conciliado_banco_id)} maxWidth="max-w-[120px]" emptyLabel="" />
                               </div>
                             ) : (
                               <span className="text-xs text-muted-foreground">—</span>
@@ -582,7 +583,9 @@ export default function DepositosManuais() {
                           }`}>
                             {formatCurrency(d.saldo)}
                           </TableCell>
-                          <TableCell className="text-xs">{d.observacao || ''}</TableCell>
+                          <TableCell className="text-xs max-w-[160px]">
+                            <ObsTooltip text={d.observacao} emptyLabel="" />
+                          </TableCell>
                           <TableCell>
                             <div className="flex gap-1 items-center">
                               {d.comprovante_path && (

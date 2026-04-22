@@ -9,8 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Plus, Trash2, AlertTriangle, Clock, FileWarning, GraduationCap, X } from 'lucide-react';
+import { Plus, Trash2, AlertTriangle, Clock, FileWarning, GraduationCap, X, Umbrella } from 'lucide-react';
+import { computeFeriasAlert, type FeriasRecord } from '@/lib/feriasPeriodos';
 import frases from '@/data/frasesSantos.json';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
@@ -27,7 +29,7 @@ interface Recado {
 
 interface AlertaItem {
   id: string;
-  tipo: 'alvara' | 'treinamento' | 'contrato';
+  tipo: 'alvara' | 'treinamento' | 'contrato' | 'ferias';
   nome: string;
   detalhe: string;
   postoNome: string;
@@ -142,7 +144,7 @@ export default function Dashboard() {
     future.setDate(future.getDate() + 90);
     const futureStr = future.toISOString().split('T')[0];
 
-    const [{ data: alvaras }, { data: treinamentosRaw }, { data: contratos }] = await Promise.all([
+    const [{ data: alvaras }, { data: treinamentosRaw }, { data: contratos }, { data: funcParaFerias }] = await Promise.all([
       (supabase as any)
         .from('documentos_alvaras')
         .select('id, nome_documento, posto_id, data_vencimento')
@@ -164,6 +166,13 @@ export default function Dashboard() {
         .eq('status', 'ativo')
         .not('inicio_experiencia', 'is', null)
         .not('prazo_experiencia', 'is', null),
+      // Parallel: active funcionários for vacation alert computation
+      (supabase as any)
+        .from('pessoal_funcionarios')
+        .select('id, nome, posto_id, data_admissao')
+        .in('posto_id', postoIds)
+        .eq('status', 'ativo')
+        .not('data_admissao', 'is', null),
     ]);
 
     const items: AlertaItem[] = [];
@@ -226,6 +235,38 @@ export default function Dashboard() {
         dataVencimento: fimAtual,
       });
     });
+
+    // ── férias alerts ───────────────────────────────────────────────────────
+    const funcFeriaIds = (funcParaFerias ?? []).map((f: any) => f.id);
+    if (funcFeriaIds.length > 0) {
+      const { data: feriasList } = await (supabase as any)
+        .from('pessoal_ferias')
+        .select('funcionario_id, periodo_aquisitivo_inicio, dias_gozados, dias_vendidos, alerta_meses')
+        .in('funcionario_id', funcFeriaIds);
+
+      const feriasMap = new Map<string, FeriasRecord[]>();
+      (feriasList ?? []).forEach((f: any) => {
+        if (!feriasMap.has(f.funcionario_id)) feriasMap.set(f.funcionario_id, []);
+        feriasMap.get(f.funcionario_id)!.push(f as FeriasRecord);
+      });
+
+      (funcParaFerias ?? []).forEach((func: any) => {
+        const alert = computeFeriasAlert(func.data_admissao, feriasMap.get(func.id) ?? []);
+        if (!alert) return;
+        const postoNome = allPostos.find((p) => p.id === func.posto_id)?.nome ?? '';
+        items.push({
+          id: func.id,
+          tipo: 'ferias',
+          nome: func.nome,
+          detalhe: alert.diasUntilVencimento < 0
+            ? `Vencidas há ${Math.abs(alert.diasUntilVencimento)}d — ${alert.periodoLabel}`
+            : `Vencem em ${alert.diasUntilVencimento}d — ${alert.periodoLabel}`,
+          postoNome,
+          dias: alert.diasUntilVencimento,
+          dataVencimento: alert.vencimento,
+        });
+      });
+    }
 
     items.sort((a, b) => a.dias - b.dias);
     setAlertas(items);
@@ -456,6 +497,8 @@ export default function Dashboard() {
                       <GraduationCap className={`w-4 h-4 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
                     ) : a.tipo === 'contrato' ? (
                       <Clock className={`w-4 h-4 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
+                    ) : a.tipo === 'ferias' ? (
+                      <Umbrella className={`w-4 h-4 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
                     ) : (
                       <FileWarning className={`w-4 h-4 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
                     )}
@@ -463,9 +506,23 @@ export default function Dashboard() {
 
                   {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium leading-tight truncate">{a.nome}</p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <p className="text-xs font-medium leading-tight truncate cursor-default">{a.nome}</p>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" align="start" className="max-w-xs break-words">
+                        <p className="text-sm">{a.nome}</p>
+                      </TooltipContent>
+                    </Tooltip>
                     {a.detalhe && (
-                      <p className="text-[10px] text-muted-foreground truncate">{a.detalhe}</p>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <p className="text-[10px] text-muted-foreground truncate cursor-default">{a.detalhe}</p>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" align="start" className="max-w-xs break-words">
+                          <p className="text-sm">{a.detalhe}</p>
+                        </TooltipContent>
+                      </Tooltip>
                     )}
                     {allPostos.length > 1 && a.postoNome && (
                       <p className="text-[10px] text-muted-foreground truncate">{a.postoNome}</p>

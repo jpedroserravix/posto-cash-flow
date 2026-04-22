@@ -15,7 +15,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, Save, FileText } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { openInNewTab } from '@/lib/utils';
+import { ObsTooltip } from '@/components/ObsTooltip';
 
 // ─── types ──────────────────────────────────────────────────────────────────
 
@@ -137,6 +139,7 @@ export default function PontoOcorrencias() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Ocorrencia | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [selectedFuncs, setSelectedFuncs] = useState<Set<string>>(new Set());
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -209,12 +212,24 @@ export default function PontoOcorrencias() {
   // ─── save ──────────────────────────────────────────────────────────────────
 
   async function handleSave() {
-    if (!form.funcionario_id || !form.data || !form.tipo) {
+    if (editTarget && !form.funcionario_id) {
       toast.error('Preencha funcionário, data e tipo');
+      return;
+    }
+    if (!editTarget && selectedFuncs.size === 0) {
+      toast.error('Selecione ao menos um funcionário');
+      return;
+    }
+    if (!form.data || !form.tipo) {
+      toast.error('Preencha data e tipo');
       return;
     }
     if (isFinanceiro(form.tipo) && (!form.valor || isNaN(parseFloat(form.valor)))) {
       toast.error('Informe o valor para este tipo de ocorrência');
+      return;
+    }
+    if (!editTarget && selectedFuncs.size > 1 && file) {
+      toast.error('Arquivo não pode ser enviado para múltiplos funcionários');
       return;
     }
     setSaving(true);
@@ -222,15 +237,15 @@ export default function PontoOcorrencias() {
     let arquivo_path: string | null = editTarget?.arquivo_path ?? null;
 
     if (file) {
+      const funcId = editTarget ? form.funcionario_id : [...selectedFuncs][0];
       const ext = file.name.split('.').pop();
-      const path = `ocorrencias/${form.funcionario_id}/${Date.now()}.${ext}`;
+      const path = `ocorrencias/${funcId}/${Date.now()}.${ext}`;
       const { error: upErr } = await supabase.storage.from('pessoal-documentos').upload(path, file);
       if (upErr) { toast.error('Erro ao enviar arquivo'); setSaving(false); return; }
       arquivo_path = path;
     }
 
-    const payload = {
-      funcionario_id: form.funcionario_id,
+    const basePayload = {
       posto_id: postoId,
       data: form.data,
       tipo: form.tipo,
@@ -242,13 +257,21 @@ export default function PontoOcorrencias() {
 
     let error;
     if (editTarget) {
-      ({ error } = await (supabase as any).from('pessoal_ocorrencias').update(payload).eq('id', editTarget.id));
+      ({ error } = await (supabase as any).from('pessoal_ocorrencias').update({ ...basePayload, funcionario_id: form.funcionario_id }).eq('id', editTarget.id));
+    } else if (selectedFuncs.size === 1) {
+      ({ error } = await (supabase as any).from('pessoal_ocorrencias').insert({ ...basePayload, funcionario_id: [...selectedFuncs][0] }));
     } else {
-      ({ error } = await (supabase as any).from('pessoal_ocorrencias').insert(payload));
+      const records = [...selectedFuncs].map((fid) => ({ ...basePayload, funcionario_id: fid }));
+      ({ error } = await (supabase as any).from('pessoal_ocorrencias').insert(records));
     }
 
     if (error) { toast.error('Erro ao salvar'); }
-    else { toast.success(editTarget ? 'Ocorrência atualizada' : 'Ocorrência registrada'); setDialogOpen(false); await load(); }
+    else {
+      const count = editTarget ? 1 : selectedFuncs.size;
+      toast.success(editTarget ? 'Ocorrência atualizada' : `${count} ocorrência${count > 1 ? 's' : ''} registrada${count > 1 ? 's' : ''}`);
+      setDialogOpen(false);
+      await load();
+    }
     setSaving(false);
   }
 
@@ -272,6 +295,7 @@ export default function PontoOcorrencias() {
   function openNew() {
     setEditTarget(null);
     setForm({ ...EMPTY_FORM });
+    setSelectedFuncs(new Set());
     setFile(null);
     if (fileRef.current) fileRef.current.value = '';
     setDialogOpen(true);
@@ -395,7 +419,9 @@ export default function PontoOcorrencias() {
                       {o.valor != null && <span className={(o.tipo === 'Bonificação' || o.tipo === 'Quebra de Caixa (Crédito)') ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>{formatBRL(o.valor)}</span>}
                       {o.horas == null && o.valor == null && '—'}
                     </TableCell>
-                    <TableCell className="max-w-[200px] truncate">{o.descricao ?? '—'}</TableCell>
+                    <TableCell className="max-w-[200px]">
+                      <ObsTooltip text={o.descricao} maxWidth="max-w-[200px]" />
+                    </TableCell>
                     <TableCell>
                       {o.arquivo_path ? (
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => getFileUrl(o.arquivo_path!)} title="Ver arquivo">
@@ -435,15 +461,58 @@ export default function PontoOcorrencias() {
           </DialogHeader>
           <div className="grid gap-3 py-2">
             <div className="space-y-1">
-              <Label className="text-xs">Funcionário *</Label>
-              <Select value={form.funcionario_id} onValueChange={(v) => setForm((f) => ({ ...f, funcionario_id: v }))}>
-                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar" /></SelectTrigger>
-                <SelectContent>
-                  {funcionarios.filter((f) => f.status === 'ativo').map((f) => (
-                    <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-xs">Funcionário(s) *</Label>
+              {editTarget ? (
+                <Select value={form.funcionario_id} onValueChange={(v) => setForm((f) => ({ ...f, funcionario_id: v }))}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                  <SelectContent>
+                    {funcionarios.filter((f) => f.status === 'ativo').map((f) => (
+                      <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <>
+                  <div className="flex gap-2 mb-1">
+                    <Button
+                      type="button" variant="outline" size="sm" className="h-6 text-xs px-2"
+                      onClick={() => setSelectedFuncs(new Set(funcionarios.filter((f) => f.status === 'ativo').map((f) => f.id)))}
+                    >
+                      Selecionar Todos
+                    </Button>
+                    <Button
+                      type="button" variant="outline" size="sm" className="h-6 text-xs px-2"
+                      onClick={() => setSelectedFuncs(new Set())}
+                    >
+                      Limpar Seleção
+                    </Button>
+                  </div>
+                  <div className="border rounded-md max-h-[150px] overflow-y-auto p-2 space-y-1.5">
+                    {funcionarios.filter((f) => f.status === 'ativo').map((f) => (
+                      <div key={f.id} className="flex items-center gap-2">
+                        <Checkbox
+                          id={`func-${f.id}`}
+                          checked={selectedFuncs.has(f.id)}
+                          onCheckedChange={(checked) => {
+                            setSelectedFuncs((prev) => {
+                              const next = new Set(prev);
+                              if (checked) next.add(f.id); else next.delete(f.id);
+                              return next;
+                            });
+                          }}
+                        />
+                        <label htmlFor={`func-${f.id}`} className="text-xs cursor-pointer select-none">{f.nome}</label>
+                      </div>
+                    ))}
+                    {funcionarios.filter((f) => f.status === 'ativo').length === 0 && (
+                      <p className="text-xs text-muted-foreground">Nenhum funcionário ativo.</p>
+                    )}
+                  </div>
+                  {selectedFuncs.size > 0 && (
+                    <p className="text-xs text-muted-foreground">{selectedFuncs.size} selecionado{selectedFuncs.size > 1 ? 's' : ''}</p>
+                  )}
+                </>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
@@ -492,13 +561,19 @@ export default function PontoOcorrencias() {
               <Label className="text-xs">Descrição / Observação</Label>
               <Textarea className="text-xs min-h-[60px]" value={form.descricao} onChange={(e) => setForm((f) => ({ ...f, descricao: e.target.value }))} />
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Arquivo (opcional)</Label>
-              <Input ref={fileRef} type="file" className="h-8 text-xs" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-              {editTarget?.arquivo_path && !file && (
-                <div className="text-xs text-muted-foreground">Arquivo existente será mantido.</div>
-              )}
-            </div>
+            {(!editTarget && selectedFuncs.size > 1) ? (
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Arquivo (não disponível para múltiplos funcionários)</Label>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <Label className="text-xs">Arquivo (opcional)</Label>
+                <Input ref={fileRef} type="file" className="h-8 text-xs" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+                {editTarget?.arquivo_path && !file && (
+                  <div className="text-xs text-muted-foreground">Arquivo existente será mantido.</div>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>Cancelar</Button>

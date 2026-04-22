@@ -17,6 +17,7 @@ import {
   ExternalLink, Search, KeyRound, ChevronDown, ChevronUp,
   Mail, Smartphone,
 } from 'lucide-react';
+import { ObsTooltip } from '@/components/ObsTooltip';
 
 // ─── types ──────────────────────────────────────────────────────────────────
 
@@ -422,10 +423,7 @@ export default function AcessosSenhas() {
 
                           {/* Observações */}
                           <TableCell className="text-xs max-w-[160px]">
-                            {a.observacoes
-                              ? <span className="truncate block" title={a.observacoes}>{a.observacoes}</span>
-                              : <span className="text-muted-foreground">—</span>
-                            }
+                            <ObsTooltip text={a.observacoes} />
                           </TableCell>
 
                           {/* Actions */}

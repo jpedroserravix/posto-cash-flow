@@ -19,7 +19,9 @@ import { Plus, Pencil, Trash2, X, Save, Upload, FileText, UserX, UserCheck, Sear
 import { Checkbox } from '@/components/ui/checkbox';
 import { openInNewTab } from '@/lib/utils';
 import FuncionarioTreinamentos from './FuncionarioTreinamentos';
+import FuncionarioFerias from './FuncionarioFerias';
 import { useListaConfig } from '@/hooks/useListaConfig';
+import { computeFeriasAlert, type FeriasRecord } from '@/lib/feriasPeriodos';
 
 // ─── types ──────────────────────────────────────────────────────────────────
 
@@ -30,6 +32,7 @@ interface Funcionario {
   posto_id: string;
   nome: string;
   cpf: string;
+  rg: string | null;
   cargo: string;
   data_admissao: string;
   data_nascimento: string | null;
@@ -141,6 +144,7 @@ const TIPOS_DOC_FALLBACK = ['RG', 'CPF', 'CNH', 'Carteira de Trabalho', 'Contrat
 const EMPTY_FORM = {
   nome: '',
   cpf: '',
+  rg: '',
   cargo: '',
   data_admissao: '',
   data_nascimento: '',
@@ -215,7 +219,7 @@ export default function Funcionarios() {
   // desligamento dialog
   const [desligOpen, setDesligOpen] = useState(false);
   const [desligTarget, setDesligTarget] = useState<Funcionario | null>(null);
-  const [desligForm, setDesligForm] = useState({ data: '', motivo: '', observacoes: '' });
+  const [desligForm, setDesligForm] = useState({ data: '', motivo: '', observacoes: '', pode_recontratar: true });
   const [desligFile, setDesligFile] = useState<File | null>(null);
   const [desligSaving, setDesligSaving] = useState(false);
 
@@ -238,20 +242,47 @@ export default function Funcionarios() {
   // training badge state
   const [badgeCursos, setBadgeCursos] = useState<CursoSummary[]>([]);
   const [badgeTreinamentos, setBadgeTreinamentos] = useState<TreinamentoSummary[]>([]);
+  // vacation alert badge: maps funcionario_id → 'vermelho' | 'amarelo'
+  const [feriasBadge, setFeriasBadge] = useState<Map<string, 'vermelho' | 'amarelo'>>(new Map());
 
   // ─── load ──────────────────────────────────────────────────────────────────
 
   async function loadBadgeData(funcList: Funcionario[]) {
-    if (funcList.length === 0) { setBadgeCursos([]); setBadgeTreinamentos([]); return; }
-    const [{ data: cs }, { data: ts }] = await Promise.all([
+    if (funcList.length === 0) {
+      setBadgeCursos([]); setBadgeTreinamentos([]); setFeriasBadge(new Map()); return;
+    }
+    const funcIds = funcList.map((f) => f.id);
+    const [{ data: cs }, { data: ts }, { data: fs }] = await Promise.all([
       (supabase as any).from('cursos').select('id, obrigatorio, cargos_obrigatorios, validade_meses'),
       (supabase as any)
         .from('funcionario_treinamentos')
         .select('funcionario_id, curso_id, data_conclusao, data_vencimento')
-        .in('funcionario_id', funcList.map((f) => f.id)),
+        .in('funcionario_id', funcIds),
+      (supabase as any)
+        .from('pessoal_ferias')
+        .select('funcionario_id, periodo_aquisitivo_inicio, dias_gozados, dias_vendidos, alerta_meses')
+        .in('funcionario_id', funcIds),
     ]);
     setBadgeCursos(cs ?? []);
     setBadgeTreinamentos(ts ?? []);
+
+    // Group ferias by funcionario_id
+    const feriasMap = new Map<string, FeriasRecord[]>();
+    (fs ?? []).forEach((f: any) => {
+      if (!feriasMap.has(f.funcionario_id)) feriasMap.set(f.funcionario_id, []);
+      feriasMap.get(f.funcionario_id)!.push(f as FeriasRecord);
+    });
+
+    // Compute vacation badges for active funcionários
+    const fbadge = new Map<string, 'vermelho' | 'amarelo'>();
+    funcList.forEach((func) => {
+      if (func.status !== 'ativo' || !func.data_admissao) return;
+      const alert = computeFeriasAlert(func.data_admissao, feriasMap.get(func.id) ?? []);
+      if (alert) {
+        fbadge.set(func.id, alert.diasUntilVencimento < 0 ? 'vermelho' : 'amarelo');
+      }
+    });
+    setFeriasBadge(fbadge);
   }
 
   function getPendingTotal(f: Funcionario): number {
@@ -344,6 +375,7 @@ export default function Funcionarios() {
       posto_id: postoId,
       nome: form.nome.trim(),
       cpf: rawCPF(form.cpf),
+      rg: form.rg.trim() || null,
       cargo: form.cargo,
       data_admissao: form.data_admissao,
       data_nascimento: form.data_nascimento || null,
@@ -396,6 +428,7 @@ export default function Funcionarios() {
       data_desligamento: desligForm.data,
       motivo: desligForm.motivo,
       observacoes: desligForm.observacoes || null,
+      pode_recontratar: desligForm.pode_recontratar,
       arquivo_path,
     });
 
@@ -504,6 +537,7 @@ export default function Funcionarios() {
     setForm({
       nome: f.nome,
       cpf: formatCPF(f.cpf),
+      rg: f.rg ?? '',
       cargo: f.cargo,
       data_admissao: f.data_admissao,
       data_nascimento: f.data_nascimento ?? '',
@@ -526,7 +560,7 @@ export default function Funcionarios() {
 
   function openDesligar(f: Funcionario) {
     setDesligTarget(f);
-    setDesligForm({ data: '', motivo: '', observacoes: '' });
+    setDesligForm({ data: '', motivo: '', observacoes: '', pode_recontratar: true });
     setDesligFile(null);
     setDesligOpen(true);
   }
@@ -636,6 +670,12 @@ export default function Funcionarios() {
                             : `Exp ${exp.periodo}º — ${exp.diasRestantes}d`;
                           return <Badge className={`${cls} text-white text-[10px]`}>{label}</Badge>;
                         })()}
+                        {(() => {
+                          const fv = feriasBadge.get(f.id);
+                          if (!fv) return null;
+                          const cls = fv === 'vermelho' ? 'bg-red-500 hover:bg-red-500' : 'bg-yellow-500 hover:bg-yellow-500';
+                          return <Badge className={`${cls} text-white text-[10px]`}>{fv === 'vermelho' ? 'Férias vencidas' : 'Férias vencendo'}</Badge>;
+                        })()}
                       </div>
                     </TableCell>
                     <TableCell>{formatCPF(f.cpf)}</TableCell>
@@ -711,6 +751,10 @@ export default function Funcionarios() {
                     ))}
                   </div>
                 )}
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">RG</Label>
+                <Input className="h-8 text-xs" placeholder="00.000.000-0" value={form.rg} onChange={(e) => setForm((f) => ({ ...f, rg: e.target.value }))} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Cargo *</Label>
@@ -886,6 +930,16 @@ export default function Funcionarios() {
               <Label className="text-xs">Observações</Label>
               <Textarea className="text-xs min-h-[60px]" value={desligForm.observacoes} onChange={(e) => setDesligForm((f) => ({ ...f, observacoes: e.target.value }))} />
             </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="pode_recontratar"
+                checked={desligForm.pode_recontratar}
+                onCheckedChange={(v) => setDesligForm((f) => ({ ...f, pode_recontratar: !!v }))}
+              />
+              <label htmlFor="pode_recontratar" className="text-xs cursor-pointer select-none">
+                Pode ser recontratado
+              </label>
+            </div>
             <div className="space-y-1">
               <Label className="text-xs">Documento (opcional)</Label>
               <Input type="file" className="h-8 text-xs" onChange={(e) => setDesligFile(e.target.files?.[0] ?? null)} />
@@ -950,6 +1004,7 @@ export default function Funcionarios() {
             <TabsList className="h-8">
               <TabsTrigger value="docs" className="text-xs">Documentos</TabsTrigger>
               <TabsTrigger value="treinamentos" className="text-xs">Treinamentos</TabsTrigger>
+              <TabsTrigger value="ferias" className="text-xs">Férias</TabsTrigger>
             </TabsList>
             <TabsContent value="treinamentos" className="mt-3">
               {detailTarget && (
@@ -957,6 +1012,15 @@ export default function Funcionarios() {
                   funcionarioId={detailTarget.id}
                   cargo={detailTarget.cargo}
                   onUpdate={() => loadBadgeData(funcionarios)}
+                />
+              )}
+            </TabsContent>
+            <TabsContent value="ferias" className="mt-3 max-h-[60vh] overflow-y-auto pr-1">
+              {detailTarget && (
+                <FuncionarioFerias
+                  funcionarioId={detailTarget.id}
+                  postoId={detailTarget.posto_id}
+                  dataAdmissao={detailTarget.data_admissao}
                 />
               )}
             </TabsContent>

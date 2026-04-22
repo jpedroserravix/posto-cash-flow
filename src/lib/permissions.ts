@@ -17,11 +17,13 @@ export const ALL_PERMISSIONS = [
   { key: 'cursos-treinamentos',   label: 'Cursos e Treinamentos' },
   { key: 'configuracoes',         label: 'Configurações' },
   { key: 'acessos-senhas',        label: 'Acessos e Senhas' },
+  { key: 'historico-rede',        label: 'Histórico da Rede (todos os postos)' },
 ] as const;
 
 export type PermissionKey = (typeof ALL_PERMISSIONS)[number]['key'];
 
 export const PROFILE_PRESETS: Record<string, string[]> = {
+  master:    ALL_PERMISSIONS.map((p) => p.key),
   admin:     ALL_PERMISSIONS.map((p) => p.key),
   gerente:   ['envio-rapido', 'brinks', 'manuais', 'resumo', 'pessoal', 'alvaras', 'garantias', 'docs-empresa', 'pedidos-compra'],
   frentista: ['envio-rapido'],

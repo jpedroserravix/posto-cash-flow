@@ -10,7 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { UserPlus, Pencil, Trash2, X, Save, UserX, UserCheck } from 'lucide-react';
+import { UserPlus, Pencil, Trash2, X, Save, UserX, UserCheck, KeyRound, ShieldCheck } from 'lucide-react';
 import { ALL_PERMISSIONS, PROFILE_PRESETS } from '@/lib/permissions';
 
 // Temporary client that won't overwrite the admin's session
@@ -31,7 +31,8 @@ interface UserProfile {
   ativo: boolean;
 }
 
-const PERFIS = [
+const ALL_PERFIS = [
+  { value: 'master',    label: 'Master' },
   { value: 'admin',     label: 'Administrador' },
   { value: 'gerente',   label: 'Gerente' },
   { value: 'frentista', label: 'Frentista' },
@@ -47,7 +48,7 @@ const emptyForm = {
 };
 
 export default function Usuarios() {
-  const { role } = useAuth();
+  const { role, isMaster } = useAuth();
   const [users, setUsers]     = useState<UserProfile[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -55,6 +56,15 @@ export default function Usuarios() {
   const [saving, setSaving]   = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [postos, setPostos]   = useState<{ id: string; nome: string }[]>([]);
+  const [resetPwd, setResetPwd] = useState<{ user: UserProfile; pwd: string } | null>(null);
+
+  // Perfis available to select based on who is logged in
+  const perfisSelecionaveis = isMaster
+    ? ALL_PERFIS
+    : ALL_PERFIS.filter((p) => p.value !== 'master' && p.value !== 'admin');
+
+  // Is the currently-being-edited user a master?
+  const isEditingMaster = editingId !== null && users.find((u) => u.id === editingId)?.perfil === 'master';
 
   const loadUsers = useCallback(async () => {
     const { data, error } = await supabase
@@ -77,8 +87,8 @@ export default function Usuarios() {
 
   // --- Form helpers ---
 
-  const handlePerfilChange = (perfil: string) => {
-    setFormData((prev) => ({ ...prev, perfil, permissoes: PROFILE_PRESETS[perfil] ?? [] }));
+  const handlePerfilChange = (p: string) => {
+    setFormData((prev) => ({ ...prev, perfil: p, permissoes: PROFILE_PRESETS[p] ?? [] }));
   };
 
   const togglePermission = (key: string) => {
@@ -106,6 +116,14 @@ export default function Usuarios() {
   };
 
   const openEditForm = (u: UserProfile) => {
+    if (u.perfil === 'master' && !isMaster) {
+      toast.error('Apenas usuários Master podem editar outro Master.');
+      return;
+    }
+    if (u.perfil === 'admin' && !isMaster) {
+      toast.error('Apenas usuários Master podem editar um Administrador.');
+      return;
+    }
     setEditingId(u.id);
     setFormData({
       nome: u.nome,
@@ -142,10 +160,24 @@ export default function Usuarios() {
       return;
     }
 
+    // Only master can create/assign admin or master profiles
+    if ((formData.perfil === 'master' || formData.perfil === 'admin') && !isMaster) {
+      toast.error('Apenas usuários Master podem criar Administradores ou Masters.');
+      setSaving(false);
+      return;
+    }
+
     setSaving(true);
 
     if (editingId) {
       const existing = users.find((u) => u.id === editingId)!;
+
+      // Prevent downgrading a master (enforced in code and in DB)
+      if (existing.perfil === 'master' && formData.perfil !== 'master') {
+        toast.error('Usuários Master não podem ser rebaixados.');
+        setSaving(false);
+        return;
+      }
 
       const { error } = await supabase
         .from('user_profiles' as any)
@@ -160,13 +192,9 @@ export default function Usuarios() {
 
       if (error) { toast.error('Erro ao atualizar: ' + error.message); setSaving(false); return; }
 
-      const newRole = formData.perfil === 'admin' ? 'admin' : 'funcionario';
+      const newRole = (formData.perfil === 'admin' || formData.perfil === 'master') ? 'admin' : 'funcionario';
       await supabase.from('user_roles').upsert({ user_id: existing.user_id, role: newRole }, { onConflict: 'user_id' });
       await syncUserPosto(existing.user_id, formData.posto_ids);
-
-      if (formData.senha.trim()) {
-        toast.info('Senha não alterada — use o painel do Supabase para redefinir senhas.');
-      }
 
       toast.success('Usuário atualizado.');
       cancelForm();
@@ -204,7 +232,7 @@ export default function Usuarios() {
 
       if (profileError) { toast.error('Erro ao salvar perfil: ' + profileError.message); setSaving(false); return; }
 
-      const newRole = formData.perfil === 'admin' ? 'admin' : 'funcionario';
+      const newRole = (formData.perfil === 'admin' || formData.perfil === 'master') ? 'admin' : 'funcionario';
       await supabase.from('user_roles').insert({ user_id: userId, role: newRole });
       await syncUserPosto(userId, formData.posto_ids);
 
@@ -217,6 +245,14 @@ export default function Usuarios() {
   };
 
   const handleToggleAtivo = async (u: UserProfile) => {
+    if (u.perfil === 'master') {
+      toast.error('Usuários Master não podem ser desativados.');
+      return;
+    }
+    if (u.perfil === 'admin' && !isMaster) {
+      toast.error('Apenas usuários Master podem desativar um Administrador.');
+      return;
+    }
     const { error } = await supabase.from('user_profiles' as any).update({ ativo: !u.ativo }).eq('id', u.id);
     if (error) { toast.error('Erro: ' + error.message); return; }
     toast.success(u.ativo ? 'Usuário desativado.' : 'Usuário reativado.');
@@ -224,6 +260,16 @@ export default function Usuarios() {
   };
 
   const handleDelete = async (u: UserProfile) => {
+    if (u.perfil === 'master') {
+      toast.error('Usuários Master não podem ser excluídos.');
+      setDeletingId(null);
+      return;
+    }
+    if (u.perfil === 'admin' && !isMaster) {
+      toast.error('Apenas usuários Master podem excluir um Administrador.');
+      setDeletingId(null);
+      return;
+    }
     await supabase.from('user_posto').delete().eq('user_id', u.user_id);
     await supabase.from('user_roles').delete().eq('user_id', u.user_id);
     const { error } = await supabase.from('user_profiles' as any).delete().eq('id', u.id);
@@ -233,12 +279,26 @@ export default function Usuarios() {
     loadUsers();
   };
 
+  const handleResetPassword = async () => {
+    if (!resetPwd || resetPwd.pwd.length < 6) {
+      toast.error('A nova senha deve ter pelo menos 6 caracteres.');
+      return;
+    }
+    const { error } = await (supabase as any).rpc('master_reset_user_password', {
+      target_user_id: resetPwd.user.user_id,
+      new_password: resetPwd.pwd,
+    });
+    if (error) { toast.error('Erro ao resetar senha: ' + error.message); return; }
+    toast.success(`Senha de ${resetPwd.user.nome} resetada com sucesso.`);
+    setResetPwd(null);
+  };
+
   const postoNames = (ids: string[]) =>
     ids.length === 0
       ? '—'
       : ids.map((id) => postos.find((p) => p.id === id)?.nome ?? id).join(', ');
 
-  const perfilLabel = (p: string) => PERFIS.find((x) => x.value === p)?.label ?? p;
+  const perfilLabel = (p: string) => ALL_PERFIS.find((x) => x.value === p)?.label ?? p;
 
   return (
     <div className="space-y-4">
@@ -286,20 +346,20 @@ export default function Usuarios() {
                     required
                   />
                 </div>
-                <div className="sm:col-span-2">
-                  <Label className="text-xs mb-1 block">
-                    Senha {editingId && <span className="font-normal text-muted-foreground">(deixe em branco para manter)</span>}
-                  </Label>
-                  <Input
-                    type="password"
-                    value={formData.senha}
-                    onChange={(e) => setFormData((p) => ({ ...p, senha: e.target.value }))}
-                    placeholder="••••••••"
-                    className="h-9 max-w-xs"
-                    minLength={editingId ? 0 : 6}
-                    required={!editingId}
-                  />
-                </div>
+                {!editingId && (
+                  <div className="sm:col-span-2">
+                    <Label className="text-xs mb-1 block">Senha</Label>
+                    <Input
+                      type="password"
+                      value={formData.senha}
+                      onChange={(e) => setFormData((p) => ({ ...p, senha: e.target.value }))}
+                      placeholder="••••••••"
+                      className="h-9 max-w-xs"
+                      minLength={6}
+                      required
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Postos — multi-select */}
@@ -336,39 +396,62 @@ export default function Usuarios() {
               <div className="space-y-3">
                 <div>
                   <Label className="text-xs mb-1 block">Perfil base</Label>
-                  <div className="flex gap-2 flex-wrap">
-                    {PERFIS.map((p) => (
-                      <Button
-                        key={p.value}
-                        type="button"
-                        size="sm"
-                        variant={formData.perfil === p.value ? 'default' : 'outline'}
-                        className="text-xs h-8"
-                        onClick={() => handlePerfilChange(p.value)}
-                      >
-                        {p.label}
-                      </Button>
-                    ))}
-                  </div>
+                  {isEditingMaster ? (
+                    <div className="flex items-center gap-3">
+                      <Badge className="bg-purple-600 hover:bg-purple-600 text-white border-0 text-xs px-3 py-1 gap-1.5">
+                        <ShieldCheck className="w-3 h-3" />
+                        Master
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">O perfil Master não pode ser alterado</span>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2 flex-wrap">
+                      {perfisSelecionaveis.map((p) => (
+                        <Button
+                          key={p.value}
+                          type="button"
+                          size="sm"
+                          variant={formData.perfil === p.value ? 'default' : 'outline'}
+                          className={`text-xs h-8 gap-1.5 ${
+                            p.value === 'master' && formData.perfil === p.value
+                              ? 'bg-purple-600 hover:bg-purple-700 border-purple-600'
+                              : p.value === 'master'
+                              ? 'border-purple-400 text-purple-600 hover:bg-purple-50'
+                              : ''
+                          }`}
+                          onClick={() => handlePerfilChange(p.value)}
+                        >
+                          {p.value === 'master' && <ShieldCheck className="w-3 h-3" />}
+                          {p.label}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                <div>
-                  <Label className="text-xs mb-2 block">Permissões de telas</Label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-                    {ALL_PERMISSIONS.map((perm) => (
-                      <label
-                        key={perm.key}
-                        className="flex items-center gap-2 rounded-md border px-3 py-2 text-xs cursor-pointer hover:bg-muted transition-colors"
-                      >
-                        <Checkbox
-                          checked={formData.permissoes.includes(perm.key)}
-                          onCheckedChange={() => togglePermission(perm.key)}
-                        />
-                        {perm.label}
-                      </label>
-                    ))}
+                {/* Permissions — hidden for master (always full access) */}
+                {!isEditingMaster && formData.perfil !== 'master' && (
+                  <div>
+                    <Label className="text-xs mb-2 block">Permissões de telas</Label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                      {ALL_PERMISSIONS.map((perm) => (
+                        <label
+                          key={perm.key}
+                          className="flex items-center gap-2 rounded-md border px-3 py-2 text-xs cursor-pointer hover:bg-muted transition-colors"
+                        >
+                          <Checkbox
+                            checked={formData.permissoes.includes(perm.key)}
+                            onCheckedChange={() => togglePermission(perm.key)}
+                          />
+                          {perm.label}
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
+                {(isEditingMaster || formData.perfil === 'master') && (
+                  <p className="text-xs text-muted-foreground">Master tem acesso completo a todas as telas.</p>
+                )}
               </div>
 
               <div className="flex gap-2">
@@ -392,42 +475,71 @@ export default function Usuarios() {
             <p className="text-sm text-muted-foreground text-center py-8">Nenhum usuário cadastrado.</p>
           ) : (
             <div className="divide-y">
-              {users.map((u) => (
-                <div key={u.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium">{u.nome}</span>
-                      <span className="text-xs text-muted-foreground">@{u.username}</span>
-                      <Badge variant={u.perfil === 'admin' ? 'default' : 'secondary'} className="text-[10px]">
-                        {perfilLabel(u.perfil)}
-                      </Badge>
-                      {!u.ativo && <Badge variant="destructive" className="text-[10px]">Inativo</Badge>}
+              {users.map((u) => {
+                const isMasterUser = u.perfil === 'master';
+                const isAdminUser  = u.perfil === 'admin';
+                const canEdit    = isMasterUser ? isMaster : (isAdminUser ? isMaster : true);
+                const canDisable = !isMasterUser && (isAdminUser ? isMaster : true);
+                const canDelete  = !isMasterUser && (isAdminUser ? isMaster : true);
+
+                return (
+                  <div key={u.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium">{u.nome}</span>
+                        <span className="text-xs text-muted-foreground">@{u.username}</span>
+                        <Badge
+                          variant={isMasterUser || isAdminUser ? 'default' : 'secondary'}
+                          className={`text-[10px] gap-1 ${isMasterUser ? 'bg-purple-600 hover:bg-purple-600 border-0' : ''}`}
+                        >
+                          {isMasterUser && <ShieldCheck className="w-2.5 h-2.5" />}
+                          {perfilLabel(u.perfil)}
+                        </Badge>
+                        {!u.ativo && <Badge variant="destructive" className="text-[10px]">Inativo</Badge>}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {postoNames(u.posto_ids ?? [])} &nbsp;·&nbsp; {u.permissoes?.length ?? 0} tela(s)
+                      </p>
                     </div>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      {postoNames(u.posto_ids ?? [])} &nbsp;·&nbsp; {u.permissoes?.length ?? 0} tela(s)
-                    </p>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {isMaster && (
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0"
+                          onClick={() => setResetPwd({ user: u, pwd: '' })}
+                          title="Resetar senha">
+                          <KeyRound className="w-3.5 h-3.5 text-purple-500" />
+                        </Button>
+                      )}
+                      {canEdit && (
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0"
+                          onClick={() => openEditForm(u)} title="Editar">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                      {canDisable && (
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0"
+                          onClick={() => handleToggleAtivo(u)}
+                          title={u.ativo ? 'Desativar' : 'Reativar'}>
+                          {u.ativo
+                            ? <UserX className="w-3.5 h-3.5 text-yellow-600" />
+                            : <UserCheck className="w-3.5 h-3.5 text-green-600" />}
+                        </Button>
+                      )}
+                      {canDelete && (
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0"
+                          onClick={() => setDeletingId(u.id)} title="Excluir">
+                          <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEditForm(u)} title="Editar">
-                      <Pencil className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => handleToggleAtivo(u)}
-                      title={u.ativo ? 'Desativar' : 'Reativar'}>
-                      {u.ativo
-                        ? <UserX className="w-3.5 h-3.5 text-yellow-600" />
-                        : <UserCheck className="w-3.5 h-3.5 text-green-600" />}
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setDeletingId(u.id)} title="Excluir">
-                      <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
       </Card>
 
+      {/* Delete confirmation */}
       <AlertDialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -443,6 +555,42 @@ export default function Usuarios() {
               onClick={() => { const u = users.find((x) => x.id === deletingId); if (u) handleDelete(u); }}
             >
               Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Reset password — Master only */}
+      <AlertDialog open={!!resetPwd} onOpenChange={(v) => { if (!v) setResetPwd(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-purple-600" />
+              Resetar senha — {resetPwd?.user.nome}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Define uma nova senha para este usuário. A senha atual será substituída imediatamente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-2">
+            <Input
+              type="password"
+              placeholder="Nova senha (mín. 6 caracteres)"
+              value={resetPwd?.pwd ?? ''}
+              onChange={(e) => setResetPwd((prev) => prev ? { ...prev, pwd: e.target.value } : prev)}
+              className="h-9"
+              autoFocus
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleResetPassword(); } }}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-purple-600 hover:bg-purple-700"
+              onClick={handleResetPassword}
+              disabled={!resetPwd || resetPwd.pwd.length < 6}
+            >
+              Confirmar reset
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
