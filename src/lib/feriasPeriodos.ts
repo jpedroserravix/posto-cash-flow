@@ -56,8 +56,8 @@ export function computePeriodos(dataAdmissao: string): Periodo[] {
     if (inicio > today) break;
     const nextStart = addMonthsToStr(dataAdmissao, (k + 1) * 12);
     const fim = subOneDay(nextStart);
-    // Vencimento = last day of período concessivo (12 months after fim)
-    const vencimento = subOneDay(addMonthsToStr(dataAdmissao, (k + 2) * 12));
+    // Vencimento = último prazo para concessão (11 months after fim do período aquisitivo)
+    const vencimento = addMonthsToStr(fim, 11);
     periods.push({
       k,
       inicio,
@@ -73,8 +73,9 @@ export function computePeriodos(dataAdmissao: string): Periodo[] {
 }
 
 export interface FeriasAlertInfo {
-  diasUntilVencimento: number; // negative = vencido
-  vencimento: string;
+  diasUntilVencimento: number; // negative = vencido (based on vencimento = ultimo prazo para concessão)
+  vencimento: string;          // ultimo prazo para concessão (p.vencimento)
+  fimAquisitivo: string;       // fim do período aquisitivo (p.fim)
   periodoLabel: string;
   saldo: number;
 }
@@ -84,6 +85,7 @@ export type FeriasRecord = {
   dias_gozados: number;
   dias_vendidos: number;
   alerta_meses: number;
+  saldo_dias?: number; // direito de dias do período (padrão 30, ajustável para proporcional)
 };
 
 /**
@@ -97,27 +99,29 @@ export function computeFeriasAlert(
 ): FeriasAlertInfo | null {
   const periodos = computePeriodos(dataAdmissao);
 
-  const stats = new Map<string, { gozados: number; vendidos: number; alerta_meses: number }>();
+  const stats = new Map<string, { gozados: number; vendidos: number; alerta_meses: number; saldo_dias: number }>();
   feriasList.forEach((f) => {
-    const cur = stats.get(f.periodo_aquisitivo_inicio) ?? { gozados: 0, vendidos: 0, alerta_meses: 6 };
+    const cur = stats.get(f.periodo_aquisitivo_inicio) ?? { gozados: 0, vendidos: 0, alerta_meses: 6, saldo_dias: 30 };
     stats.set(f.periodo_aquisitivo_inicio, {
       gozados: cur.gozados + (f.dias_gozados ?? 0),
       vendidos: cur.vendidos + (f.dias_vendidos ?? 0),
       alerta_meses: Math.max(cur.alerta_meses, f.alerta_meses ?? 6),
+      saldo_dias: f.saldo_dias ?? cur.saldo_dias,
     });
   });
 
   for (const p of periodos) {
     if (!p.completed) continue;
-    const st = stats.get(p.inicio) ?? { gozados: 0, vendidos: 0, alerta_meses: 6 };
-    const saldo = 30 - st.gozados - st.vendidos;
+    const st = stats.get(p.inicio) ?? { gozados: 0, vendidos: 0, alerta_meses: 6, saldo_dias: 30 };
+    const direito = st.saldo_dias ?? 30;
+    const saldo = direito - st.gozados - st.vendidos;
     if (saldo <= 0) continue; // fully used
 
     const daysLeft = daysUntil(p.vencimento);
     const alertThreshold = st.alerta_meses * 30;
 
     if (daysLeft <= alertThreshold) {
-      return { diasUntilVencimento: daysLeft, vencimento: p.vencimento, periodoLabel: p.label, saldo };
+      return { diasUntilVencimento: daysLeft, vencimento: p.vencimento, fimAquisitivo: p.fim, periodoLabel: p.label, saldo };
     }
   }
 

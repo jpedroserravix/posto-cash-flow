@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Plus, Trash2, AlertTriangle, Clock, FileWarning, GraduationCap, X, Umbrella } from 'lucide-react';
+import { Plus, Trash2, AlertTriangle, Clock, FileWarning, GraduationCap, X, CalendarX2 } from 'lucide-react';
 import { computeFeriasAlert, type FeriasRecord } from '@/lib/feriasPeriodos';
 import frases from '@/data/frasesSantos.json';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -55,6 +55,12 @@ function timeAgo(isoStr: string): string {
   const days = Math.floor(hrs / 24);
   if (days < 7) return `há ${days}d`;
   return new Date(isoStr).toLocaleDateString('pt-BR');
+}
+
+function formatDateBR(dateStr: string | undefined): string {
+  if (!dateStr) return '—';
+  const [y, m, d] = dateStr.split('-');
+  return `${d}/${m}/${y}`;
 }
 
 function daysUntil(dateStr: string): number {
@@ -241,7 +247,7 @@ export default function Dashboard() {
     if (funcFeriaIds.length > 0) {
       const { data: feriasList } = await (supabase as any)
         .from('pessoal_ferias')
-        .select('funcionario_id, periodo_aquisitivo_inicio, dias_gozados, dias_vendidos, alerta_meses')
+        .select('funcionario_id, periodo_aquisitivo_inicio, dias_gozados, dias_vendidos, alerta_meses, saldo_dias')
         .in('funcionario_id', funcFeriaIds);
 
       const feriasMap = new Map<string, FeriasRecord[]>();
@@ -257,10 +263,8 @@ export default function Dashboard() {
         items.push({
           id: func.id,
           tipo: 'ferias',
-          nome: func.nome,
-          detalhe: alert.diasUntilVencimento < 0
-            ? `Vencidas há ${Math.abs(alert.diasUntilVencimento)}d — ${alert.periodoLabel}`
-            : `Vencem em ${alert.diasUntilVencimento}d — ${alert.periodoLabel}`,
+          nome: `Férias — ${func.nome}`,
+          detalhe: `Vence em ${formatDateBR(alert.fimAquisitivo)} · Último prazo: ${formatDateBR(alert.vencimento)}`,
           postoNome,
           dias: alert.diasUntilVencimento,
           dataVencimento: alert.vencimento,
@@ -498,7 +502,7 @@ export default function Dashboard() {
                     ) : a.tipo === 'contrato' ? (
                       <Clock className={`w-4 h-4 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
                     ) : a.tipo === 'ferias' ? (
-                      <Umbrella className={`w-4 h-4 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
+                      <CalendarX2 className={`w-4 h-4 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
                     ) : (
                       <FileWarning className={`w-4 h-4 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
                     )}

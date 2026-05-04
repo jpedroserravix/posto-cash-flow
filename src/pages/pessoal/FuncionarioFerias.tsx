@@ -32,6 +32,7 @@ interface Ferias {
   arquivo_path: string | null;
   arquivo_type: string | null;
   alerta_meses: number;
+  saldo_dias: number;
 }
 
 interface Props {
@@ -46,6 +47,7 @@ const EMPTY_FORM = {
   data_fim: '',
   dias_gozados: '',
   dias_vendidos: '0',
+  saldo_dias: '30',
   alerta_meses: '6',
   observacoes: '',
 };
@@ -90,13 +92,15 @@ export default function FuncionarioFerias({ funcionarioId, postoId, dataAdmissao
   // ─── derived: stats per period ────────────────────────────────────────────
 
   const periodoStats = useMemo(() => {
-    const map = new Map<string, { gozados: number; vendidos: number; alerta_meses: number }>();
+    const map = new Map<string, { gozados: number; vendidos: number; alerta_meses: number; saldo_dias: number }>();
     ferias.forEach((f) => {
-      const cur = map.get(f.periodo_aquisitivo_inicio) ?? { gozados: 0, vendidos: 0, alerta_meses: 6 };
+      const cur = map.get(f.periodo_aquisitivo_inicio) ?? { gozados: 0, vendidos: 0, alerta_meses: 6, saldo_dias: 30 };
       map.set(f.periodo_aquisitivo_inicio, {
         gozados: cur.gozados + (f.dias_gozados ?? 0),
         vendidos: cur.vendidos + (f.dias_vendidos ?? 0),
         alerta_meses: Math.max(cur.alerta_meses, f.alerta_meses ?? 6),
+        // keep the first value seen (ferias loaded desc, so first = most recent)
+        saldo_dias: cur.saldo_dias !== 30 ? cur.saldo_dias : (f.saldo_dias ?? 30),
       });
     });
     return map;
@@ -106,7 +110,8 @@ export default function FuncionarioFerias({ funcionarioId, postoId, dataAdmissao
   const relevantPeriodo: Periodo | null = useMemo(() => {
     for (const p of completedPeriodos) {
       const st = periodoStats.get(p.inicio);
-      const saldo = 30 - (st?.gozados ?? 0) - (st?.vendidos ?? 0);
+      const direito = st?.saldo_dias ?? 30;
+      const saldo = direito - (st?.gozados ?? 0) - (st?.vendidos ?? 0);
       if (saldo > 0) return p;
     }
     if (completedPeriodos.length > 0) return completedPeriodos[completedPeriodos.length - 1];
@@ -114,11 +119,12 @@ export default function FuncionarioFerias({ funcionarioId, postoId, dataAdmissao
   }, [completedPeriodos, inProgressPeriodo, periodoStats]);
 
   const summaryStats = relevantPeriodo
-    ? (periodoStats.get(relevantPeriodo.inicio) ?? { gozados: 0, vendidos: 0, alerta_meses: 6 })
-    : { gozados: 0, vendidos: 0, alerta_meses: 6 };
+    ? (periodoStats.get(relevantPeriodo.inicio) ?? { gozados: 0, vendidos: 0, alerta_meses: 6, saldo_dias: 30 })
+    : { gozados: 0, vendidos: 0, alerta_meses: 6, saldo_dias: 30 };
 
+  const direito = summaryStats.saldo_dias ?? 30;
   const saldo = relevantPeriodo?.completed
-    ? Math.max(0, 30 - summaryStats.gozados - summaryStats.vendidos)
+    ? Math.max(0, direito - summaryStats.gozados - summaryStats.vendidos)
     : null;
 
   type StatusColor = 'verde' | 'amarelo' | 'vermelho' | 'neutro';
@@ -168,6 +174,7 @@ export default function FuncionarioFerias({ funcionarioId, postoId, dataAdmissao
       data_fim: f.data_fim,
       dias_gozados: String(f.dias_gozados),
       dias_vendidos: String(f.dias_vendidos ?? 0),
+      saldo_dias: String(f.saldo_dias ?? 30),
       alerta_meses: String(f.alerta_meses ?? 6),
       observacoes: f.observacoes ?? '',
     });
@@ -220,6 +227,7 @@ export default function FuncionarioFerias({ funcionarioId, postoId, dataAdmissao
       data_fim: form.data_fim,
       dias_gozados: dias,
       dias_vendidos: parseInt(form.dias_vendidos) || 0,
+      saldo_dias: parseInt(form.saldo_dias) || 30,
       alerta_meses: parseInt(form.alerta_meses) || 6,
       observacoes: form.observacoes.trim() || null,
       arquivo_path,
@@ -293,7 +301,7 @@ export default function FuncionarioFerias({ funcionarioId, postoId, dataAdmissao
             </div>
             <div>
               <div className="text-muted-foreground mb-0.5">Direito</div>
-              <div className="font-medium">30 dias</div>
+              <div className="font-medium">{direito} dias</div>
             </div>
             {relevantPeriodo.completed ? (
               <>
@@ -312,7 +320,11 @@ export default function FuncionarioFerias({ funcionarioId, postoId, dataAdmissao
                   </div>
                 </div>
                 <div>
-                  <div className="text-muted-foreground mb-0.5">Vencimento</div>
+                  <div className="text-muted-foreground mb-0.5">Fim do período aquisitivo</div>
+                  <div className="font-medium">{formatDate(relevantPeriodo.fim)}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground mb-0.5">Último prazo para concessão</div>
                   <div className={`font-medium text-xs ${statusColor === 'vermelho' ? 'text-red-600' : statusColor === 'amarelo' ? 'text-yellow-700' : ''}`}>
                     {formatDate(relevantPeriodo.vencimento)}
                     {(() => {
@@ -370,8 +382,8 @@ export default function FuncionarioFerias({ funcionarioId, postoId, dataAdmissao
         {historyPeriodos.map((p) => {
           const records = (feriasGrouped.find(([k]) => k === p.inicio)?.[1] ?? [])
             .slice().sort((a, b) => a.data_inicio.localeCompare(b.data_inicio));
-          const st = periodoStats.get(p.inicio) ?? { gozados: 0, vendidos: 0, alerta_meses: 6 };
-          const saldoPeriodo = Math.max(0, 30 - st.gozados - st.vendidos);
+          const st = periodoStats.get(p.inicio) ?? { gozados: 0, vendidos: 0, alerta_meses: 6, saldo_dias: 30 };
+          const saldoPeriodo = Math.max(0, (st.saldo_dias ?? 30) - st.gozados - st.vendidos);
           const daysLeft = daysUntil(p.vencimento);
           const isVencido = daysLeft < 0 && saldoPeriodo > 0;
           const isAlerta = daysLeft >= 0 && daysLeft <= st.alerta_meses * 30 && saldoPeriodo > 0;
@@ -390,8 +402,10 @@ export default function FuncionarioFerias({ funcionarioId, postoId, dataAdmissao
                   <span>·</span>
                   <span>Saldo: <span className={saldoPeriodo > 0 ? (isVencido ? 'text-red-600 font-semibold' : isAlerta ? 'text-yellow-700 font-semibold' : 'text-orange-600 font-medium') : 'text-green-700 font-medium'}>{saldoPeriodo}d</span></span>
                   <span>·</span>
+                  <span>Fim aq.: {formatDate(p.fim)}</span>
+                  <span>·</span>
                   <span className={isVencido ? 'text-red-600 font-medium' : isAlerta ? 'text-yellow-700' : ''}>
-                    Vence: {formatDate(p.vencimento)}
+                    Último prazo: {formatDate(p.vencimento)}
                     {daysLeft < 0 && saldoPeriodo > 0 && <span> (há {Math.abs(daysLeft)}d)</span>}
                     {daysLeft >= 0 && daysLeft <= st.alerta_meses * 30 && saldoPeriodo > 0 && <span> ({daysLeft}d)</span>}
                   </span>
@@ -459,11 +473,12 @@ export default function FuncionarioFerias({ funcionarioId, postoId, dataAdmissao
               {form.periodo_inicio && (() => {
                 const p = periodos.find((x) => x.inicio === form.periodo_inicio);
                 if (!p?.completed) return null;
-                const st = periodoStats.get(form.periodo_inicio) ?? { gozados: 0, vendidos: 0, alerta_meses: 6 };
-                const currentSaldo = 30 - st.gozados - st.vendidos - (editTarget ? editTarget.dias_gozados + editTarget.dias_vendidos : 0);
+                const st = periodoStats.get(form.periodo_inicio) ?? { gozados: 0, vendidos: 0, alerta_meses: 6, saldo_dias: 30 };
+                const direitoPeriodo = parseInt(form.saldo_dias) || (st.saldo_dias ?? 30);
+                const currentSaldo = direitoPeriodo - st.gozados - st.vendidos - (editTarget ? editTarget.dias_gozados + editTarget.dias_vendidos : 0);
                 return (
                   <p className="text-[10px] text-muted-foreground">
-                    Saldo disponível: {Math.max(0, currentSaldo)} dias · Vencimento: {formatDate(p.vencimento)}
+                    Saldo disponível: {Math.max(0, currentSaldo)} dias · Fim aq.: {formatDate(p.fim)} · Último prazo: {formatDate(p.vencimento)}
                   </p>
                 );
               })()}
@@ -490,6 +505,12 @@ export default function FuncionarioFerias({ funcionarioId, postoId, dataAdmissao
                 <Input type="number" min="0" max="10" className="h-8 text-xs" value={form.dias_vendidos}
                   onChange={(e) => setForm((f) => ({ ...f, dias_vendidos: e.target.value }))} />
               </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Saldo de dias (direito do período)</Label>
+              <Input type="number" min="1" max="30" className="h-8 text-xs" value={form.saldo_dias}
+                onChange={(e) => setForm((f) => ({ ...f, saldo_dias: e.target.value }))} />
+              <p className="text-[10px] text-muted-foreground">Padrão: 30. Ajuste para férias proporcionais.</p>
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Alertar antes do vencimento</Label>

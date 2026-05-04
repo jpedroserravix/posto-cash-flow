@@ -11,8 +11,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { Camera, Paperclip, Send, X, FileText, ExternalLink, CalendarDays, Building2, StickyNote } from 'lucide-react';
+import { Camera, Paperclip, Send, X, FileText, ExternalLink, CalendarDays, Building2, StickyNote, Plus, Trash2 } from 'lucide-react';
 import { openInNewTab } from '@/lib/utils';
+import { useListaConfig } from '@/hooks/useListaConfig';
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -24,7 +25,8 @@ type Tipo =
   | 'Nota Fiscal de Compra'
   | 'Despesa'
   | 'Manutenção'
-  | 'Outros';
+  | 'Outros'
+  | 'Entrega de Uniforme/EPI';
 
 // Ordem dos grupos e itens no seletor de tipo.
 // O primeiro item do primeiro grupo é o padrão ao abrir a tela.
@@ -45,6 +47,10 @@ const TIPO_GROUPS: { label: string; items: { value: Tipo; label: string }[] }[] 
     label: 'Financeiro',
     items: [{ value: 'Depósito Manual', label: 'Depósito Manual' }],
   },
+  {
+    label: 'Pessoal',
+    items: [{ value: 'Entrega de Uniforme/EPI', label: 'Entrega de Uniforme/EPI' }],
+  },
 ];
 
 const TIPO_DEFAULT: Tipo = TIPO_GROUPS[0].items[0].value;
@@ -62,6 +68,9 @@ interface FormState {
   data_chegada: string;
   fornecedor:   string;
   observacoes: string;
+  // entrega de uniforme/epi
+  funcionario_epi: string;
+  data_entrega:    string;
 }
 
 const emptyForm: FormState = {
@@ -72,7 +81,15 @@ const emptyForm: FormState = {
   data_chegada: '',
   fornecedor:   '',
   observacoes:  '',
+  funcionario_epi: '',
+  data_entrega:    '',
 };
+
+// EPI item row
+interface EPIItem { tipo: string; quantidade: string; }
+const emptyEPIItem = (): EPIItem => ({ tipo: '', quantidade: '1' });
+
+const EPI_FALLBACK = ['Bota', 'Boné', 'Calça', 'Camisa', 'Crachá', 'Luva', 'Óculos de Proteção', 'Outros'];
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -99,6 +116,25 @@ export default function EnvioRapido() {
   const [selectedMercadoria, setSelectedMercadoria] = useState<File | null>(null);
   const [loading, setLoading]     = useState(false);
 
+  // ── EPI ───────────────────────────────────────────────────────────────────
+  const tiposEPI = useListaConfig('tipos_uniforme_epi', EPI_FALLBACK);
+  const [epiItems, setEpiItems]   = useState<EPIItem[]>([emptyEPIItem()]);
+  const [epiFuncionarios, setEpiFuncionarios] = useState<{ id: string; nome: string }[]>([]);
+
+  useEffect(() => {
+    if (tipo !== 'Entrega de Uniforme/EPI' || !selectedPostoId) {
+      setEpiFuncionarios([]);
+      return;
+    }
+    (supabase as any)
+      .from('pessoal_funcionarios')
+      .select('id, nome')
+      .eq('posto_id', selectedPostoId)
+      .eq('status', 'ativo')
+      .order('nome')
+      .then(({ data }: any) => setEpiFuncionarios(data ?? []));
+  }, [tipo, selectedPostoId]);
+
   // ── pedidos pendentes (para Nota Fiscal de Compra) ────────────────────────
   interface PedidoPendente {
     id: string;
@@ -123,6 +159,7 @@ export default function EnvioRapido() {
   const isLegado     = tipo === 'Despesa' || tipo === 'Manutenção' || tipo === 'Outros';
   const isManual     = tipo === 'Depósito Manual';
   const isNotaCompra = tipo === 'Nota Fiscal de Compra';
+  const isEPI        = tipo === 'Entrega de Uniforme/EPI';
 
   // Carrega pedidos aguardando entrega quando tipo = Nota Fiscal de Compra
   useEffect(() => {
@@ -188,6 +225,10 @@ export default function EnvioRapido() {
     if (isLegado)     return !!selectedFile && !!form.data_caixa && !!form.turno;
     if (isManual)     return !!form.valor && !!form.data_caixa && !!form.turno;
     if (isNotaCompra) return !!form.fornecedor && !!form.data_chegada && !!selectedFile;
+    if (isEPI) {
+      const hasValidItem = epiItems.some((i) => i.tipo && parseInt(i.quantidade) > 0);
+      return !!form.funcionario_epi && !!form.data_entrega && !!selectedFile && hasValidItem;
+    }
     return false;
   })();
 
@@ -315,6 +356,39 @@ export default function EnvioRapido() {
         toast.success('Nota fiscal de compra enviada! Aparecerá em Lançamento de Notas.');
       }
 
+      // ── Entrega de Uniforme/EPI ──────────────────────────────────────────
+      else if (isEPI) {
+        const up = await uploadFile('pessoal-documentos', `epi/${selectedPostoId}`);
+        if (!up) throw new Error('Upload do comprovante falhou');
+
+        const { data: entrega, error: entregaErr } = await (supabase as any)
+          .from('pessoal_entregas_epi')
+          .insert({
+            funcionario_id:    form.funcionario_epi,
+            posto_id:          selectedPostoId,
+            data_entrega:      form.data_entrega,
+            comprovante_path:  up.path,
+            comprovante_type:  up.fileType,
+            observacoes:       form.observacoes || null,
+          })
+          .select()
+          .single();
+        if (entregaErr) throw entregaErr;
+
+        const itemsPayload = epiItems
+          .filter((i) => i.tipo && parseInt(i.quantidade) > 0)
+          .map((i) => ({ entrega_id: entrega.id, tipo_item: i.tipo, quantidade: parseInt(i.quantidade) }));
+        if (itemsPayload.length > 0) {
+          const { error: itemsErr } = await (supabase as any)
+            .from('pessoal_entregas_epi_itens')
+            .insert(itemsPayload);
+          if (itemsErr) throw itemsErr;
+        }
+
+        toast.success('Entrega de EPI registrada com sucesso!');
+        setEpiItems([emptyEPIItem()]);
+      }
+
       // reset
       setSelectedFile(null);
       setSelectedBoleto(null);
@@ -342,7 +416,7 @@ export default function EnvioRapido() {
   const isImage            = selectedFile?.type.startsWith('image/');
   const isBoletoImage      = selectedBoleto?.type.startsWith('image/');
   const isMercadoriaImage  = selectedMercadoria?.type.startsWith('image/');
-  const fileRequired  = !isManual && !isNotaCompra; // for isNotaCompra, NF is required but handled separately
+  const fileRequired  = !isManual && !isNotaCompra && !isEPI; // for isNotaCompra/isEPI, file is required but handled separately
 
   if (!selectedPostoId) {
     return (
@@ -417,12 +491,15 @@ export default function EnvioRapido() {
             <Select
               value={tipo}
               onValueChange={(v) => {
-                setTipo(v as Tipo);
-                setForm(emptyForm);
+                const newTipo = v as Tipo;
+                setTipo(newTipo);
+                const today = new Date().toISOString().split('T')[0];
+                setForm({ ...emptyForm, data_entrega: newTipo === 'Entrega de Uniforme/EPI' ? today : '' });
                 clearFile();
                 clearBoleto();
                 clearMercadoria();
                 setSelectedPedidoId('');
+                setEpiItems([emptyEPIItem()]);
               }}
             >
               <SelectTrigger className="h-12 text-sm">
@@ -442,7 +519,17 @@ export default function EnvioRapido() {
           </div>
 
           {/* ── Arquivo(s) ── */}
-          {isNotaCompra ? (
+          {isEPI ? (
+            <FilePickerField
+              label="Comprovante assinado *"
+              file={selectedFile}
+              previewUrl={previewUrl}
+              isImage={!!isImage}
+              onClear={clearFile}
+              onCamera={() => cameraInputRef.current?.click()}
+              onFile={() => fileInputRef.current?.click()}
+            />
+          ) : isNotaCompra ? (
             <>
               {/* NF obrigatória */}
               <FilePickerField
@@ -745,6 +832,103 @@ export default function EnvioRapido() {
                   </div>
                 );
               })()}
+            </>
+          )}
+
+          {/* ── Entrega de Uniforme/EPI ── */}
+          {isEPI && (
+            <>
+              {/* Funcionário */}
+              <div className="space-y-2">
+                <Label>Funcionário *</Label>
+                <Select value={form.funcionario_epi} onValueChange={(v) => setForm((f) => ({ ...f, funcionario_epi: v }))}>
+                  <SelectTrigger className="h-12 text-sm">
+                    <SelectValue placeholder="Selecionar funcionário" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {epiFuncionarios.map((f) => (
+                      <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>
+                    ))}
+                    {epiFuncionarios.length === 0 && (
+                      <SelectItem value="__none__" disabled>Nenhum funcionário ativo</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Itens entregues */}
+              <div className="space-y-2">
+                <Label>Itens entregues *</Label>
+                <div className="space-y-2">
+                  {epiItems.map((item, idx) => (
+                    <div key={idx} className="flex gap-2 items-center">
+                      <Select
+                        value={item.tipo}
+                        onValueChange={(v) => setEpiItems((prev) => prev.map((it, i) => i === idx ? { ...it, tipo: v } : it))}
+                      >
+                        <SelectTrigger className="h-10 text-sm flex-1">
+                          <SelectValue placeholder="Tipo de item" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {tiposEPI.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={item.quantidade}
+                        onChange={(e) => setEpiItems((prev) => prev.map((it, i) => i === idx ? { ...it, quantidade: e.target.value } : it))}
+                        className="h-10 text-sm w-20 shrink-0"
+                        placeholder="Qtd"
+                      />
+                      {epiItems.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setEpiItems((prev) => prev.filter((_, i) => i !== idx))}
+                          className="shrink-0 rounded-full p-1.5 hover:bg-muted text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs gap-1 w-full"
+                    onClick={() => setEpiItems((prev) => [...prev, emptyEPIItem()])}
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Adicionar item
+                  </Button>
+                </div>
+              </div>
+
+              {/* Data da entrega */}
+              <div className="space-y-2">
+                <Label>Data da entrega *</Label>
+                <Input
+                  type="date"
+                  value={form.data_entrega}
+                  onChange={(e) => setForm((f) => ({ ...f, data_entrega: e.target.value }))}
+                  className="h-12 text-sm"
+                />
+              </div>
+
+              {/* Observações */}
+              <div className="space-y-2">
+                <Label>
+                  Observações{' '}
+                  <span className="text-muted-foreground font-normal text-xs">(opcional)</span>
+                </Label>
+                <Textarea
+                  value={form.observacoes}
+                  onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))}
+                  placeholder="Informações adicionais..."
+                  className="text-sm resize-none"
+                  rows={3}
+                />
+              </div>
             </>
           )}
 

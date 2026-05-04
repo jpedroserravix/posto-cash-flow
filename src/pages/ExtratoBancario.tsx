@@ -6,9 +6,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { Upload, FileText } from 'lucide-react';
+import { Upload, FileText, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
+} from '@/components/ui/alert-dialog';
 import { usePagination } from '@/hooks/usePagination';
 import { PaginationControls } from '@/components/PaginationControls';
 import { useDateFilter } from '@/hooks/useDateFilter';
@@ -70,7 +75,7 @@ function parseOFX(text: string): OFXTransaction[] {
 }
 
 export default function ExtratoBancario() {
-  const { selectedPostoId } = useAuth();
+  const { selectedPostoId, role, postoNome } = useAuth();
   const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter();
   const [contasBancarias, setContasBancarias] = useState<{ id: string; banco: string; agencia: string; conta: string }[]>([]);
   const [selectedContaId, setSelectedContaId] = useState<string>('');
@@ -78,6 +83,16 @@ export default function ExtratoBancario() {
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('todos');
+
+  // Import confirmation
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [confirmImportOpen, setConfirmImportOpen] = useState(false);
+
+  // Row selection & delete
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteIds, setDeleteIds] = useState<string[]>([]);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const loadContas = useCallback(async () => {
     if (!selectedPostoId) return;
@@ -115,11 +130,16 @@ export default function ExtratoBancario() {
   useEffect(() => { loadContas(); }, [loadContas]);
   useEffect(() => { loadExtrato(); }, [loadExtrato]);
 
-  const handleImportOFX = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedPostoId || !selectedContaId) return;
     e.target.value = '';
+    setPendingFile(file);
+    setConfirmImportOpen(true);
+  };
 
+  const doImport = async (file: File) => {
+    if (!selectedPostoId || !selectedContaId) return;
     setImporting(true);
     try {
       const text = await file.text();
@@ -221,6 +241,55 @@ export default function ExtratoBancario() {
     setImporting(false);
   };
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    const ids = filtered.map(r => r.id);
+    const allSelected = ids.length > 0 && ids.every(id => selectedIds.has(id));
+    if (allSelected) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        ids.forEach(id => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        ids.forEach(id => next.add(id));
+        return next;
+      });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (deleteIds.length === 0) return;
+    setDeleting(true);
+    const { error } = await supabase
+      .from('extrato_bancario')
+      .delete()
+      .in('id', deleteIds);
+    if (error) {
+      toast.error('Erro ao excluir: ' + error.message);
+    } else {
+      toast.success(`${deleteIds.length} lançamento(s) excluído(s)`);
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        deleteIds.forEach(id => next.delete(id));
+        return next;
+      });
+      loadExtrato();
+    }
+    setDeleting(false);
+    setDeleteConfirmOpen(false);
+    setDeleteIds([]);
+  };
+
   const filtered = useMemo(() => {
     if (filterStatus === 'conciliado') return extrato.filter(e => e.conciliado);
     if (filterStatus === 'pendente') return extrato.filter(e => !e.conciliado);
@@ -252,6 +321,16 @@ export default function ExtratoBancario() {
             Extrato Bancário
           </CardTitle>
           <div className="flex items-center gap-2 flex-wrap">
+            {role === 'admin' && selectedIds.size > 0 && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => { setDeleteIds(Array.from(selectedIds)); setDeleteConfirmOpen(true); }}
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                Excluir selecionados ({selectedIds.size})
+              </Button>
+            )}
             <Select value={selectedContaId} onValueChange={setSelectedContaId}>
               <SelectTrigger className="w-[220px] h-9 text-sm">
                 <SelectValue placeholder="Selecionar conta" />
@@ -290,7 +369,7 @@ export default function ExtratoBancario() {
               type="file"
               accept=".ofx"
               className="hidden"
-              onChange={handleImportOFX}
+              onChange={handleFileSelected}
             />
           </div>
         </div>
@@ -307,16 +386,36 @@ export default function ExtratoBancario() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  {role === 'admin' && (
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={filtered.length > 0 && filtered.every(r => selectedIds.has(r.id))}
+                        onCheckedChange={selectAll}
+                      />
+                    </TableHead>
+                  )}
                   <TableHead className="text-xs">Data</TableHead>
                   <TableHead className="text-xs text-right">Valor</TableHead>
                   <TableHead className="text-xs">Memo</TableHead>
                   <TableHead className="text-xs">Tipo</TableHead>
                   <TableHead className="text-xs text-center">Status</TableHead>
+                  {role === 'admin' && <TableHead className="w-10"></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {pagination.paginatedData.map(row => (
-                  <TableRow key={row.id} className={cn(row.conciliado && 'bg-green-50')}>
+                  <TableRow key={row.id} className={cn(
+                    row.conciliado && !selectedIds.has(row.id) && 'bg-green-50',
+                    selectedIds.has(row.id) && 'bg-accent/50',
+                  )}>
+                    {role === 'admin' && (
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedIds.has(row.id)}
+                          onCheckedChange={() => toggleSelect(row.id)}
+                        />
+                      </TableCell>
+                    )}
                     <TableCell className="text-xs whitespace-nowrap">{formatDate(row.data_lancamento)}</TableCell>
                     <TableCell className={cn('text-xs text-right whitespace-nowrap font-medium', row.valor < 0 ? 'text-destructive' : 'text-green-700')}>
                       {formatBRL(row.valor)}
@@ -330,6 +429,18 @@ export default function ExtratoBancario() {
                         {row.conciliado ? 'Conciliado' : 'Pendente'}
                       </Badge>
                     </TableCell>
+                    {role === 'admin' && (
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => { setDeleteIds([row.id]); setDeleteConfirmOpen(true); }}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
@@ -354,6 +465,45 @@ export default function ExtratoBancario() {
         )}
       </CardContent>
     </Card>
+      <AlertDialog open={confirmImportOpen} onOpenChange={setConfirmImportOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar importação</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja importar este extrato para o posto <strong>{postoNome}</strong>?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingFile(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setConfirmImportOpen(false); if (pendingFile) doImport(pendingFile); setPendingFile(null); }}>
+              Confirmar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={open => { if (!open) setDeleteIds([]); setDeleteConfirmOpen(open); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir{' '}
+              <strong>{deleteIds.length} {deleteIds.length === 1 ? 'lançamento' : 'lançamentos'}</strong>?
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteIds([])}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? 'Excluindo...' : 'Excluir'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

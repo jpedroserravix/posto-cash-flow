@@ -20,6 +20,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { openInNewTab } from '@/lib/utils';
 import FuncionarioTreinamentos from './FuncionarioTreinamentos';
 import FuncionarioFerias from './FuncionarioFerias';
+import FuncionarioEPI from './FuncionarioEPI';
 import { useListaConfig } from '@/hooks/useListaConfig';
 import { computeFeriasAlert, type FeriasRecord } from '@/lib/feriasPeriodos';
 
@@ -51,6 +52,17 @@ interface Funcionario {
   emergencia_telefone?: string | null;
   emergencia_parentesco?: string | null;
   emergencia_parentesco_outro?: string | null;
+  // jornada
+  escala_trabalho?: string | null;
+  escala_outros?: string | null;
+  horario_entrada?: string | null;
+  horario_saida?: string | null;
+  horario_sabado_entrada?: string | null;
+  horario_sabado_saida?: string | null;
+  carga_horaria_semanal?: number | null;
+  adicional_noturno?: boolean | null;
+  horas_extras_fixas_mes?: number | null;
+  intervalo_descanso?: number | null;
 }
 
 interface Desligamento {
@@ -128,6 +140,47 @@ function calcExperiencia(f: Funcionario): ExperienciaInfo | null {
   return { fim1, fim2: null, periodo: 1, diasRestantes: daysFromToday(fim1), vencido: true };
 }
 
+// ─── jornada helpers ────────────────────────────────────────────────────────
+
+const ESCALAS_FALLBACK = ['12x36', '6x1', 'Segunda a Sexta', 'Segunda a Sábado', 'Outros'];
+
+function horaToMinutes(t: string): number {
+  if (!t) return 0;
+  const [h, m] = t.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+function computeHorasExtraFixas(
+  escala: string,
+  entrada: string,
+  saida: string,
+  sabEntrada: string,
+  sabSaida: string,
+  cargaHorariaSemanal: number,
+  intervaloDescanso: number = 1,
+): number {
+  if (!escala || escala === 'Outros' || !entrada || !saida) return 0;
+  const intervaloMin = intervaloDescanso * 60;
+  const dailyMinutes = horaToMinutes(saida) - horaToMinutes(entrada) - intervaloMin;
+  if (dailyMinutes <= 0) return 0;
+  const dailyHours = dailyMinutes / 60;
+  let weeklyHours: number;
+  if (escala === 'Segunda a Sexta') {
+    weeklyHours = dailyHours * 5;
+  } else if (escala === 'Segunda a Sábado' || escala === '6x1') {
+    const sabBruto = (sabEntrada && sabSaida)
+      ? Math.max(0, horaToMinutes(sabSaida) - horaToMinutes(sabEntrada))
+      : horaToMinutes(saida) - horaToMinutes(entrada);
+    const sabMin = Math.max(0, sabBruto - intervaloMin);
+    weeklyHours = dailyHours * 5 + sabMin / 60;
+  } else if (escala === '12x36') {
+    weeklyHours = dailyHours * 3.5; // avg 3.5 shifts/week
+  } else {
+    return 0;
+  }
+  return Math.round(Math.max(0, weeklyHours - cargaHorariaSemanal) * 4.333);
+}
+
 const CARGOS_FALLBACK = [
   'Auxiliar Administrativo',
   'Chefe de Pista',
@@ -160,6 +213,16 @@ const EMPTY_FORM = {
   emergencia_telefone: '',
   emergencia_parentesco: '',
   emergencia_parentesco_outro: '',
+  // jornada
+  escala_trabalho: '',
+  escala_outros: '',
+  horario_entrada: '',
+  horario_saida: '',
+  horario_sabado_entrada: '',
+  horario_sabado_saida: '',
+  carga_horaria_semanal: '44',
+  adicional_noturno: false as boolean,
+  intervalo_descanso: '1',
 };
 
 // ─── badge types ────────────────────────────────────────────────────────────
@@ -189,6 +252,7 @@ interface CPFWarning {
 
 export default function Funcionarios() {
   const cargos   = useListaConfig('cargos',                CARGOS_FALLBACK);
+  const escalas  = useListaConfig('escalas_trabalho',     ESCALAS_FALLBACK);
   const tiposDoc = useListaConfig('tipos_doc_funcionario', TIPOS_DOC_FALLBACK);
 
   const { selectedPostoId, allPostos, hasPermission } = useAuth();
@@ -391,6 +455,24 @@ export default function Funcionarios() {
       emergencia_telefone: form.emergencia_telefone || null,
       emergencia_parentesco: form.emergencia_parentesco || null,
       emergencia_parentesco_outro: form.emergencia_parentesco === 'Outro' ? (form.emergencia_parentesco_outro || null) : null,
+      escala_trabalho: form.escala_trabalho || null,
+      escala_outros: form.escala_trabalho === 'Outros' ? (form.escala_outros || null) : null,
+      horario_entrada: form.horario_entrada || null,
+      horario_saida: form.horario_saida || null,
+      horario_sabado_entrada: (form.escala_trabalho === '6x1' || form.escala_trabalho === 'Segunda a Sábado') ? (form.horario_sabado_entrada || null) : null,
+      horario_sabado_saida: (form.escala_trabalho === '6x1' || form.escala_trabalho === 'Segunda a Sábado') ? (form.horario_sabado_saida || null) : null,
+      carga_horaria_semanal: Number(form.carga_horaria_semanal) || 44,
+      adicional_noturno: form.adicional_noturno,
+      intervalo_descanso: Number(form.intervalo_descanso) || 1,
+      horas_extras_fixas_mes: computeHorasExtraFixas(
+        form.escala_trabalho,
+        form.horario_entrada,
+        form.horario_saida,
+        form.horario_sabado_entrada,
+        form.horario_sabado_saida,
+        Number(form.carga_horaria_semanal) || 44,
+        Number(form.intervalo_descanso) || 1,
+      ),
     };
 
     let error;
@@ -553,6 +635,15 @@ export default function Funcionarios() {
       emergencia_telefone: f.emergencia_telefone ?? '',
       emergencia_parentesco: f.emergencia_parentesco ?? '',
       emergencia_parentesco_outro: f.emergencia_parentesco_outro ?? '',
+      escala_trabalho: f.escala_trabalho ?? '',
+      escala_outros: f.escala_outros ?? '',
+      horario_entrada: f.horario_entrada ?? '',
+      horario_saida: f.horario_saida ?? '',
+      horario_sabado_entrada: f.horario_sabado_entrada ?? '',
+      horario_sabado_saida: f.horario_sabado_saida ?? '',
+      carga_horaria_semanal: String(f.carga_horaria_semanal ?? 44),
+      adicional_noturno: !!f.adicional_noturno,
+      intervalo_descanso: String(f.intervalo_descanso ?? 1),
     });
     setCpfWarning({ show: false, funcionarios: [] });
     setDialogOpen(true);
@@ -889,6 +980,91 @@ export default function Funcionarios() {
                   </div>
                 )}
               </div>
+              {/* ── Jornada de Trabalho ─────────────────────────────────── */}
+              <div className="col-span-2 border rounded-md p-3 space-y-3 bg-muted/30">
+                <p className="text-xs font-medium">Jornada de Trabalho</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2 space-y-1">
+                    <Label className="text-xs">Escala de trabalho</Label>
+                    <Select value={form.escala_trabalho} onValueChange={(v) => setForm((f) => ({ ...f, escala_trabalho: v }))}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                      <SelectContent>
+                        {escalas.map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {form.escala_trabalho === 'Outros' && (
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs">Descrição da escala</Label>
+                      <Input className="h-8 text-xs" placeholder="Descreva a escala..." value={form.escala_outros} onChange={(e) => setForm((f) => ({ ...f, escala_outros: e.target.value }))} />
+                    </div>
+                  )}
+                  <div className="space-y-1">
+                    <Label className="text-xs">Entrada</Label>
+                    <Input type="time" className="h-8 text-xs" value={form.horario_entrada} onChange={(e) => setForm((f) => ({ ...f, horario_entrada: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Saída</Label>
+                    <Input type="time" className="h-8 text-xs" value={form.horario_saida} onChange={(e) => setForm((f) => ({ ...f, horario_saida: e.target.value }))} />
+                  </div>
+                  {(form.escala_trabalho === '6x1' || form.escala_trabalho === 'Segunda a Sábado') && (
+                    <>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Entrada sábado</Label>
+                        <Input type="time" className="h-8 text-xs" value={form.horario_sabado_entrada} onChange={(e) => setForm((f) => ({ ...f, horario_sabado_entrada: e.target.value }))} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Saída sábado</Label>
+                        <Input type="time" className="h-8 text-xs" value={form.horario_sabado_saida} onChange={(e) => setForm((f) => ({ ...f, horario_sabado_saida: e.target.value }))} />
+                      </div>
+                    </>
+                  )}
+                  <div className="space-y-1">
+                    <Label className="text-xs">Intervalo de descanso</Label>
+                    <Select value={form.intervalo_descanso} onValueChange={(v) => setForm((f) => ({ ...f, intervalo_descanso: v }))}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">Sem intervalo</SelectItem>
+                        <SelectItem value="0.5">30 min</SelectItem>
+                        <SelectItem value="1">1 hora</SelectItem>
+                        <SelectItem value="1.5">1h30</SelectItem>
+                        <SelectItem value="2">2 horas</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Carga horária semanal (h)</Label>
+                    <Input type="number" min="1" max="60" className="h-8 text-xs" value={form.carga_horaria_semanal} onChange={(e) => setForm((f) => ({ ...f, carga_horaria_semanal: e.target.value }))} />
+                  </div>
+                  <div className="flex items-end pb-1">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="adicional_noturno"
+                        checked={form.adicional_noturno}
+                        onCheckedChange={(v) => setForm((f) => ({ ...f, adicional_noturno: !!v }))}
+                      />
+                      <Label htmlFor="adicional_noturno" className="text-xs cursor-pointer">Adicional noturno</Label>
+                    </div>
+                  </div>
+                  {form.escala_trabalho && form.escala_trabalho !== 'Outros' && form.horario_entrada && form.horario_saida && (
+                    <div className="col-span-2 bg-background border rounded px-3 py-2 text-xs">
+                      <span className="text-muted-foreground">Horas extras fixas mensais estimadas: </span>
+                      <span className="font-semibold">
+                        {computeHorasExtraFixas(
+                          form.escala_trabalho,
+                          form.horario_entrada,
+                          form.horario_saida,
+                          form.horario_sabado_entrada,
+                          form.horario_sabado_saida,
+                          Number(form.carga_horaria_semanal) || 44,
+                          Number(form.intervalo_descanso) || 1,
+                        )}h
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
             </div>
           </div>
           </div>
@@ -1005,6 +1181,7 @@ export default function Funcionarios() {
               <TabsTrigger value="docs" className="text-xs">Documentos</TabsTrigger>
               <TabsTrigger value="treinamentos" className="text-xs">Treinamentos</TabsTrigger>
               <TabsTrigger value="ferias" className="text-xs">Férias</TabsTrigger>
+              <TabsTrigger value="epi" className="text-xs">Uniformes/EPI</TabsTrigger>
             </TabsList>
             <TabsContent value="treinamentos" className="mt-3">
               {detailTarget && (
@@ -1021,6 +1198,14 @@ export default function Funcionarios() {
                   funcionarioId={detailTarget.id}
                   postoId={detailTarget.posto_id}
                   dataAdmissao={detailTarget.data_admissao}
+                />
+              )}
+            </TabsContent>
+            <TabsContent value="epi" className="mt-3 max-h-[60vh] overflow-y-auto pr-1">
+              {detailTarget && (
+                <FuncionarioEPI
+                  funcionarioId={detailTarget.id}
+                  postoId={detailTarget.posto_id}
                 />
               )}
             </TabsContent>

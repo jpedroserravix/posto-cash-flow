@@ -22,9 +22,11 @@ interface ListaItem {
 
 const LISTAS: { key: string; label: string; hint?: string }[] = [
   { key: 'cargos',               label: 'Cargos',                           hint: 'Usado no cadastro de funcionários' },
+  { key: 'escalas_trabalho',     label: 'Escalas de Trabalho',              hint: 'Usado na jornada de trabalho do funcionário' },
   { key: 'centros_custo',        label: 'Centros de Custo',                 hint: 'Usado nos depósitos Brinks e Manuais' },
   { key: 'tipos_doc_funcionario', label: 'Tipos de Documento do Funcionário', hint: 'Usado na aba Documentos do funcionário' },
   { key: 'tipos_doc_empresa',    label: 'Tipos de Documento da Empresa',    hint: 'Usado em Documentos da Empresa (a entrada "Outros" é reservada)' },
+  { key: 'tipos_uniforme_epi',   label: 'Tipos de Uniforme/EPI',            hint: 'Usado nas entregas de uniforme e EPI pelo Envio Rápido' },
 ];
 
 // ─── component ──────────────────────────────────────────────────────────────

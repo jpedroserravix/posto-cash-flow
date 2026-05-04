@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Save, Lock, Unlock, Download } from 'lucide-react';
 
@@ -18,18 +20,27 @@ interface Funcionario {
   nome: string;
   cargo: string;
   status: 'ativo' | 'desligado';
+  // jornada
+  escala_trabalho?: string | null;
+  horario_entrada?: string | null;
+  horario_saida?: string | null;
+  adicional_noturno?: boolean | null;
+  horas_extras_fixas_mes?: number | null;
 }
 
 interface OcorrenciaStats {
   funcionario_id: string;
   faltas: number;
+  faltas_justificadas: number;
   atrasos: number;
   horas_extra: number;
   atestados: number;
   advertencias: number;
   suspensoes: number;
-  auto_descontos: number;       // Vale Funcionário + Desconto Quebra de Caixa + Dano/Prejuízo
-  auto_quebra_credito: number;  // Quebra de Caixa (Crédito) — read-only display
+  auto_descontos: number;        // Vale Funcionário + Dano/Prejuízo
+  auto_vale_quinzenal: number;   // Vale Quinzenal — coluna própria, read-only
+  auto_quebra_desc: number;      // Desconto Quebra de Caixa — coluna própria, read-only
+  auto_quebra_credito: number;   // Quebra de Caixa (Crédito) — read-only display
 }
 
 interface Fechamento {
@@ -57,20 +68,43 @@ interface Fechamento {
 
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
-function formatBRL(val: number) {
-  return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+function formatBRL(val: number | string) {
+  const n = typeof val === 'string' ? parseFloat(val) || 0 : (val ?? 0);
+  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function negBRL(val: number | string) {
+  // Guard: Supabase may return numeric columns as strings (e.g. "652.0000000000")
+  const n = typeof val === 'string' ? parseFloat(val) || 0 : (val ?? 0);
+  return n > 0 ? `-${formatBRL(n)}` : formatBRL(n);
 }
 
 // ─── edit row state per employee ─────────────────────────────────────────────
 // Premiação e Vale Transporte foram removidos da UI (mantidos no DB com valor 0 para compat.)
 
 interface EditRow {
-  descontos: string;    // UI label: "Vale Funcionário"
-  quebra_caixa: string; // UI label: "Desconto Quebra de Caixa"
   observacoes: string;
 }
 
-const EMPTY_EDIT: EditRow = { descontos: '0', quebra_caixa: '0', observacoes: '' };
+const EMPTY_EDIT: EditRow = { observacoes: '' };
+
+// ─── column keys for visibility toggle ───────────────────────────────────────
+
+const COL_KEYS = ['escala', 'horario', 'adicNoturno', 'hExtraFixas', 'faltas', 'faltasJust', 'atrasos', 'horasExtra', 'advertencias', 'suspensoes'] as const;
+type ColKey = typeof COL_KEYS[number];
+
+const COL_LABELS: Record<ColKey, string> = {
+  escala: 'Escala',
+  horario: 'Horário',
+  adicNoturno: 'Ad. Noturno',
+  hExtraFixas: 'H. Extra Fixas',
+  faltas: 'Faltas',
+  faltasJust: 'Faltas Just.',
+  atrasos: 'Atrasos',
+  horasExtra: 'H. Extra',
+  advertencias: 'Advert.',
+  suspensoes: 'Susp.',
+};
 
 // ─── main component ─────────────────────────────────────────────────────────
 
@@ -85,6 +119,11 @@ export default function FechamentoMensal() {
   const now = new Date();
   const [filterMes, setFilterMes] = useState(String(now.getMonth() + 1));
   const [filterAno, setFilterAno] = useState(String(now.getFullYear()));
+  const [filterFunc, setFilterFunc] = useState('__all__');
+  const [showCols, setShowCols] = useState<Record<ColKey, boolean>>({
+    escala: false, horario: false, adicNoturno: false, hExtraFixas: true,
+    faltas: true, faltasJust: true, atrasos: true, horasExtra: true, advertencias: true, suspensoes: true,
+  });
 
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
   const [fechamentos, setFechamentos] = useState<Fechamento[]>([]);
@@ -99,7 +138,7 @@ export default function FechamentoMensal() {
     if (!postoId) return;
     const { data } = await (supabase as any)
       .from('pessoal_funcionarios')
-      .select('id, nome, cargo, status')
+      .select('id, nome, cargo, status, escala_trabalho, horario_entrada, horario_saida, adicional_noturno, horas_extras_fixas_mes')
       .eq('posto_id', postoId)
       .order('nome');
     setFuncionarios(data ?? []);
@@ -136,19 +175,23 @@ export default function FechamentoMensal() {
       if (!statsMap[o.funcionario_id]) {
         statsMap[o.funcionario_id] = {
           funcionario_id: o.funcionario_id,
-          faltas: 0, atrasos: 0, horas_extra: 0, atestados: 0, advertencias: 0, suspensoes: 0,
-          auto_descontos: 0, auto_quebra_credito: 0,
+          faltas: 0, faltas_justificadas: 0, atrasos: 0, horas_extra: 0, atestados: 0, advertencias: 0, suspensoes: 0,
+          auto_descontos: 0, auto_vale_quinzenal: 0, auto_quebra_desc: 0, auto_quebra_credito: 0,
         };
       }
       const s = statsMap[o.funcionario_id];
+      // Use parseFloat to guard against Supabase returning numeric as string (e.g. "755.0000000000")
       if (o.tipo === 'Falta') s.faltas += 1;
-      else if (o.tipo === 'Atraso') s.atrasos += (o.horas ?? 0);
-      else if (o.tipo === 'Hora Extra') s.horas_extra += (o.horas ?? 0);
+      else if (o.tipo === 'Falta Justificada') s.faltas_justificadas += 1;
+      else if (o.tipo === 'Atraso') s.atrasos += parseFloat(o.horas) || 0;
+      else if (o.tipo === 'Hora Extra') s.horas_extra += parseFloat(o.horas) || 0;
       else if (o.tipo === 'Atestado') s.atestados += 1;
       else if (o.tipo === 'Advertência') s.advertencias += 1;
       else if (o.tipo === 'Suspensão') s.suspensoes += 1;
-      else if (o.tipo === 'Vale Funcionário' || o.tipo === 'Desconto Quebra de Caixa' || o.tipo === 'Dano/Prejuízo') s.auto_descontos += (o.valor ?? 0);
-      else if (o.tipo === 'Quebra de Caixa (Crédito)') s.auto_quebra_credito += (o.valor ?? 0);
+      else if (o.tipo === 'Vale Quinzenal') s.auto_vale_quinzenal += parseFloat(o.valor) || 0;
+      else if (o.tipo === 'Vale Funcionário' || o.tipo === 'Dano/Prejuízo') s.auto_descontos += parseFloat(o.valor) || 0;
+      else if (o.tipo === 'Desconto Quebra de Caixa') s.auto_quebra_desc += parseFloat(o.valor) || 0;
+      else if (o.tipo === 'Quebra de Caixa (Crédito)') s.auto_quebra_credito += parseFloat(o.valor) || 0;
     });
 
     setStats(Object.values(statsMap));
@@ -158,19 +201,13 @@ export default function FechamentoMensal() {
     const newEditRows: Record<string, EditRow> = {};
     (fechData ?? []).forEach((f: Fechamento) => {
       newEditRows[f.funcionario_id] = {
-        descontos: String(f.descontos),
-        quebra_caixa: String(f.quebra_caixa),
         observacoes: f.observacoes ?? '',
       };
     });
-    // Pre-fill from ocorrências for employees without a fechamento
+    // Pre-fill for employees without a fechamento
     Object.values(statsMap).forEach((s) => {
       if (!newEditRows[s.funcionario_id]) {
-        newEditRows[s.funcionario_id] = {
-          descontos: s.auto_descontos > 0 ? String(s.auto_descontos) : '0',
-          quebra_caixa: '0',
-          observacoes: '',
-        };
+        newEditRows[s.funcionario_id] = { observacoes: '' };
       }
     });
     setEditRows(newEditRows);
@@ -187,21 +224,28 @@ export default function FechamentoMensal() {
       .filter((f) => f.status === 'ativo')
       .map((f) => {
         const st = stats.find((s) => s.funcionario_id === f.id) ?? {
-          funcionario_id: f.id, faltas: 0, atrasos: 0, horas_extra: 0, atestados: 0, advertencias: 0, suspensoes: 0,
-          auto_descontos: 0, auto_quebra_credito: 0,
+          funcionario_id: f.id, faltas: 0, faltas_justificadas: 0, atrasos: 0, horas_extra: 0, atestados: 0, advertencias: 0, suspensoes: 0,
+          auto_descontos: 0, auto_vale_quinzenal: 0, auto_quebra_desc: 0, auto_quebra_credito: 0,
         };
         const fech = fechamentos.find((fe) => fe.funcionario_id === f.id);
-        const edit = editRows[f.id] ?? {
-          descontos: st.auto_descontos > 0 ? String(st.auto_descontos) : '0',
-          quebra_caixa: '0',
-          observacoes: '',
-        };
+        const edit = editRows[f.id] ?? EMPTY_EDIT;
         return { funcionario: f, stats: st, fech, edit };
       });
   }, [funcionarios, stats, fechamentos, editRows]);
 
+  const filteredRows = useMemo(() => {
+    if (filterFunc === '__all__') return rows;
+    return rows.filter((r) => r.funcionario.id === filterFunc);
+  }, [rows, filterFunc]);
+
   const { page, setPage, pageSize, handlePageSizeChange, paginatedData, totalPages, totalItems, startIndex, endIndex } =
-    usePagination(rows, [filterMes, filterAno, postoId], { sessionKey: 'fechamento_pageSize' });
+    usePagination(filteredRows, [filterMes, filterAno, postoId, filterFunc], { sessionKey: 'fechamento_pageSize' });
+
+  // ─── column count for colSpan ─────────────────────────────────────────────
+
+  // Fixed: Nome, Atestados, Vale Funcionário, Vale Quinzenal, Desc. Quebra, Créd. Quebra, Obs, Actions = 8
+  const visibleOptionalCount = COL_KEYS.filter((k) => showCols[k]).length;
+  const totalColSpan = 8 + visibleOptionalCount;
 
   // ─── save row ──────────────────────────────────────────────────────────────
 
@@ -210,6 +254,10 @@ export default function FechamentoMensal() {
       ...prev,
       [funcId]: { ...(prev[funcId] ?? EMPTY_EDIT), [field]: value },
     }));
+  }
+
+  function toggleCol(key: ColKey) {
+    setShowCols((prev) => ({ ...prev, [key]: !prev[key] }));
   }
 
   async function handleSave(row: typeof rows[number]) {
@@ -233,9 +281,9 @@ export default function FechamentoMensal() {
       advertencias: st.advertencias,
       suspensoes: st.suspensoes,
       premiacao: 0,           // removed from UI; kept at 0 for DB compat
-      descontos: parseFloat(edit.descontos) || 0,
+      descontos: st.auto_descontos,  // auto-calculated from ocorrências, not editable
       vale_transporte: 0,     // removed from UI; kept at 0 for DB compat
-      quebra_caixa: parseFloat(edit.quebra_caixa) || 0,
+      quebra_caixa: st.auto_quebra_desc,
       observacoes: edit.observacoes || null,
       fechado: false,
     };
@@ -265,23 +313,34 @@ export default function FechamentoMensal() {
     const mes = Number(filterMes);
     const ano = Number(filterAno);
     const header = [
-      'Nome', 'Cargo', 'Faltas', 'Atrasos (h)', 'Horas Extra', 'Atestados', 'Advertências', 'Suspensões',
-      'Vale Funcionário', 'Desc. Quebra de Caixa', 'Créd. Quebra de Caixa', 'Observações',
+      'Nome', 'Cargo', 'Escala', 'Horário', 'Ad. Noturno', 'H. Extra Fixas',
+      'Faltas', 'Faltas Just.', 'Atrasos (h)', 'Horas Extra', 'Atestados', 'Advertências', 'Suspensões',
+      'Vale Funcionário', 'Vale Quinzenal', 'Desc. Quebra de Caixa', 'Créd. Quebra de Caixa', 'Observações',
     ];
-    const csvRows = rows.map(({ funcionario, stats: st, fech, edit }) => [
-      funcionario.nome,
-      funcionario.cargo,
-      st.faltas,
-      st.atrasos,
-      st.horas_extra,
-      st.atestados,
-      st.advertencias,
-      st.suspensoes,
-      fech ? fech.descontos    : (parseFloat(edit.descontos)    || 0),
-      fech ? fech.quebra_caixa : (parseFloat(edit.quebra_caixa) || 0),
-      st.auto_quebra_credito,
-      fech?.observacoes ?? edit.observacoes,
-    ]);
+    const csvRows = filteredRows.map(({ funcionario, stats: st, fech, edit }) => {
+      const horario = funcionario.horario_entrada && funcionario.horario_saida
+        ? `${funcionario.horario_entrada}-${funcionario.horario_saida}` : '';
+      return [
+        funcionario.nome,
+        funcionario.cargo,
+        funcionario.escala_trabalho ?? '',
+        horario,
+        funcionario.adicional_noturno ? 'Sim' : 'Não',
+        funcionario.horas_extras_fixas_mes ?? 0,
+        st.faltas,
+        st.faltas_justificadas,
+        st.atrasos.toFixed(2),
+        st.horas_extra.toFixed(2),
+        st.atestados,
+        st.advertencias,
+        st.suspensoes,
+        (st.auto_descontos > 0 ? -st.auto_descontos : 0).toFixed(2),
+        (st.auto_vale_quinzenal > 0 ? -st.auto_vale_quinzenal : 0).toFixed(2),
+        (st.auto_quebra_desc > 0 ? -st.auto_quebra_desc : 0).toFixed(2),
+        st.auto_quebra_credito.toFixed(2),
+        fech?.observacoes ?? edit.observacoes,
+      ];
+    });
     const csv = '\ufeff' + [header, ...csvRows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -302,7 +361,7 @@ export default function FechamentoMensal() {
 
   return (
     <div className="space-y-4">
-      {/* Toolbar */}
+      {/* Toolbar - row 1: selects */}
       <div className="flex flex-wrap gap-2 items-center justify-between">
         <div className="flex gap-2 flex-wrap items-center">
           {showPostoSelector && (
@@ -319,10 +378,35 @@ export default function FechamentoMensal() {
             <SelectTrigger className="h-8 w-[90px] text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>{years.map((y) => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
           </Select>
+          <Select value={filterFunc} onValueChange={setFilterFunc}>
+            <SelectTrigger className="h-8 w-[180px] text-xs"><SelectValue placeholder="Funcionário" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todos os funcionários</SelectItem>
+              {funcionarios.filter((f) => f.status === 'ativo').map((f) => (
+                <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={exportCSV}>
           <Download className="w-3.5 h-3.5" /> Exportar CSV
         </Button>
+      </div>
+
+      {/* Toolbar - row 2: column visibility */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 items-center">
+        <span className="text-xs text-muted-foreground font-medium">Colunas:</span>
+        {COL_KEYS.map((key) => (
+          <div key={key} className="flex items-center gap-1.5">
+            <Checkbox
+              id={`col-${key}`}
+              checked={showCols[key]}
+              onCheckedChange={() => toggleCol(key)}
+              className="h-3.5 w-3.5"
+            />
+            <Label htmlFor={`col-${key}`} className="text-xs cursor-pointer select-none">{COL_LABELS[key]}</Label>
+          </div>
+        ))}
       </div>
 
       <Card>
@@ -332,13 +416,19 @@ export default function FechamentoMensal() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-xs">Funcionário</TableHead>
-                  <TableHead className="text-xs text-center">Faltas</TableHead>
-                  <TableHead className="text-xs text-center">Atrasos (h)</TableHead>
-                  <TableHead className="text-xs text-center">H. Extra</TableHead>
+                  {showCols.escala     && <TableHead className="text-xs text-center">Escala</TableHead>}
+                  {showCols.horario    && <TableHead className="text-xs text-center">Horário</TableHead>}
+                  {showCols.adicNoturno && <TableHead className="text-xs text-center">Ad. Noturno</TableHead>}
+                  {showCols.faltas     && <TableHead className="text-xs text-center">Faltas</TableHead>}
+                  {showCols.faltasJust && <TableHead className="text-xs text-center">Faltas Just.</TableHead>}
+                  {showCols.atrasos    && <TableHead className="text-xs text-center">Atrasos (h)</TableHead>}
+                  {showCols.horasExtra && <TableHead className="text-xs text-center">H. Extra</TableHead>}
+                  {showCols.hExtraFixas && <TableHead className="text-xs text-center">H. Extra Fixas</TableHead>}
                   <TableHead className="text-xs text-center">Atestados</TableHead>
-                  <TableHead className="text-xs text-center">Advert.</TableHead>
-                  <TableHead className="text-xs text-center">Susp.</TableHead>
+                  {showCols.advertencias && <TableHead className="text-xs text-center">Advert.</TableHead>}
+                  {showCols.suspensoes   && <TableHead className="text-xs text-center">Susp.</TableHead>}
                   <TableHead className="text-xs">Vale Funcionário (R$)</TableHead>
+                  <TableHead className="text-xs">Vale Quinzenal (R$)</TableHead>
                   <TableHead className="text-xs">Desc. Quebra Caixa (R$)</TableHead>
                   <TableHead className="text-xs">Créd. Quebra Caixa (R$)</TableHead>
                   <TableHead className="text-xs">Obs.</TableHead>
@@ -347,10 +437,10 @@ export default function FechamentoMensal() {
               </TableHeader>
               <TableBody>
                 {loading && (
-                  <TableRow><TableCell colSpan={12} className="text-center text-xs text-muted-foreground py-8">Carregando...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={totalColSpan} className="text-center text-xs text-muted-foreground py-8">Carregando...</TableCell></TableRow>
                 )}
                 {!loading && paginatedData.length === 0 && (
-                  <TableRow><TableCell colSpan={12} className="text-center text-xs text-muted-foreground py-8">Nenhum funcionário ativo.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={totalColSpan} className="text-center text-xs text-muted-foreground py-8">Nenhum funcionário ativo.</TableCell></TableRow>
                 )}
                 {paginatedData.map(({ funcionario, stats: st, fech, edit }) => {
                   const locked = fech?.fechado ?? false;
@@ -361,64 +451,110 @@ export default function FechamentoMensal() {
                         <div className="font-medium">{funcionario.nome}</div>
                         <div className="text-muted-foreground text-[10px]">{funcionario.cargo}</div>
                       </TableCell>
-                      <TableCell className="text-center">
-                        <span className={st.faltas > 0 ? 'text-red-600 font-bold' : ''}>{st.faltas}</span>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className={st.atrasos > 0 ? 'text-orange-600 font-medium' : ''}>{st.atrasos > 0 ? `${st.atrasos}h` : '0'}</span>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className={st.horas_extra > 0 ? 'text-blue-600 font-medium' : ''}>{st.horas_extra}h</span>
-                      </TableCell>
+                      {showCols.escala && (
+                        <TableCell className="text-center text-[11px]">
+                          {funcionario.escala_trabalho ?? <span className="text-muted-foreground">—</span>}
+                        </TableCell>
+                      )}
+                      {showCols.horario && (
+                        <TableCell className="text-center text-[11px]">
+                          {funcionario.horario_entrada && funcionario.horario_saida
+                            ? `${funcionario.horario_entrada}–${funcionario.horario_saida}`
+                            : <span className="text-muted-foreground">—</span>}
+                        </TableCell>
+                      )}
+                      {showCols.adicNoturno && (
+                        <TableCell className="text-center text-[11px]">
+                          {funcionario.adicional_noturno
+                            ? <span className="text-blue-600 font-medium">Sim</span>
+                            : <span className="text-muted-foreground">Não</span>}
+                        </TableCell>
+                      )}
+                      {showCols.faltas && (
+                        <TableCell className="text-center">
+                          <span className={st.faltas > 0 ? 'text-red-600 font-bold' : ''}>{st.faltas}</span>
+                        </TableCell>
+                      )}
+                      {showCols.faltasJust && (
+                        <TableCell className="text-center">
+                          <span className={st.faltas_justificadas > 0 ? 'text-amber-600 font-medium' : ''}>{st.faltas_justificadas}</span>
+                        </TableCell>
+                      )}
+                      {showCols.atrasos && (
+                        <TableCell className="text-center">
+                          <span className={st.atrasos > 0 ? 'text-orange-600 font-medium' : ''}>{st.atrasos > 0 ? `${st.atrasos}h` : '0'}</span>
+                        </TableCell>
+                      )}
+                      {showCols.horasExtra && (
+                        <TableCell className="text-center">
+                          <span className={st.horas_extra > 0 ? 'text-blue-600 font-medium' : ''}>{st.horas_extra}h</span>
+                        </TableCell>
+                      )}
+                      {showCols.hExtraFixas && (
+                        <TableCell className="text-center">
+                          {(funcionario.horas_extras_fixas_mes ?? 0) > 0
+                            ? <span className="text-violet-600 font-medium">{funcionario.horas_extras_fixas_mes}h</span>
+                            : <span className="text-muted-foreground">—</span>}
+                        </TableCell>
+                      )}
                       <TableCell className="text-center">{st.atestados}</TableCell>
-                      <TableCell className="text-center">
-                        <span className={st.advertencias > 0 ? 'text-yellow-600 font-medium' : ''}>{st.advertencias}</span>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className={st.suspensoes > 0 ? 'text-red-700 font-bold' : ''}>{st.suspensoes}</span>
-                      </TableCell>
+                      {showCols.advertencias && (
+                        <TableCell className="text-center">
+                          <span className={st.advertencias > 0 ? 'text-yellow-600 font-medium' : ''}>{st.advertencias}</span>
+                        </TableCell>
+                      )}
+                      {showCols.suspensoes && (
+                        <TableCell className="text-center">
+                          <span className={st.suspensoes > 0 ? 'text-red-700 font-bold' : ''}>{st.suspensoes}</span>
+                        </TableCell>
+                      )}
 
-                      {/* Vale Funcionário (= descontos no DB) */}
+                      {/* Vale Funcionário — read-only, auto-calculated from ocorrências */}
                       <TableCell>
-                        <Input
-                          type="number" step="0.01" min="0"
-                          className="h-7 text-xs w-24"
-                          disabled={locked}
-                          value={edit.descontos}
-                          onChange={(e) => setEditField(funcionario.id, 'descontos', e.target.value)}
-                        />
-                        {st.auto_descontos > 0 && (
-                          <div className="text-[10px] text-red-600 mt-0.5">{formatBRL(st.auto_descontos)} (ocorr.)</div>
+                        {st.auto_descontos > 0 ? (
+                          <span className="text-red-600 font-medium whitespace-nowrap">{negBRL(st.auto_descontos)}</span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
 
-                      {/* Desconto Quebra de Caixa (= quebra_caixa no DB) */}
+                      {/* Vale Quinzenal — read-only, auto-computed from ocorrências */}
+                      <TableCell className="text-center">
+                        {st.auto_vale_quinzenal > 0 ? (
+                          <span className="text-red-600 font-medium whitespace-nowrap">{negBRL(st.auto_vale_quinzenal)}</span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+
+                      {/* Desconto Quebra de Caixa — read-only, auto-computed from ocorrências */}
                       <TableCell>
-                        <Input
-                          type="number" step="0.01" min="0"
-                          className="h-7 text-xs w-24"
-                          disabled={locked}
-                          value={edit.quebra_caixa}
-                          onChange={(e) => setEditField(funcionario.id, 'quebra_caixa', e.target.value)}
-                        />
+                        {st.auto_quebra_desc > 0 ? (
+                          <span className="text-red-600 font-medium whitespace-nowrap">{negBRL(st.auto_quebra_desc)}</span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </TableCell>
 
                       {/* Crédito Quebra de Caixa — read-only, auto-computed from ocorrências */}
                       <TableCell className="text-center">
                         {st.auto_quebra_credito > 0 ? (
-                          <span className="text-teal-700 font-medium">{formatBRL(st.auto_quebra_credito)}</span>
+                          <span className="text-green-700 font-medium">{formatBRL(st.auto_quebra_credito)}</span>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
 
                       <TableCell>
-                        <Input
-                          className="h-7 text-xs w-32"
-                          disabled={locked}
-                          value={edit.observacoes}
-                          onChange={(e) => setEditField(funcionario.id, 'observacoes', e.target.value)}
-                        />
+                        {locked ? (
+                          <span className="text-xs text-muted-foreground">{edit.observacoes || '—'}</span>
+                        ) : (
+                          <Input
+                            className="h-7 text-xs w-32"
+                            value={edit.observacoes}
+                            onChange={(e) => setEditField(funcionario.id, 'observacoes', e.target.value)}
+                          />
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1">

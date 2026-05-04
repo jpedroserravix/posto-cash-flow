@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -142,6 +142,12 @@ export default function DepositosManuais() {
     return isNaN(n) ? null : n;
   };
 
+  // Converts a DB number to BR string for input fields (so parseMoney round-trips correctly)
+  const numToInputStr = (v: number | null | undefined): string => {
+    if (v == null) return '';
+    return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
   const formatCurrency = (v: number) =>
     v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -266,17 +272,16 @@ export default function DepositosManuais() {
       const { error } = await supabase.from('depositos_manuais').update(record).eq('id', editingId);
       if (error) { toast.error('Erro: ' + error.message); return; }
       toast.success('Atualizado');
-      setEditingId(null);
+      cancelEdit();
     } else {
       const { error } = await supabase.from('depositos_manuais').insert(record);
       if (error) { toast.error('Erro: ' + error.message); return; }
       toast.success('Lançamento adicionado');
+      setFormData({ data: '', turno: '', centro_custo: '', valor_lancado: '', valor_depositado: '', observacao: '' });
+      setFormFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setShowForm(false);
     }
-
-    setFormData({ data: '', turno: '', centro_custo: '', valor_lancado: '', valor_depositado: '', observacao: '' });
-    setFormFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    setShowForm(false);
     loadDeposits();
     loadAllDeposits();
   };
@@ -297,17 +302,26 @@ export default function DepositosManuais() {
     loadAllDeposits();
   };
 
+  const cancelEdit = () => {
+    setEditingId(null);
+    setFormData({ data: '', turno: '', centro_custo: '', valor_lancado: '', valor_depositado: '', observacao: '' });
+    setFormFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const handleEdit = (d: ManualDeposit) => {
+    setShowForm(false); // fecha novo lançamento se estiver aberto
     setEditingId(d.id);
     setFormData({
       data: d.data,
       turno: d.turno,
       centro_custo: d.centro_custo || '',
-      valor_lancado: d.valor_lancado.toString(),
-      valor_depositado: d.valor_depositado?.toString() || '',
+      valor_lancado: numToInputStr(d.valor_lancado),
+      valor_depositado: numToInputStr(d.valor_depositado),
       observacao: d.observacao || '',
     });
-    setShowForm(true);
+    setFormFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleDelete = async (id: string) => {
@@ -549,83 +563,157 @@ export default function DepositosManuais() {
                       const isConciliado = !!d.conciliado_banco_id;
                       const isConferido = d.conferido === 'OK';
                       const isSelected = concSelected.has(d.id);
+                      const isEditing = editingId === d.id;
+                      const colSpan = role === 'admin' ? 10 : 9;
                       return (
-                        <TableRow key={d.id} className={cn(
-                          isConciliado && 'bg-green-50 dark:bg-green-950/20',
-                          isSelected && !isConciliado && 'bg-accent/50'
-                        )}>
-                          {role === 'admin' && (
-                            <TableCell className="w-8">
-                              {!isConciliado && (
-                                <Checkbox checked={isSelected} onCheckedChange={() => toggleConcSelect(d.id)} />
+                        <React.Fragment key={d.id}>
+                          <TableRow className={cn(
+                            isConciliado && !isEditing && 'bg-green-50 dark:bg-green-950/20',
+                            isSelected && !isConciliado && !isEditing && 'bg-accent/50',
+                            isEditing && 'bg-muted/40',
+                          )}>
+                            {role === 'admin' && (
+                              <TableCell className="w-8">
+                                {!isConciliado && (
+                                  <Checkbox checked={isSelected} onCheckedChange={() => toggleConcSelect(d.id)} />
+                                )}
+                              </TableCell>
+                            )}
+                            <TableCell>
+                              {isConciliado ? (
+                                <div className="space-y-0.5">
+                                  <Badge variant="default" className="text-[10px] bg-green-600 hover:bg-green-700 cursor-pointer" onClick={() => role === 'admin' && handleDesconciliar(d.id)}>
+                                    Recebido
+                                  </Badge>
+                                  <ObsTooltip text={getContaName(d.conciliado_banco_id)} maxWidth="max-w-[120px]" emptyLabel="" />
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
                               )}
                             </TableCell>
-                          )}
-                          <TableCell>
-                            {isConciliado ? (
-                              <div className="space-y-0.5">
-                                <Badge variant="default" className="text-[10px] bg-green-600 hover:bg-green-700 cursor-pointer" onClick={() => role === 'admin' && handleDesconciliar(d.id)}>
-                                  Recebido
-                                </Badge>
-                                <ObsTooltip text={getContaName(d.conciliado_banco_id)} maxWidth="max-w-[120px]" emptyLabel="" />
+                            <TableCell className="text-xs">{formatDate(d.data)}</TableCell>
+                            <TableCell className="text-xs">{d.turno}</TableCell>
+                            <TableCell className="text-xs">{d.centro_custo || '—'}</TableCell>
+                            <TableCell className="text-right text-xs font-medium">{formatCurrency(d.valor_lancado)}</TableCell>
+                            <TableCell className="text-right text-xs">{d.valor_depositado ? formatCurrency(d.valor_depositado) : '—'}</TableCell>
+                            <TableCell className={`text-right text-xs font-bold ${
+                              d.saldo === 0 ? 'text-success' : d.saldo > 0 ? 'text-warning' : 'text-destructive'
+                            }`}>
+                              {formatCurrency(d.saldo)}
+                            </TableCell>
+                            <TableCell className="text-xs max-w-[160px]">
+                              <ObsTooltip text={d.observacao} emptyLabel="" />
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-1 items-center">
+                                {d.comprovante_path && (
+                                  <HoverCard openDelay={200}>
+                                    <HoverCardTrigger asChild>
+                                      <div className="relative group/comp inline-flex">
+                                        <button
+                                          className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-muted"
+                                          onClick={() => {
+                                            const url = getStorageUrl(d.comprovante_path!);
+                                            const type = d.comprovante_type === 'image' ? 'image' : 'pdf';
+                                            if (type === 'pdf' && isMobile) { openInNewTab(url); return; }
+                                            setPreviewFile({ url, type });
+                                          }}
+                                        >
+                                          <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="absolute -top-1 -right-1 hidden group-hover/comp:flex h-4 w-4 items-center justify-center rounded-full bg-destructive"
+                                          onClick={(e) => { e.stopPropagation(); setDeletingComprovanteId(d.id); }}
+                                        >
+                                          <X className="h-2.5 w-2.5 text-white" />
+                                        </button>
+                                      </div>
+                                    </HoverCardTrigger>
+                                    <HoverCardContent side="left" className="w-48 p-1">
+                                      {d.comprovante_type === 'image' ? (
+                                        <img src={getStorageUrl(d.comprovante_path)} className="w-full rounded object-cover" alt="" />
+                                      ) : (
+                                        <iframe src={getStorageUrl(d.comprovante_path)} className="w-full h-36 rounded" title="preview" />
+                                      )}
+                                    </HoverCardContent>
+                                  </HoverCard>
+                                )}
+                                <Button size="sm" variant="ghost" className={cn(isEditing && 'text-primary')} onClick={() => isEditing ? cancelEdit() : handleEdit(d)}>
+                                  {isEditing ? <X className="w-3 h-3" /> : <Pencil className="w-3 h-3" />}
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={() => handleDelete(d.id)}><Trash2 className="w-3 h-3" /></Button>
                               </div>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">—</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-xs">{formatDate(d.data)}</TableCell>
-                          <TableCell className="text-xs">{d.turno}</TableCell>
-                          <TableCell className="text-xs">{d.centro_custo || '—'}</TableCell>
-                          <TableCell className="text-right text-xs font-medium">{formatCurrency(d.valor_lancado)}</TableCell>
-                          <TableCell className="text-right text-xs">{d.valor_depositado ? formatCurrency(d.valor_depositado) : '—'}</TableCell>
-                          <TableCell className={`text-right text-xs font-bold ${
-                            d.saldo === 0 ? 'text-success' : d.saldo > 0 ? 'text-warning' : 'text-destructive'
-                          }`}>
-                            {formatCurrency(d.saldo)}
-                          </TableCell>
-                          <TableCell className="text-xs max-w-[160px]">
-                            <ObsTooltip text={d.observacao} emptyLabel="" />
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-1 items-center">
-                              {d.comprovante_path && (
-                                <HoverCard openDelay={200}>
-                                  <HoverCardTrigger asChild>
-                                    <div className="relative group/comp inline-flex">
-                                      <button
-                                        className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-muted"
-                                        onClick={() => {
-                                          const url = getStorageUrl(d.comprovante_path!);
-                                          const type = d.comprovante_type === 'image' ? 'image' : 'pdf';
-                                          if (type === 'pdf' && isMobile) { openInNewTab(url); return; }
-                                          setPreviewFile({ url, type });
-                                        }}
-                                      >
-                                        <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="absolute -top-1 -right-1 hidden group-hover/comp:flex h-4 w-4 items-center justify-center rounded-full bg-destructive"
-                                        onClick={(e) => { e.stopPropagation(); setDeletingComprovanteId(d.id); }}
-                                      >
-                                        <X className="h-2.5 w-2.5 text-white" />
-                                      </button>
-                                    </div>
-                                  </HoverCardTrigger>
-                                  <HoverCardContent side="left" className="w-48 p-1">
-                                    {d.comprovante_type === 'image' ? (
-                                      <img src={getStorageUrl(d.comprovante_path)} className="w-full rounded object-cover" alt="" />
+                            </TableCell>
+                          </TableRow>
+
+                          {isEditing && (
+                            <tr className="border-b bg-muted/20">
+                              <td colSpan={colSpan} className="px-4 py-3">
+                                <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+                                  <div>
+                                    <label className="text-xs font-medium mb-1 block">Data</label>
+                                    <Input type="date" value={formData.data} onChange={e => setFormData({ ...formData, data: e.target.value })} required className="h-9" />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium mb-1 block">Turno</label>
+                                    <Select value={formData.turno} onValueChange={v => setFormData({ ...formData, turno: v })}>
+                                      <SelectTrigger className="h-9"><SelectValue placeholder="Turno" /></SelectTrigger>
+                                      <SelectContent>{TURNOS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium mb-1 block">Centro de Custo</label>
+                                    <Select value={formData.centro_custo || '__empty__'} onValueChange={v => setFormData({ ...formData, centro_custo: v === '__empty__' ? '' : v })}>
+                                      <SelectTrigger className="h-9"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="__empty__">(Em branco)</SelectItem>
+                                        {centrosCusto.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium mb-1 block">Valor Avulso Caixa (R$)</label>
+                                    <Input value={formData.valor_lancado} onChange={e => setFormData({ ...formData, valor_lancado: e.target.value })} placeholder="0,00" required className="h-9" />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium mb-1 block">Valor Depositado (R$)</label>
+                                    <Input value={formData.valor_depositado} onChange={e => setFormData({ ...formData, valor_depositado: e.target.value })} placeholder="0,00" className="h-9" />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium mb-1 block">Observação</label>
+                                    <Input value={formData.observacao} onChange={e => setFormData({ ...formData, observacao: e.target.value })} placeholder="Ex: SICREDI/JP" className="h-9" />
+                                  </div>
+                                  <div className="sm:col-span-2 lg:col-span-5">
+                                    <label className="text-xs font-medium mb-1 block">Comprovante <span className="text-muted-foreground font-normal">(opcional)</span></label>
+                                    {formFile ? (
+                                      <div className="flex items-center gap-2 h-9 rounded-md border px-3 text-xs">
+                                        <FileText className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                                        <span className="truncate flex-1">{formFile.name}</span>
+                                        <button type="button" onClick={() => { setFormFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}>
+                                          <X className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
+                                        </button>
+                                      </div>
                                     ) : (
-                                      <iframe src={getStorageUrl(d.comprovante_path)} className="w-full h-36 rounded" title="preview" />
+                                      <Button type="button" variant="outline" size="sm" className="h-9 gap-1.5 text-xs" onClick={() => fileInputRef.current?.click()}>
+                                        <Paperclip className="w-3.5 h-3.5" />
+                                        {d.comprovante_path ? 'Substituir arquivo' : 'Anexar arquivo'}
+                                      </Button>
                                     )}
-                                  </HoverCardContent>
-                                </HoverCard>
-                              )}
-                              <Button size="sm" variant="ghost" onClick={() => handleEdit(d)}><Pencil className="w-3 h-3" /></Button>
-                              <Button size="sm" variant="ghost" onClick={() => handleDelete(d.id)}><Trash2 className="w-3 h-3" /></Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
+                                  </div>
+                                  <div className="flex items-end gap-2">
+                                    <Button type="submit" size="sm" className="h-9 px-4 flex-1">
+                                      <Save className="w-4 h-4 mr-1" />Salvar
+                                    </Button>
+                                    <Button type="button" size="sm" variant="outline" className="h-9" onClick={cancelEdit}>
+                                      <X className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                </form>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       );
                     })}
                   </TableBody>

@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Upload, Save, Search, CheckCircle, Check } from 'lucide-react';
+import { Upload, Save, Search, CheckCircle, Check, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
 import {
@@ -212,7 +212,8 @@ function rowKey(r: { data_deposito: string; valor: number; depositante: string; 
 export default function DepositosBrinks() {
   const centrosCusto = useListaConfig('centros_custo', CENTROS_CUSTO_FALLBACK);
 
-  const { selectedPostoId, role } = useAuth();
+  const { selectedPostoId, role, postoNome } = useAuth();
+  const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
   const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter();
   const [importRows, setImportRows] = useState<BrinksRow[]>([]);
   const [loteId, setLoteId] = useState<string>('');
@@ -234,6 +235,11 @@ export default function DepositosBrinks() {
   const [concSaving, setConcSaving] = useState(false);
   const [forceDialogOpen, setForceDialogOpen] = useState(false);
   const [forceDialogValor, setForceDialogValor] = useState(0);
+
+  // Delete state
+  const [deleteIds, setDeleteIds] = useState<string[]>([]);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Sort state
   const [sortField, setSortField] = useState<string | null>('data_deposito');
@@ -657,6 +663,29 @@ export default function DepositosBrinks() {
     }
   };
 
+  const handleDelete = async () => {
+    if (deleteIds.length === 0) return;
+    setDeleting(true);
+    const { error } = await supabase
+      .from('depositos_brinks')
+      .delete()
+      .in('id', deleteIds);
+    if (error) {
+      toast.error('Erro ao excluir: ' + error.message);
+    } else {
+      toast.success(`${deleteIds.length} depósito(s) excluído(s)`);
+      setConcSelected(prev => {
+        const next = new Set(prev);
+        deleteIds.forEach(id => next.delete(id));
+        return next;
+      });
+      loadAllDepositos();
+    }
+    setDeleting(false);
+    setDeleteConfirmOpen(false);
+    setDeleteIds([]);
+  };
+
   const formatCurrency = (v: number) =>
     v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -688,14 +717,20 @@ export default function DepositosBrinks() {
       {isImporting && importRows.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">
-              Importação — {importRows.length} registros
-              {duplicatesRemoved > 0 && (
-                <span className="text-sm font-normal text-muted-foreground ml-2">
-                  ({duplicatesRemoved} duplicados ignorados)
-                </span>
-              )}
-            </CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-base">
+                Importação — {importRows.length} registros
+                {duplicatesRemoved > 0 && (
+                  <span className="text-sm font-normal text-muted-foreground ml-2">
+                    ({duplicatesRemoved} duplicados ignorados)
+                  </span>
+                )}
+              </CardTitle>
+              <Button onClick={() => setConfirmSaveOpen(true)} disabled={saving} size="sm">
+                <Save className="w-4 h-4 mr-1" />
+                {saving ? 'Salvando...' : 'Salvar Depósitos'}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="overflow-auto max-h-[calc(100vh-200px)]">
             <Table>
@@ -761,10 +796,6 @@ export default function DepositosBrinks() {
                   </div>
                 </>
               )}
-              <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto">
-                <Save className="w-4 h-4 mr-1" />
-                {saving ? 'Salvando...' : 'Salvar Depósitos'}
-              </Button>
             </div>
           </CardContent>
         </Card>
@@ -780,6 +811,16 @@ export default function DepositosBrinks() {
                 {loading && <span className="text-sm font-normal text-muted-foreground ml-2">Carregando...</span>}
               </CardTitle>
               <div className="flex items-center gap-2">
+                {role === 'admin' && concSelected.size > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => { setDeleteIds(Array.from(concSelected)); setDeleteConfirmOpen(true); }}
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Excluir selecionados ({concSelected.size})
+                  </Button>
+                )}
                 {activeFilterCount > 0 && (
                   <Button variant="ghost" size="sm" className="text-xs" onClick={() => {
                     setFilterDataDeposito(new Set());
@@ -959,9 +1000,21 @@ export default function DepositosBrinks() {
                               />
                             </TableCell>
                             <TableCell>
-                              <Button size="sm" variant="ghost" onClick={() => handleUpdateRow(dep)}>
-                                {savedRows.has(dep.id) ? <Check className="w-3 h-3 text-green-600" /> : <Save className="w-3 h-3" />}
-                              </Button>
+                              <div className="flex gap-1">
+                                <Button size="sm" variant="ghost" onClick={() => handleUpdateRow(dep)}>
+                                  {savedRows.has(dep.id) ? <Check className="w-3 h-3 text-green-600" /> : <Save className="w-3 h-3" />}
+                                </Button>
+                                {role === 'admin' && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-destructive hover:text-destructive"
+                                    onClick={() => { setDeleteIds([dep.id]); setDeleteConfirmOpen(true); }}
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                )}
+                              </div>
                             </TableCell>
                           </TableRow>
                         );
@@ -1065,6 +1118,46 @@ export default function DepositosBrinks() {
           </div>
         </div>
       )}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={open => { if (!open) setDeleteIds([]); setDeleteConfirmOpen(open); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir{' '}
+              <strong>{deleteIds.length} {deleteIds.length === 1 ? 'linha selecionada' : 'linhas selecionadas'}</strong>?
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteIds([])}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? 'Excluindo...' : 'Excluir'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmSaveOpen} onOpenChange={setConfirmSaveOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar importação</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja importar este relatório para o posto <strong>{postoNome}</strong>?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setConfirmSaveOpen(false); handleSave(); }}>
+              Confirmar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={forceDialogOpen} onOpenChange={setForceDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
