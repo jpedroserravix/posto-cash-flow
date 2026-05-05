@@ -21,6 +21,7 @@ import Funcionarios from "./pages/pessoal/Funcionarios";
 import PontoOcorrencias from "./pages/pessoal/PontoOcorrencias";
 import FechamentoMensal from "./pages/pessoal/FechamentoMensal";
 import HistoricoFuncionario from "./pages/pessoal/HistoricoFuncionario";
+import Recrutamento from "./pages/pessoal/Recrutamento";
 import LancamentoNotas from "./pages/notas/LancamentoNotas";
 import Pedidos from "./pages/compras/Pedidos";
 import Cursos from "./pages/Cursos";
@@ -90,6 +91,7 @@ function AppRoutes() {
       <Route path="/ponto"             element={<ProtectedRoute permission="pessoal"><PontoOcorrencias /></ProtectedRoute>} />
       <Route path="/fechamento"        element={<ProtectedRoute permission="pessoal"><FechamentoMensal /></ProtectedRoute>} />
       <Route path="/historico-pessoal" element={<ProtectedRoute permission="pessoal"><HistoricoFuncionario /></ProtectedRoute>} />
+      <Route path="/recrutamento"      element={<ProtectedRoute permission="recrutamento"><Recrutamento /></ProtectedRoute>} />
       <Route path="/alvaras"       element={<ProtectedRoute permission="alvaras">      <Documentos /></ProtectedRoute>} />
       <Route path="/garantias"     element={<ProtectedRoute permission="garantias">    <Documentos /></ProtectedRoute>} />
       <Route path="/docs-empresa"  element={<ProtectedRoute permission="docs-empresa"> <Documentos /></ProtectedRoute>} />

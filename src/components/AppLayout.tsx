@@ -15,7 +15,7 @@ import {
   Fuel, LogOut, FileSpreadsheet, PenLine, BarChart3, Building2, Users,
   Landmark, Receipt, Zap, LayoutDashboard, FileCheck2, ShoppingBag,
   UserCircle, Clock, Calculator, History, ClipboardList, Package,
-  Info, Copy, Check, GraduationCap, LayoutGrid, Settings, KeyRound, ChevronDown, ShieldCheck,
+  Info, Copy, Check, GraduationCap, LayoutGrid, Settings, KeyRound, ChevronDown, ShieldCheck, UserSearch,
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -91,6 +91,7 @@ const primaryNavGroups: NavGroup[] = [
       { to: '/ponto',             label: 'Ponto e Ocorrências', icon: Clock,      permission: 'pessoal' },
       { to: '/fechamento',        label: 'Fechamento Mensal',   icon: Calculator, permission: 'pessoal' },
       { to: '/historico-pessoal', label: 'Histórico',           icon: History,    permission: 'pessoal' },
+      { to: '/recrutamento',      label: 'Recrutamento',        icon: UserSearch, permission: 'recrutamento' },
     ],
   },
   {

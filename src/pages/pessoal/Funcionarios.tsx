@@ -241,6 +241,13 @@ interface TreinamentoSummary {
   data_vencimento: string | null;
 }
 
+// ─── recrutamento summary ────────────────────────────────────────────────────
+
+interface RecrutamentoInfo {
+  primeiraEntrevista: string | null;
+  numDiarias: number;
+}
+
 // ─── CPF duplicate check warning ────────────────────────────────────────────
 
 interface CPFWarning {
@@ -295,6 +302,7 @@ export default function Funcionarios() {
 
   // detail dialog (documentos)
   const [detailTarget, setDetailTarget] = useState<Funcionario | null>(null);
+  const [recrutamentoInfo, setRecrutamentoInfo] = useState<RecrutamentoInfo | null>(null);
   const [docList, setDocList] = useState<FuncDocumento[]>([]);
   const [docLoading, setDocLoading] = useState(false);
   const [docUploadTipo, setDocUploadTipo] = useState('');
@@ -656,9 +664,38 @@ export default function Funcionarios() {
     setDesligOpen(true);
   }
 
+  async function loadRecrutamentoInfo(funcId: string) {
+    const { data: cand } = await (supabase as any)
+      .from('pessoal_candidatos')
+      .select('id')
+      .eq('funcionario_id', funcId)
+      .maybeSingle();
+
+    if (!cand) { setRecrutamentoInfo(null); return; }
+
+    const [{ data: entrevistas }, { count }] = await Promise.all([
+      (supabase as any)
+        .from('candidatos_entrevistas')
+        .select('data_entrevista')
+        .eq('candidato_id', cand.id)
+        .order('data_entrevista', { ascending: true })
+        .limit(1),
+      (supabase as any)
+        .from('candidatos_diarias')
+        .select('*', { count: 'exact', head: true })
+        .eq('candidato_id', cand.id),
+    ]);
+
+    setRecrutamentoInfo({
+      primeiraEntrevista: entrevistas?.[0]?.data_entrevista ?? null,
+      numDiarias: count ?? 0,
+    });
+  }
+
   function openDetail(f: Funcionario) {
     setDetailTarget(f);
     loadDocs(f.id);
+    loadRecrutamentoInfo(f.id);
   }
 
   // ─── render ────────────────────────────────────────────────────────────────
@@ -1168,6 +1205,7 @@ export default function Funcionarios() {
         onOpenChange={(o) => {
           if (!o) {
             setDetailTarget(null);
+            setRecrutamentoInfo(null);
             loadBadgeData(funcionarios);
           }
         }}
@@ -1176,6 +1214,14 @@ export default function Funcionarios() {
           <DialogHeader>
             <DialogTitle>{detailTarget?.nome}</DialogTitle>
           </DialogHeader>
+          {recrutamentoInfo && (
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 mb-3">
+              <span className="font-medium">Veio do recrutamento</span>
+              {recrutamentoInfo.primeiraEntrevista && ` — Entrevista em ${formatDate(recrutamentoInfo.primeiraEntrevista)}`}
+              {` — ${recrutamentoInfo.numDiarias} diária${recrutamentoInfo.numDiarias !== 1 ? 's' : ''}`}
+              {detailTarget?.data_admissao && ` — Contratado em ${formatDate(detailTarget.data_admissao)}`}
+            </div>
+          )}
           <Tabs defaultValue="docs">
             <TabsList className="h-8">
               <TabsTrigger value="docs" className="text-xs">Documentos</TabsTrigger>

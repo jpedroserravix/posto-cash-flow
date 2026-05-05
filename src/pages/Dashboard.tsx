@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Plus, Trash2, AlertTriangle, Clock, FileWarning, GraduationCap, X, CalendarX2 } from 'lucide-react';
+import { Plus, Trash2, AlertTriangle, Clock, FileWarning, GraduationCap, X, CalendarX2, CalendarClock } from 'lucide-react';
 import { computeFeriasAlert, type FeriasRecord } from '@/lib/feriasPeriodos';
 import frases from '@/data/frasesSantos.json';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -29,7 +29,7 @@ interface Recado {
 
 interface AlertaItem {
   id: string;
-  tipo: 'alvara' | 'treinamento' | 'contrato' | 'ferias';
+  tipo: 'alvara' | 'treinamento' | 'contrato' | 'ferias' | 'entrevista';
   nome: string;
   detalhe: string;
   postoNome: string;
@@ -150,7 +150,11 @@ export default function Dashboard() {
     future.setDate(future.getDate() + 90);
     const futureStr = future.toISOString().split('T')[0];
 
-    const [{ data: alvaras }, { data: treinamentosRaw }, { data: contratos }, { data: funcParaFerias }] = await Promise.all([
+    const alertDate3 = new Date();
+    alertDate3.setDate(alertDate3.getDate() + 3);
+    const alertDate3Str = alertDate3.toISOString().split('T')[0];
+
+    const [{ data: alvaras }, { data: treinamentosRaw }, { data: contratos }, { data: funcParaFerias }, { data: entrevistasRaw }] = await Promise.all([
       (supabase as any)
         .from('documentos_alvaras')
         .select('id, nome_documento, posto_id, data_vencimento')
@@ -179,6 +183,13 @@ export default function Dashboard() {
         .in('posto_id', postoIds)
         .eq('status', 'ativo')
         .not('data_admissao', 'is', null),
+      // Interviews in the next 3 days with no result yet
+      (supabase as any)
+        .from('candidatos_entrevistas')
+        .select('id, data_entrevista, horario, local, entrevistador, pessoal_candidatos(nome, posto_id)')
+        .is('resultado', null)
+        .gte('data_entrevista', today)
+        .lte('data_entrevista', alertDate3Str),
     ]);
 
     const items: AlertaItem[] = [];
@@ -271,6 +282,23 @@ export default function Dashboard() {
         });
       });
     }
+
+    // ── entrevistas agendadas (próximos 3 dias) ─────────────────────────────
+    (entrevistasRaw ?? []).forEach((e: any) => {
+      const cand = e.pessoal_candidatos;
+      if (!cand || !postoIds.includes(cand.posto_id)) return;
+      const postoNome = allPostos.find((p) => p.id === cand.posto_id)?.nome ?? '';
+      const hora = (e.horario ?? '').slice(0, 5);
+      items.push({
+        id: e.id,
+        tipo: 'entrevista',
+        nome: `Entrevista — ${cand.nome}`,
+        detalhe: `${hora}${e.local ? ' · ' + e.local : ''}${e.entrevistador ? ' · ' + e.entrevistador : ''}`,
+        postoNome,
+        dias: daysUntil(e.data_entrevista),
+        dataVencimento: e.data_entrevista,
+      });
+    });
 
     items.sort((a, b) => a.dias - b.dias);
     setAlertas(items);
@@ -503,6 +531,8 @@ export default function Dashboard() {
                       <Clock className={`w-4 h-4 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
                     ) : a.tipo === 'ferias' ? (
                       <CalendarX2 className={`w-4 h-4 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
+                    ) : a.tipo === 'entrevista' ? (
+                      <CalendarClock className={`w-4 h-4 ${isProximo ? 'text-purple-600' : 'text-muted-foreground'}`} />
                     ) : (
                       <FileWarning className={`w-4 h-4 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
                     )}
