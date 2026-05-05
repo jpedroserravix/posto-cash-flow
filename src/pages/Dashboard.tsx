@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Plus, Trash2, AlertTriangle, Clock, FileWarning, GraduationCap, X, CalendarX2, CalendarClock } from 'lucide-react';
+import { Plus, Trash2, AlertTriangle, Clock, FileWarning, GraduationCap, X, CalendarX2, CalendarClock, Inbox } from 'lucide-react';
 import { computeFeriasAlert, type FeriasRecord } from '@/lib/feriasPeriodos';
 import frases from '@/data/frasesSantos.json';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -102,7 +103,7 @@ const fraseDia = (frases as { dia: number; santo: string; frase: string }[])[
 // ─── component ───────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const { allPostos, selectedPostoId, user, role, nome } = useAuth();
+  const { allPostos, selectedPostoId, user, role, nome, hasPermission } = useAuth();
 
   const postoIds = useMemo(
     () => (allPostos.length > 0 ? allPostos.map((p) => p.id) : selectedPostoId ? [selectedPostoId] : []),
@@ -121,6 +122,9 @@ export default function Dashboard() {
   // ── alertas state ──────────────────────────────────────────────────────────
   const [alertas, setAlertas] = useState<AlertaItem[]>([]);
 
+  // ── caixa de entrada state ─────────────────────────────────────────────────
+  const [novos, setNovos] = useState({ curriculos: 0, feedbacks: 0 });
+
   // ── load ───────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -129,6 +133,18 @@ export default function Dashboard() {
       loadAlertas();
     }
   }, [postoIds]);
+
+  useEffect(() => {
+    if (hasPermission('caixa-entrada')) loadNovos();
+  }, [hasPermission]);
+
+  async function loadNovos() {
+    const [{ count: c1 }, { count: c2 }] = await Promise.all([
+      (supabase as any).from('publico_curriculos').select('id', { count: 'exact', head: true }).eq('status', 'Novo'),
+      (supabase as any).from('publico_feedback').select('id', { count: 'exact', head: true }).eq('status', 'Novo'),
+    ]);
+    setNovos({ curriculos: c1 ?? 0, feedbacks: c2 ?? 0 });
+  }
 
   async function loadRecados() {
     const now = new Date().toISOString();
@@ -493,6 +509,29 @@ export default function Dashboard() {
           })}
         </div>
       </div>
+
+      {/* ── SEÇÃO 2.5: CAIXA DE ENTRADA ──────────────────────────────────── */}
+      {hasPermission('caixa-entrada') && (novos.curriculos > 0 || novos.feedbacks > 0) && (
+        <Link to="/caixa-entrada" className="block">
+          <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/20 px-4 py-3 flex items-center gap-3 hover:bg-blue-100 dark:hover:bg-blue-950/40 transition-colors">
+            <Inbox className="w-4 h-4 text-blue-600 shrink-0" />
+            <div className="flex-1 flex flex-wrap items-center gap-2 text-sm text-blue-800 dark:text-blue-200">
+              <span className="font-medium">Caixa de Entrada</span>
+              {novos.curriculos > 0 && (
+                <Badge className="bg-blue-600 hover:bg-blue-600 text-white text-[10px]">
+                  {novos.curriculos} {novos.curriculos === 1 ? 'novo currículo' : 'novos currículos'}
+                </Badge>
+              )}
+              {novos.feedbacks > 0 && (
+                <Badge className="bg-purple-600 hover:bg-purple-600 text-white text-[10px]">
+                  {novos.feedbacks} {novos.feedbacks === 1 ? 'novo feedback' : 'novos feedbacks'}
+                </Badge>
+              )}
+            </div>
+            <span className="text-xs text-blue-600 shrink-0">Ver →</span>
+          </div>
+        </Link>
+      )}
 
       {/* ── SEÇÃO 3: ALERTAS DE DOCUMENTOS ───────────────────────────────── */}
       <div className="space-y-3">

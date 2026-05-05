@@ -19,6 +19,7 @@ export const ALL_PERMISSIONS = [
   { key: 'configuracoes',         label: 'Configurações' },
   { key: 'acessos-senhas',        label: 'Acessos e Senhas' },
   { key: 'historico-rede',        label: 'Histórico da Rede (todos os postos)' },
+  { key: 'caixa-entrada',         label: 'Caixa de Entrada (Currículos e Feedback)' },
 ] as const;
 
 export type PermissionKey = (typeof ALL_PERMISSIONS)[number]['key'];
@@ -54,6 +55,7 @@ export const ROUTE_PERMISSION_MAP: { path: string; permission: string }[] = [
   { path: '/cursos',            permission: 'cursos-treinamentos' },
   { path: '/configuracoes',    permission: 'configuracoes' },
   { path: '/acessos-senhas',   permission: 'acessos-senhas' },
+  { path: '/caixa-entrada',    permission: 'caixa-entrada' },
 ];
 
 export function firstAllowedPath(hasPermission: (k: string) => boolean): string {

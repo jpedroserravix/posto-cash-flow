@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Plus, Trash2, Settings } from 'lucide-react';
+import { Plus, Trash2, Settings, RotateCcw } from 'lucide-react';
 import { invalidateListaConfig } from '@/hooks/useListaConfig';
 
 // ─── types ──────────────────────────────────────────────────────────────────
@@ -22,6 +22,7 @@ interface ListaItem {
 
 const LISTAS: { key: string; label: string; hint?: string }[] = [
   { key: 'cargos',               label: 'Cargos',                           hint: 'Usado no cadastro de funcionários' },
+  { key: 'cargos_publico',       label: 'Cargos — Página Pública',          hint: 'Opções de cargo exibidas no formulário público de candidatura (/publico)' },
   { key: 'escalas_trabalho',     label: 'Escalas de Trabalho',              hint: 'Usado na jornada de trabalho do funcionário' },
   { key: 'centros_custo',        label: 'Centros de Custo',                 hint: 'Usado nos depósitos Brinks e Manuais' },
   { key: 'tipos_doc_funcionario', label: 'Tipos de Documento do Funcionário', hint: 'Usado na aba Documentos do funcionário' },
@@ -44,7 +45,6 @@ export default function Configuracoes() {
     const { data, error } = await (supabase as any)
       .from('listas_configuracoes')
       .select('*')
-      .eq('ativo', true)
       .order('lista')
       .order('ordem', { ascending: true });
     if (error) { toast.error('Erro ao carregar configurações'); }
@@ -56,11 +56,21 @@ export default function Configuracoes() {
     const raw = (adding[lista] || '').trim();
     if (!raw) return;
 
-    // Check duplicate within this lista
-    const duplicate = items.some(
-      (it) => it.lista === lista && it.valor.toLowerCase() === raw.toLowerCase()
+    // If item already exists and is active, block
+    const activeMatch = items.find(
+      (it) => it.lista === lista && it.ativo && it.valor.toLowerCase() === raw.toLowerCase()
     );
-    if (duplicate) { toast.error('Esse valor já existe na lista'); return; }
+    if (activeMatch) { toast.error('Esse valor já existe na lista'); return; }
+
+    // If item exists but is inactive, reactivate instead of inserting
+    const inactiveMatch = items.find(
+      (it) => it.lista === lista && !it.ativo && it.valor.toLowerCase() === raw.toLowerCase()
+    );
+    if (inactiveMatch) {
+      await handleReactivate(inactiveMatch);
+      setAdding((prev) => ({ ...prev, [lista]: '' }));
+      return;
+    }
 
     setSaving(lista);
     const maxOrdem = items
@@ -79,6 +89,22 @@ export default function Configuracoes() {
       setAdding((prev) => ({ ...prev, [lista]: '' }));
       invalidateListaConfig(lista);
       toast.success('Item adicionado');
+    }
+    setSaving(null);
+  }
+
+  async function handleReactivate(item: ListaItem) {
+    setSaving(item.id);
+    const { error } = await (supabase as any)
+      .from('listas_configuracoes')
+      .update({ ativo: true })
+      .eq('id', item.id);
+
+    if (error) { toast.error(`Erro ao reativar: ${error.message}`); }
+    else {
+      setItems((prev) => prev.map((it) => it.id === item.id ? { ...it, ativo: true } : it));
+      invalidateListaConfig(item.lista);
+      toast.success('Item reativado');
     }
     setSaving(null);
   }
@@ -103,7 +129,8 @@ export default function Configuracoes() {
     setSaving(null);
   }
 
-  const itemsByLista = (lista: string) => items.filter((it) => it.lista === lista);
+  const activeByLista   = (lista: string) => items.filter((it) => it.lista === lista && it.ativo);
+  const inactiveByLista = (lista: string) => items.filter((it) => it.lista === lista && !it.ativo);
 
   if (loading) {
     return (
@@ -122,7 +149,8 @@ export default function Configuracoes() {
       </p>
 
       {LISTAS.map(({ key, label, hint }) => {
-        const listaItems = itemsByLista(key);
+        const activeItems   = activeByLista(key);
+        const inactiveItems = inactiveByLista(key);
         const addVal = adding[key] || '';
 
         return (
@@ -132,12 +160,12 @@ export default function Configuracoes() {
               {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
             </CardHeader>
             <CardContent className="space-y-3">
-              {/* Item list */}
-              {listaItems.length === 0 ? (
+              {/* Active items */}
+              {activeItems.length === 0 && inactiveItems.length === 0 ? (
                 <p className="text-xs text-muted-foreground italic">Nenhum item cadastrado — usando valores padrão do sistema.</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  {listaItems.map((item) => (
+                  {activeItems.map((item) => (
                     <Badge
                       key={item.id}
                       variant="secondary"
@@ -151,6 +179,23 @@ export default function Configuracoes() {
                         title="Remover"
                       >
                         <Trash2 className="w-3 h-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                  {inactiveItems.map((item) => (
+                    <Badge
+                      key={item.id}
+                      variant="outline"
+                      className="flex items-center gap-1.5 pl-2.5 pr-1.5 py-0.5 text-sm text-muted-foreground border-dashed opacity-60"
+                    >
+                      {item.valor}
+                      <button
+                        onClick={() => handleReactivate(item)}
+                        disabled={saving === item.id}
+                        className="ml-0.5 hover:text-green-600 transition-colors disabled:opacity-40"
+                        title="Reativar"
+                      >
+                        <RotateCcw className="w-3 h-3" />
                       </button>
                     </Badge>
                   ))}
