@@ -13,7 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { FileText, UserPlus, Search } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { FileText, UserPlus, Search, Trash2 } from 'lucide-react';
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
@@ -121,6 +122,10 @@ export default function CaixaEntrada() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailTarget, setDetailTarget] = useState<Curriculo | null>(null);
 
+  // ── delete dialog ──────────────────────────────────────────────────────────
+  const [deleteTarget, setDeleteTarget] = useState<{ type: 'curriculo' | 'feedback'; id: string; path?: string | null } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   // ── mover dialog ───────────────────────────────────────────────────────────
   const [moverOpen, setMoverOpen] = useState(false);
   const [moverTarget, setMoverTarget] = useState<Curriculo | null>(null);
@@ -170,6 +175,33 @@ export default function CaixaEntrada() {
       .from('publico_feedback').update({ status }).eq('id', id);
     if (error) toast.error('Erro ao atualizar status');
     else setFeedbacks((prev) => prev.map((f) => f.id === id ? { ...f, status } : f));
+  }
+
+  // ── delete ────────────────────────────────────────────────────────────────
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+
+    if (deleteTarget.type === 'curriculo') {
+      if (deleteTarget.path) {
+        await supabase.storage.from('curriculos-publico').remove([deleteTarget.path]);
+      }
+      const { error } = await (supabase as any)
+        .from('publico_curriculos').delete().eq('id', deleteTarget.id);
+      if (error) { toast.error('Erro ao excluir currículo'); setDeleting(false); return; }
+      setCurriculos((prev) => prev.filter((c) => c.id !== deleteTarget.id));
+      toast.success('Currículo excluído');
+    } else {
+      const { error } = await (supabase as any)
+        .from('publico_feedback').delete().eq('id', deleteTarget.id);
+      if (error) { toast.error('Erro ao excluir feedback'); setDeleting(false); return; }
+      setFeedbacks((prev) => prev.filter((f) => f.id !== deleteTarget.id));
+      toast.success('Feedback excluído');
+    }
+
+    setDeleting(false);
+    setDeleteTarget(null);
   }
 
   // ── ver arquivo ────────────────────────────────────────────────────────────
@@ -369,17 +401,29 @@ export default function CaixaEntrada() {
                           </Select>
                         </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()} className="whitespace-nowrap">
-                          {c.candidato_id ? (
-                            <Badge className="bg-emerald-700 hover:bg-emerald-700 text-white text-[10px]">No Recrutamento</Badge>
-                          ) : (
-                            <Button
-                              variant="outline" size="sm" className="h-7 text-xs gap-1 border-green-300 text-green-700 hover:bg-green-50"
-                              onClick={() => openMover(c)}
-                            >
-                              <UserPlus className="w-3 h-3" />
-                              Recrutar
-                            </Button>
-                          )}
+                          <div className="flex items-center gap-1.5">
+                            {c.candidato_id ? (
+                              <Badge className="bg-emerald-700 hover:bg-emerald-700 text-white text-[10px]">No Recrutamento</Badge>
+                            ) : (
+                              <Button
+                                variant="outline" size="sm" className="h-7 text-xs gap-1 border-green-300 text-green-700 hover:bg-green-50"
+                                onClick={() => openMover(c)}
+                              >
+                                <UserPlus className="w-3 h-3" />
+                                Recrutar
+                              </Button>
+                            )}
+                            {isAdmin && (
+                              <Button
+                                variant="ghost" size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-red-500 hover:bg-red-50"
+                                onClick={() => setDeleteTarget({ type: 'curriculo', id: c.id, path: c.arquivo_path })}
+                                title="Excluir currículo"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -438,6 +482,7 @@ export default function CaixaEntrada() {
                       <TableHead className="text-xs">Tipo</TableHead>
                       <TableHead className="text-xs">Mensagem</TableHead>
                       <TableHead className="text-xs">Status</TableHead>
+                      {isAdmin && <TableHead className="text-xs w-10"></TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -467,6 +512,18 @@ export default function CaixaEntrada() {
                             </SelectContent>
                           </Select>
                         </TableCell>
+                        {isAdmin && (
+                          <TableCell>
+                            <Button
+                              variant="ghost" size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-red-500 hover:bg-red-50"
+                              onClick={() => setDeleteTarget({ type: 'feedback', id: f.id })}
+                              title="Excluir feedback"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -565,6 +622,31 @@ export default function CaixaEntrada() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Confirmação de exclusão ──────────────────────────────────── */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget?.type === 'curriculo'
+                ? 'Tem certeza que deseja excluir este currículo?'
+                : 'Tem certeza que deseja excluir este feedback?'}
+              {' '}Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              disabled={deleting}
+              onClick={handleConfirmDelete}
+            >
+              {deleting ? 'Excluindo...' : 'Excluir'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ── Mover para Recrutamento Dialog ───────────────────────────── */}
       <Dialog open={moverOpen} onOpenChange={(o) => !o && setMoverOpen(false)}>
