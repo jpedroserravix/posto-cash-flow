@@ -55,6 +55,8 @@ interface Feedback {
   tipo: string;
   mensagem: string;
   status: string;
+  whatsapp: string | null;
+  posto_id: string | null;
   created_at: string;
 }
 
@@ -479,6 +481,8 @@ export default function CaixaEntrada() {
                     <TableRow>
                       <TableHead className="text-xs">Data</TableHead>
                       <TableHead className="text-xs">Nome</TableHead>
+                      <TableHead className="text-xs">WhatsApp</TableHead>
+                      <TableHead className="text-xs">Posto</TableHead>
                       <TableHead className="text-xs">Tipo</TableHead>
                       <TableHead className="text-xs">Mensagem</TableHead>
                       <TableHead className="text-xs">Status</TableHead>
@@ -487,15 +491,19 @@ export default function CaixaEntrada() {
                   </TableHeader>
                   <TableBody>
                     {loadingFeedbacks && (
-                      <TableRow><TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-8">Carregando...</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={isAdmin ? 8 : 7} className="text-center text-xs text-muted-foreground py-8">Carregando...</TableCell></TableRow>
                     )}
                     {!loadingFeedbacks && paginaFeedbacks.paginatedData.length === 0 && (
-                      <TableRow><TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-8">Nenhum feedback encontrado.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={isAdmin ? 8 : 7} className="text-center text-xs text-muted-foreground py-8">Nenhum feedback encontrado.</TableCell></TableRow>
                     )}
                     {paginaFeedbacks.paginatedData.map((f) => (
                       <TableRow key={f.id} className="text-xs">
                         <TableCell className="whitespace-nowrap">{formatDate(f.created_at)}</TableCell>
                         <TableCell>{f.nome ?? <span className="text-muted-foreground italic">Anônimo</span>}</TableCell>
+                        <TableCell className="whitespace-nowrap">{f.whatsapp ?? '—'}</TableCell>
+                        <TableCell className="max-w-[120px] truncate" title={allPostos.find((p) => p.id === f.posto_id)?.nome ?? ''}>
+                          {allPostos.find((p) => p.id === f.posto_id)?.nome ?? '—'}
+                        </TableCell>
                         <TableCell>
                           <Badge className={`text-[10px] text-white ${FEEDBACK_TYPE_COLORS[f.tipo] ?? 'bg-gray-400 hover:bg-gray-400'}`}>
                             {f.tipo}

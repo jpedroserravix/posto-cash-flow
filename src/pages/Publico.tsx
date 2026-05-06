@@ -62,7 +62,7 @@ const ANOS = Array.from({ length: ANO_ATUAL - 2009 }, (_, i) => String(ANO_ATUAL
 const CIDADES = ['Vitória', 'Serra', 'Vila Velha', 'Cariacica', 'Outra'];
 
 const EMPTY_CURRICULO = { nome: '', cpf: '', rg: '', whatsapp: '', cidadeSel: '', cidadeOutra: '', bairro: '', cargo: '', posto_id: '' };
-const EMPTY_FEEDBACK  = { nome: '', tipo: '', mensagem: '' };
+const EMPTY_FEEDBACK  = { nome: '', tipo: '', mensagem: '', whatsapp: '', posto_id: '' };
 const EMPTY_EXP = (): Experiencia => ({ cargo: '', empresa: '', descricao: '', inicioMes: '', inicioAno: '', fimMes: '', fimAno: '', atual: false });
 
 // ─── component ────────────────────────────────────────────────────────────────
@@ -178,6 +178,7 @@ export default function Publico() {
   async function handleSubmitFeedback() {
     if (!feedback.tipo) { toast.error('Selecione o tipo'); return; }
     if (!feedback.mensagem.trim()) { toast.error('Escreva uma mensagem'); return; }
+    if (!feedback.posto_id) { toast.error('Selecione o posto'); return; }
 
     setSendingFeedback(true);
 
@@ -185,6 +186,8 @@ export default function Publico() {
       nome:     feedback.nome.trim() || null,
       tipo:     feedback.tipo,
       mensagem: feedback.mensagem.trim(),
+      whatsapp: feedback.whatsapp.trim() || null,
+      posto_id: feedback.posto_id,
     });
 
     if (error) { toast.error('Erro ao enviar. Tente novamente.'); setSendingFeedback(false); return; }
@@ -563,6 +566,32 @@ export default function Publico() {
                     value={feedback.nome}
                     onChange={(e) => setFeedback((f) => ({ ...f, nome: e.target.value }))}
                   />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium">WhatsApp</Label>
+                  <Input
+                    className="h-12 text-base"
+                    placeholder="Opcional — (00) 00000-0000"
+                    type="tel"
+                    value={feedback.whatsapp}
+                    onChange={(e) => setFeedback((f) => ({ ...f, whatsapp: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium">Posto *</Label>
+                  <Select
+                    value={feedback.posto_id}
+                    onValueChange={(v) => setFeedback((f) => ({ ...f, posto_id: v }))}
+                  >
+                    <SelectTrigger className="h-12 text-base">
+                      <SelectValue placeholder="Selecione o posto" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {postos.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-1.5">
