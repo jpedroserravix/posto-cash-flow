@@ -92,7 +92,12 @@ const primaryNavGroups: NavGroup[] = [
       { to: '/fechamento',        label: 'Fechamento Mensal',   icon: Calculator, permission: 'pessoal' },
       { to: '/historico-pessoal', label: 'Histórico',           icon: History,    permission: 'pessoal' },
       { to: '/recrutamento',      label: 'Recrutamento',        icon: UserSearch, permission: 'recrutamento' },
-      { to: '/caixa-entrada',     label: 'Caixa de Entrada',    icon: Inbox,      permission: 'caixa-entrada' },
+    ],
+  },
+  {
+    label: 'Caixa de Entrada',
+    items: [
+      { to: '/caixa-entrada', label: 'Caixa de Entrada', icon: Inbox, permission: 'caixa-entrada' },
     ],
   },
   {
@@ -303,12 +308,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <div className="container flex items-center h-14 gap-2">
 
           {/* Brand */}
-          <div className="flex items-center gap-2 shrink-0">
+          <Link to="/" className="flex items-center gap-2 shrink-0 hover:opacity-80 transition-opacity">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center shadow-sm ring-1 ring-primary/20">
               <Fuel className="w-4 h-4 text-primary-foreground" />
             </div>
             <span className="font-semibold text-sm tracking-tight hidden md:block">POSTO INTELIGENTE</span>
-          </div>
+          </Link>
 
           {/* Cadastros + Documentos — desktop: text buttons, mobile: dropdown */}
           {visibleHeader.length > 0 && (
