@@ -15,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 interface Experiencia {
   cargo: string;
   empresa: string;
+  descricao: string;
   inicioMes: string;
   inicioAno: string;
   fimMes: string;
@@ -35,7 +36,7 @@ function formatCPF(raw: string) {
 function rawCPF(masked: string) { return masked.replace(/\D/g, ''); }
 
 function expIsEmpty(e: Experiencia) {
-  return !e.cargo.trim() && !e.empresa.trim() && !e.inicioMes && !e.inicioAno && !e.fimMes && !e.fimAno && !e.atual;
+  return !e.cargo.trim() && !e.empresa.trim() && !e.descricao.trim() && !e.inicioMes && !e.inicioAno && !e.fimMes && !e.fimAno && !e.atual;
 }
 
 const MESES = [
@@ -58,15 +59,18 @@ const ANOS = Array.from({ length: ANO_ATUAL - 2009 }, (_, i) => String(ANO_ATUAL
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
-const EMPTY_CURRICULO = { nome: '', cpf: '', rg: '', whatsapp: '', cargo: '' };
+const CIDADES = ['Vitória', 'Serra', 'Vila Velha', 'Cariacica', 'Outra'];
+
+const EMPTY_CURRICULO = { nome: '', cpf: '', rg: '', whatsapp: '', cidadeSel: '', cidadeOutra: '', bairro: '', cargo: '', posto_id: '' };
 const EMPTY_FEEDBACK  = { nome: '', tipo: '', mensagem: '' };
-const EMPTY_EXP = (): Experiencia => ({ cargo: '', empresa: '', inicioMes: '', inicioAno: '', fimMes: '', fimAno: '', atual: false });
+const EMPTY_EXP = (): Experiencia => ({ cargo: '', empresa: '', descricao: '', inicioMes: '', inicioAno: '', fimMes: '', fimAno: '', atual: false });
 
 // ─── component ────────────────────────────────────────────────────────────────
 
 export default function Publico() {
   const [cargos, setCargos] = useState<string[]>([]);
   const [cargosLoading, setCargosLoading] = useState(true);
+  const [postos, setPostos] = useState<{ id: string; nome: string }[]>([]);
   const [tab, setTab] = useState<'curriculo' | 'feedback'>('curriculo');
 
   useEffect(() => {
@@ -79,6 +83,14 @@ export default function Publico() {
       .then(({ data }: any) => {
         setCargos(data?.map((r: any) => r.valor as string) ?? []);
         setCargosLoading(false);
+      });
+
+    (supabase as any)
+      .from('postos')
+      .select('id, nome')
+      .order('nome', { ascending: true })
+      .then(({ data }: any) => {
+        setPostos(data ?? []);
       });
   }, []);
 
@@ -104,11 +116,10 @@ export default function Publico() {
     if (!curriculo.nome.trim()) { toast.error('Informe o nome completo'); return; }
     if (rawCPF(curriculo.cpf).length < 11) { toast.error('CPF inválido'); return; }
     if (!curriculo.whatsapp.trim()) { toast.error('Informe o WhatsApp'); return; }
+    const cidadeFinal = curriculo.cidadeSel === 'Outra' ? curriculo.cidadeOutra.trim() : curriculo.cidadeSel;
+    if (!cidadeFinal) { toast.error('Informe a cidade'); return; }
+    if (!curriculo.bairro.trim()) { toast.error('Informe o bairro'); return; }
     if (!curriculo.cargo) { toast.error('Selecione o cargo desejado'); return; }
-    if (!experiencias[0].cargo.trim() || !experiencias[0].empresa.trim()) {
-      toast.error('Preencha pelo menos a 1ª experiência (cargo e empresa)');
-      return;
-    }
     if (curricuFile && curricuFile.size > 5 * 1024 * 1024) { toast.error('Arquivo muito grande. Máximo 5MB'); return; }
 
     setSendingCurriculo(true);
@@ -135,10 +146,11 @@ export default function Publico() {
     const expsToSave = experiencias
       .filter((e) => !expIsEmpty(e))
       .map((e) => ({
-        cargo:   e.cargo.trim(),
-        empresa: e.empresa.trim(),
-        inicio:  e.inicioMes && e.inicioAno ? `${e.inicioMes}/${e.inicioAno}` : '',
-        fim:     e.atual ? 'Atual' : (e.fimMes && e.fimAno ? `${e.fimMes}/${e.fimAno}` : ''),
+        cargo:     e.cargo.trim(),
+        empresa:   e.empresa.trim(),
+        descricao: e.descricao.trim() || undefined,
+        inicio:    e.inicioMes && e.inicioAno ? `${e.inicioMes}/${e.inicioAno}` : '',
+        fim:       e.atual ? 'Atual' : (e.fimMes && e.fimAno ? `${e.fimMes}/${e.fimAno}` : ''),
       }));
 
     const { error } = await (supabase as any).from('publico_curriculos').insert({
@@ -146,6 +158,9 @@ export default function Publico() {
       cpf:           rawCPF(curriculo.cpf),
       rg:            curriculo.rg.trim() || null,
       whatsapp:      curriculo.whatsapp.trim(),
+      cidade:        cidadeFinal,
+      bairro:        curriculo.bairro.trim(),
+      posto_id:      curriculo.posto_id || null,
       cargo_desejado: curriculo.cargo,
       experiencia:   JSON.stringify(expsToSave),
       arquivo_path,
@@ -245,6 +260,7 @@ export default function Publico() {
                   setCurriculo({ ...EMPTY_CURRICULO });
                   setExperiencias([EMPTY_EXP(), EMPTY_EXP(), EMPTY_EXP()]);
                   setCurricuFile(null);
+                  // posto_id já está em EMPTY_CURRICULO como ''
                 }}
               >
                 Enviar outro currículo
@@ -304,6 +320,59 @@ export default function Publico() {
                   />
                 </div>
 
+                {/* Cidade + Bairro */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium">Cidade *</Label>
+                    <Select
+                      value={curriculo.cidadeSel}
+                      onValueChange={(v) => setCurriculo((f) => ({ ...f, cidadeSel: v, cidadeOutra: '' }))}
+                    >
+                      <SelectTrigger className="h-12 text-base">
+                        <SelectValue placeholder="Selecionar" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CIDADES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    {curriculo.cidadeSel === 'Outra' && (
+                      <Input
+                        className="h-12 text-base mt-2"
+                        placeholder="Digite a cidade"
+                        value={curriculo.cidadeOutra}
+                        onChange={(e) => setCurriculo((f) => ({ ...f, cidadeOutra: e.target.value }))}
+                      />
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium">Bairro *</Label>
+                    <Input
+                      className="h-12 text-base"
+                      value={curriculo.bairro}
+                      onChange={(e) => setCurriculo((f) => ({ ...f, bairro: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                {/* Posto desejado */}
+                {postos.length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium">Posto desejado</Label>
+                    <Select
+                      value={curriculo.posto_id}
+                      onValueChange={(v) => setCurriculo((f) => ({ ...f, posto_id: v === '__nenhum__' ? '' : v }))}
+                    >
+                      <SelectTrigger className="h-12 text-base">
+                        <SelectValue placeholder="Selecionar posto (opcional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__nenhum__">Qualquer posto</SelectItem>
+                        {postos.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
                 {/* Cargo desejado */}
                 {!cargosLoading && cargos.length === 0 ? (
                   <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 text-center">
@@ -329,28 +398,14 @@ export default function Publico() {
 
                 {/* Experiências estruturadas */}
                 <div className="space-y-3">
-                  <div>
-                    <p className="text-sm font-medium">Descreva suas últimas 3 experiências</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">(pelo menos 1 obrigatória)</p>
-                  </div>
+                  <p className="text-sm font-medium">Descreva suas últimas 3 experiências</p>
 
-                  {experiencias.map((exp, i) => {
-                    const obrigatorio = i === 0;
-                    return (
+                  {experiencias.map((exp, i) => (
                       <div
                         key={i}
-                        className={`rounded-xl border p-4 space-y-3 ${
-                          obrigatorio ? 'border-blue-200 bg-blue-50/40' : 'border-slate-200 bg-slate-50/40'
-                        }`}
+                        className="rounded-xl border border-slate-200 bg-slate-50/40 p-4 space-y-3"
                       >
-                        <div className="flex items-center gap-2">
-                          <span className={`text-sm font-bold ${obrigatorio ? 'text-blue-700' : 'text-slate-400'}`}>
-                            {i + 1}.
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {obrigatorio ? 'Obrigatória' : 'Opcional'}
-                          </span>
-                        </div>
+                        <span className="text-sm font-bold text-slate-500">{i + 1}.</span>
 
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1">
@@ -431,9 +486,18 @@ export default function Publico() {
                             Trabalho aqui atualmente
                           </label>
                         </div>
+
+                        {/* Descrição */}
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Descrição</Label>
+                          <Textarea
+                            className="text-sm min-h-[72px] resize-none"
+                            value={exp.descricao}
+                            onChange={(e) => setExp(i, { descricao: e.target.value })}
+                          />
+                        </div>
                       </div>
-                    );
-                  })}
+                    ))}
                 </div>
 
                 {/* Arquivo */}

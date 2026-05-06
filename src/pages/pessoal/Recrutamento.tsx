@@ -59,6 +59,7 @@ interface Diaria {
   data: string;
   horario_entrada: string;
   horario_saida: string;
+  valor: number | null;
   observacoes_gerente: string | null;
   created_at: string;
 }
@@ -103,7 +104,7 @@ const EMPTY_ENTREVISTA_FORM = {
 };
 
 const EMPTY_DIARIA_FORM = {
-  data: '', horario_entrada: '', horario_saida: '', posto_id: '', observacoes_gerente: '',
+  data: '', horario_entrada: '', horario_saida: '', posto_id: '', valor: '', observacoes_gerente: '',
 };
 
 const ESCALAS_FALLBACK = ['12x36', '6x1', 'Segunda a Sexta', 'Segunda a Sábado', 'Outros'];
@@ -375,6 +376,13 @@ export default function Recrutamento() {
     else { toast.success('Candidato excluído'); setDeleteTarget(null); await load(); }
   }
 
+  async function handleCandidatoStatus(id: string, status: string) {
+    const { error } = await (supabase as any)
+      .from('pessoal_candidatos').update({ status }).eq('id', id);
+    if (error) { toast.error('Erro ao atualizar status'); return; }
+    setCandidatos((prev) => prev.map((c) => c.id === id ? { ...c, status } : c));
+  }
+
   // ─── open helpers ─────────────────────────────────────────────────────────
 
   function openNew() {
@@ -440,11 +448,6 @@ export default function Recrutamento() {
 
     const { error } = await (supabase as any).from('candidatos_entrevistas').insert(payload);
     if (error) { toast.error('Erro ao agendar: ' + error.message); setSavingEntrevista(false); return; }
-
-    await (supabase as any)
-      .from('pessoal_candidatos')
-      .update({ status: 'Entrevista Agendada' })
-      .eq('id', entrevistaCandidate.id);
 
     toast.success('Entrevista agendada');
     setShowEntrevistaForm(false);
@@ -638,6 +641,9 @@ export default function Recrutamento() {
     if (!diariaForm.data) { toast.error('Informe a data da diária'); return; }
     if (!diariaForm.horario_entrada) { toast.error('Informe o horário de entrada'); return; }
     if (!diariaForm.horario_saida) { toast.error('Informe o horário de saída'); return; }
+    if (!diariaForm.valor.trim()) { toast.error('Informe o valor da diária'); return; }
+    const valorNum = parseFloat(diariaForm.valor.replace(',', '.'));
+    if (isNaN(valorNum) || valorNum < 0) { toast.error('Valor da diária inválido'); return; }
     const postoId = isAdmin ? diariaForm.posto_id : (selectedPostoId ?? '');
     if (!postoId) { toast.error('Selecione o posto'); return; }
     if (!diariaCandidate) return;
@@ -645,6 +651,7 @@ export default function Recrutamento() {
     setSavingDiaria(true);
     const { error } = await (supabase as any).from('candidatos_diarias').insert({
       candidato_id: diariaCandidate.id,
+      valor: valorNum,
       posto_id: postoId,
       data: diariaForm.data,
       horario_entrada: diariaForm.horario_entrada,
@@ -653,14 +660,6 @@ export default function Recrutamento() {
     });
 
     if (error) { toast.error('Erro ao registrar diária: ' + error.message); setSavingDiaria(false); return; }
-
-    if (diariaCandidate.status === 'Aprovado') {
-      await (supabase as any)
-        .from('pessoal_candidatos')
-        .update({ status: 'Em diárias' })
-        .eq('id', diariaCandidate.id);
-      setDiariaCandidate((prev) => prev ? { ...prev, status: 'Em diárias' } : prev);
-    }
 
     toast.success('Diária registrada');
     setShowDiariaForm(false);
@@ -766,9 +765,23 @@ export default function Recrutamento() {
                     <TableCell>{c.cargo_pretendido}</TableCell>
                     {isAdmin && <TableCell>{getPostoNome(c.posto_id)}</TableCell>}
                     <TableCell>
-                      <Badge className={`text-[10px] text-white ${STATUS_COLORS[c.status] ?? 'bg-gray-400'}`}>
-                        {c.status}
-                      </Badge>
+                      <Select value={c.status} onValueChange={(v) => handleCandidatoStatus(c.id, v)}>
+                        <SelectTrigger className="h-6 w-[160px] text-[11px] border-0 shadow-none p-0 gap-1">
+                          <Badge className={`text-[10px] text-white font-normal ${STATUS_COLORS[c.status] ?? 'bg-gray-400 hover:bg-gray-400'}`}>
+                            {c.status}
+                          </Badge>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {STATUSES.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              <div className="flex items-center gap-2">
+                                <span className={`inline-block w-2 h-2 rounded-full ${STATUS_COLORS[s]?.split(' ')[0] ?? 'bg-gray-400'}`} />
+                                {s}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                     <TableCell>{formatDate(c.created_at)}</TableCell>
                     <TableCell>
@@ -1223,8 +1236,13 @@ export default function Recrutamento() {
 
             {/* Summary */}
             {!loadingDiarias && diarias.length > 0 && (
-              <div className="rounded-md bg-teal-50 border border-teal-200 px-3 py-2 text-xs text-teal-800 font-medium">
-                {diarias.length} diária{diarias.length !== 1 ? 's' : ''} realizada{diarias.length !== 1 ? 's' : ''}
+              <div className="rounded-md bg-teal-50 border border-teal-200 px-3 py-2 text-xs text-teal-800 font-medium flex items-center justify-between">
+                <span>{diarias.length} diária{diarias.length !== 1 ? 's' : ''} realizada{diarias.length !== 1 ? 's' : ''}</span>
+                {diarias.some((d) => d.valor != null) && (
+                  <span>
+                    Total: R$ {diarias.reduce((acc, d) => acc + (d.valor ?? 0), 0).toFixed(2).replace('.', ',')}
+                  </span>
+                )}
               </div>
             )}
 
@@ -1244,6 +1262,7 @@ export default function Recrutamento() {
                     <p className="text-xs font-medium">{formatDate(d.data)}</p>
                     <p className="text-[10px] text-muted-foreground">
                       Entrada: {formatTime(d.horario_entrada)} · Saída: {formatTime(d.horario_saida)}
+                      {d.valor != null && ` · R$ ${d.valor.toFixed(2).replace('.', ',')}`}
                     </p>
                     {isAdmin && <p className="text-[10px] text-muted-foreground">Posto: {getPostoNome(d.posto_id)}</p>}
                     {d.observacoes_gerente && (
@@ -1285,6 +1304,18 @@ export default function Recrutamento() {
                       className="h-7 text-xs"
                       value={diariaForm.horario_saida}
                       onChange={(e) => setDiariaForm((f) => ({ ...f, horario_saida: e.target.value }))}
+                    />
+                  </div>
+                  <div className="col-span-2 space-y-1">
+                    <Label className="text-[10px]">Valor da diária (R$) *</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="h-7 text-xs"
+                      placeholder="0,00"
+                      value={diariaForm.valor}
+                      onChange={(e) => setDiariaForm((f) => ({ ...f, valor: e.target.value }))}
                     />
                   </div>
                   {isAdmin && (

@@ -23,13 +23,29 @@ interface Curriculo {
   cpf: string;
   rg: string | null;
   whatsapp: string;
+  cidade: string | null;
+  bairro: string | null;
   cargo_desejado: string;
   experiencia: string | null;
   arquivo_path: string | null;
   arquivo_type: string | null;
   status: string;
   candidato_id: string | null;
+  posto_id: string | null;
   created_at: string;
+}
+
+interface ExpItem {
+  cargo: string;
+  empresa: string;
+  descricao?: string;
+  inicio?: string;
+  fim?: string;
+}
+
+function parseExperiencias(raw: string | null): ExpItem[] {
+  if (!raw) return [];
+  try { return JSON.parse(raw) as ExpItem[]; } catch { return []; }
 }
 
 interface Feedback {
@@ -43,13 +59,16 @@ interface Feedback {
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
-const CURRICULO_STATUSES = ['Novo', 'Lido', 'Arquivado'] as const;
+const CURRICULO_STATUSES = ['Novo', 'Lido', 'Em contato', 'Rejeitado', 'Não respondeu', 'Arquivado'] as const;
 const FEEDBACK_STATUSES  = ['Novo', 'Lido', 'Resolvido'] as const;
 
 const CURRICULO_STATUS_COLORS: Record<string, string> = {
-  Novo:      'bg-blue-500 hover:bg-blue-500',
-  Lido:      'bg-gray-400 hover:bg-gray-400',
-  Arquivado: 'bg-slate-600 hover:bg-slate-600',
+  'Novo':               'bg-blue-500 hover:bg-blue-500',
+  'Lido':               'bg-green-600 hover:bg-green-600',
+  'Em contato':         'bg-yellow-500 hover:bg-yellow-500',
+  'Rejeitado':          'bg-red-500 hover:bg-red-500',
+  'Não respondeu':      'bg-gray-400 hover:bg-gray-400',
+  'Arquivado':          'bg-slate-300 hover:bg-slate-300 text-slate-700',
 };
 
 const FEEDBACK_TYPE_COLORS: Record<string, string> = {
@@ -97,6 +116,10 @@ export default function CaixaEntrada() {
   const [fTipo, setFTipo] = useState('__all__');
   const [fStatus, setFStatus] = useState('__all__');
   const [fSearch, setFSearch] = useState('');
+
+  // ── detail dialog ──────────────────────────────────────────────────────────
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailTarget, setDetailTarget] = useState<Curriculo | null>(null);
 
   // ── mover dialog ───────────────────────────────────────────────────────────
   const [moverOpen, setMoverOpen] = useState(false);
@@ -159,11 +182,22 @@ export default function CaixaEntrada() {
     window.open(data.signedUrl, '_blank');
   }
 
+  // ── open detail ────────────────────────────────────────────────────────────
+
+  function openDetail(c: Curriculo) {
+    setDetailTarget(c);
+    setDetailOpen(true);
+    if (c.status === 'Novo') {
+      handleCurriculoStatus(c.id, 'Lido');
+      setDetailTarget({ ...c, status: 'Lido' });
+    }
+  }
+
   // ── mover para recrutamento ────────────────────────────────────────────────
 
   function openMover(c: Curriculo) {
     setMoverTarget(c);
-    setMoverPosto(isAdmin ? '' : (selectedPostoId ?? ''));
+    setMoverPosto(c.posto_id ?? (isAdmin ? '' : (selectedPostoId ?? '')));
     setMoverOpen(true);
   }
 
@@ -284,58 +318,68 @@ export default function CaixaEntrada() {
                       <TableHead className="text-xs">Nome</TableHead>
                       <TableHead className="text-xs">CPF</TableHead>
                       <TableHead className="text-xs">Cargo</TableHead>
+                      <TableHead className="text-xs">Posto</TableHead>
                       <TableHead className="text-xs">WhatsApp</TableHead>
+                      <TableHead className="text-xs">Cidade</TableHead>
+                      <TableHead className="text-xs">Bairro</TableHead>
                       <TableHead className="text-xs">Status</TableHead>
-                      <TableHead className="text-xs w-28"></TableHead>
+                      <TableHead className="text-xs w-16"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loadingCurriculos && (
-                      <TableRow><TableCell colSpan={7} className="text-center text-xs text-muted-foreground py-8">Carregando...</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={10} className="text-center text-xs text-muted-foreground py-8">Carregando...</TableCell></TableRow>
                     )}
                     {!loadingCurriculos && paginaCurriculos.paginatedData.length === 0 && (
-                      <TableRow><TableCell colSpan={7} className="text-center text-xs text-muted-foreground py-8">Nenhum currículo encontrado.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={10} className="text-center text-xs text-muted-foreground py-8">Nenhum currículo encontrado.</TableCell></TableRow>
                     )}
                     {paginaCurriculos.paginatedData.map((c) => (
-                      <TableRow key={c.id} className="text-xs">
+                      <TableRow
+                        key={c.id}
+                        className="text-xs cursor-pointer hover:bg-muted/50"
+                        onClick={() => openDetail(c)}
+                      >
                         <TableCell className="whitespace-nowrap">{formatDate(c.created_at)}</TableCell>
                         <TableCell className="font-medium max-w-[140px] truncate" title={c.nome}>{c.nome}</TableCell>
                         <TableCell className="whitespace-nowrap">{formatCPF(c.cpf)}</TableCell>
-                        <TableCell className="max-w-[120px] truncate" title={c.cargo_desejado}>{c.cargo_desejado}</TableCell>
+                        <TableCell className="max-w-[110px] truncate" title={c.cargo_desejado}>{c.cargo_desejado}</TableCell>
+                        <TableCell className="max-w-[110px] truncate" title={allPostos.find((p) => p.id === c.posto_id)?.nome ?? ''}>
+                          {allPostos.find((p) => p.id === c.posto_id)?.nome ?? '—'}
+                        </TableCell>
                         <TableCell className="whitespace-nowrap">{c.whatsapp}</TableCell>
-                        <TableCell>
+                        <TableCell className="max-w-[100px] truncate" title={c.cidade ?? ''}>{c.cidade ?? '—'}</TableCell>
+                        <TableCell className="max-w-[100px] truncate" title={c.bairro ?? ''}>{c.bairro ?? '—'}</TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
                           <Select value={c.status} onValueChange={(v) => handleCurriculoStatus(c.id, v)}>
-                            <SelectTrigger className="h-6 w-[95px] text-[11px]"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="h-6 w-[150px] text-[11px] border-0 shadow-none p-0 gap-1">
+                              <Badge className={`text-[10px] text-white font-normal ${CURRICULO_STATUS_COLORS[c.status] ?? 'bg-gray-400 hover:bg-gray-400'}`}>
+                                {c.status}
+                              </Badge>
+                            </SelectTrigger>
                             <SelectContent>
-                              {CURRICULO_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                              {CURRICULO_STATUSES.map((s) => (
+                                <SelectItem key={s} value={s}>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`inline-block w-2 h-2 rounded-full ${CURRICULO_STATUS_COLORS[s]?.split(' ')[0]}`} />
+                                    {s}
+                                  </div>
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            {c.arquivo_path && (
-                              <Button
-                                variant="ghost" size="icon" className="h-7 w-7 text-blue-600"
-                                onClick={() => handleVerArquivo(c.arquivo_path!)}
-                                title="Ver currículo"
-                              >
-                                <FileText className="w-3.5 h-3.5" />
-                              </Button>
-                            )}
-                            {c.candidato_id ? (
-                              <Badge className="bg-emerald-700 hover:bg-emerald-700 text-white text-[10px]">
-                                Recrutamento
-                              </Badge>
-                            ) : (
-                              <Button
-                                variant="ghost" size="icon" className="h-7 w-7 text-green-600"
-                                onClick={() => openMover(c)}
-                                title="Mover para Recrutamento"
-                              >
-                                <UserPlus className="w-3.5 h-3.5" />
-                              </Button>
-                            )}
-                          </div>
+                        <TableCell onClick={(e) => e.stopPropagation()} className="whitespace-nowrap">
+                          {c.candidato_id ? (
+                            <Badge className="bg-emerald-700 hover:bg-emerald-700 text-white text-[10px]">No Recrutamento</Badge>
+                          ) : (
+                            <Button
+                              variant="outline" size="sm" className="h-7 text-xs gap-1 border-green-300 text-green-700 hover:bg-green-50"
+                              onClick={() => openMover(c)}
+                            >
+                              <UserPlus className="w-3 h-3" />
+                              Recrutar
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -439,6 +483,88 @@ export default function CaixaEntrada() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* ── Detalhe do Currículo ─────────────────────────────────────── */}
+      <Dialog open={detailOpen} onOpenChange={(o) => { if (!o) setDetailOpen(false); }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-base">Currículo — {detailTarget?.nome}</DialogTitle>
+          </DialogHeader>
+          {detailTarget && (() => {
+            const exps = parseExperiencias(detailTarget.experiencia);
+            return (
+              <div className="space-y-4 py-1 text-sm">
+                {/* Dados pessoais */}
+                <div className="rounded-md border bg-muted/30 px-3 py-2.5 space-y-1.5 text-xs">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                    <div><span className="text-muted-foreground">Nome:</span> <span className="font-medium">{detailTarget.nome}</span></div>
+                    <div><span className="text-muted-foreground">CPF:</span> {formatCPF(detailTarget.cpf)}</div>
+                    <div><span className="text-muted-foreground">RG:</span> {detailTarget.rg ?? '—'}</div>
+                    <div><span className="text-muted-foreground">WhatsApp:</span> {detailTarget.whatsapp}</div>
+                    <div><span className="text-muted-foreground">Cidade:</span> {detailTarget.cidade ?? '—'}</div>
+                    <div><span className="text-muted-foreground">Bairro:</span> {detailTarget.bairro ?? '—'}</div>
+                    <div className="col-span-2"><span className="text-muted-foreground">Cargo desejado:</span> <span className="font-medium">{detailTarget.cargo_desejado}</span></div>
+                    {detailTarget.posto_id && (
+                      <div className="col-span-2"><span className="text-muted-foreground">Posto desejado:</span> <span className="font-medium">{allPostos.find((p) => p.id === detailTarget.posto_id)?.nome ?? detailTarget.posto_id}</span></div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Experiências */}
+                {exps.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Experiências anteriores</p>
+                    {exps.map((e, i) => (
+                      <div key={i} className="rounded-md border px-3 py-2 space-y-0.5 text-xs">
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="font-semibold text-slate-500 text-[11px]">{i + 1}.</span>
+                          <span className="font-medium">{e.cargo}</span>
+                          {e.empresa && <span className="text-muted-foreground">· {e.empresa}</span>}
+                        </div>
+                        {(e.inicio || e.fim) && (
+                          <p className="text-muted-foreground pl-4">
+                            {[e.inicio, e.fim].filter(Boolean).join(' → ')}
+                          </p>
+                        )}
+                        {e.descricao && <p className="pl-4 text-slate-600 dark:text-slate-400 whitespace-pre-wrap">{e.descricao}</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {exps.length === 0 && (
+                  <p className="text-xs text-muted-foreground italic">Nenhuma experiência informada.</p>
+                )}
+
+                {/* Arquivo */}
+                {detailTarget.arquivo_path && (
+                  <Button
+                    variant="outline" size="sm" className="gap-1.5 text-xs"
+                    onClick={() => handleVerArquivo(detailTarget.arquivo_path!)}
+                  >
+                    <FileText className="w-3.5 h-3.5 text-blue-600" />
+                    Ver currículo anexado
+                  </Button>
+                )}
+              </div>
+            );
+          })()}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setDetailOpen(false)}>Fechar</Button>
+            {detailTarget && !detailTarget.candidato_id && (
+              <Button
+                size="sm" className="bg-green-600 hover:bg-green-700 gap-1.5"
+                onClick={() => { setDetailOpen(false); openMover(detailTarget); }}
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                Mover para Recrutamento
+              </Button>
+            )}
+            {detailTarget?.candidato_id && (
+              <Badge className="bg-emerald-700 hover:bg-emerald-700 text-white text-xs self-center">Já no Recrutamento</Badge>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Mover para Recrutamento Dialog ───────────────────────────── */}
       <Dialog open={moverOpen} onOpenChange={(o) => !o && setMoverOpen(false)}>
