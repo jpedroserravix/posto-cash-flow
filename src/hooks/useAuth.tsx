@@ -127,7 +127,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // so new permission keys work automatically without DB migrations.
         const dbPerms = (profile.permissoes as string[]) || [];
         setPermissoes(isAdminOrMaster ? PROFILE_PRESETS.admin : dbPerms);
-        await loadPostoData(isAdminOrMaster, (profile.posto_ids as string[]) || []);
+
+        const assignedIds = (profile.posto_ids as string[]) || [];
+        // master → always sees all postos
+        // admin with no posto_ids → sees all (retrocompat)
+        // admin with posto_ids set → restricted to those postos
+        // gerente/frentista → always restricted to posto_ids
+        const seeAllPostos = p === 'master' || (p === 'admin' && assignedIds.length === 0);
+        await loadPostoData(seeAllPostos, assignedIds);
         return;
       }
 
@@ -182,20 +189,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let isMounted = true;
+    setLoading(true);
 
-    const init = async () => {
-      setLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (isMounted) await syncSession(session?.user ?? null);
-    };
-
-    void init();
-
+    // onAuthStateChange fires INITIAL_SESSION immediately on subscribe (Supabase v2),
+    // so we don't need a separate getSession() call — that would cause syncSession to
+    // run twice concurrently, creating a race that can leave the app stuck on first load.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!isMounted) return;
-      queueMicrotask(() => {
-        if (isMounted) void syncSession(session?.user ?? null);
-      });
+      void syncSession(session?.user ?? null);
     });
 
     return () => {
