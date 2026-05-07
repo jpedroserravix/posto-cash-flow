@@ -123,10 +123,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUsername(profile.username);
         setPerfil(p);
         setRole(derivedRole);
-        // Admins and Masters always get all permissions defined in the codebase,
-        // so new permission keys work automatically without DB migrations.
+        // Only master gets all permissions automatically.
+        // admin and all other profiles use exactly what is stored in the DB permissoes field,
+        // so the master can fine-tune access per user.
         const dbPerms = (profile.permissoes as string[]) || [];
-        setPermissoes(isAdminOrMaster ? PROFILE_PRESETS.admin : dbPerms);
+        setPermissoes(p === 'master' ? PROFILE_PRESETS.admin : dbPerms);
 
         const assignedIds = (profile.posto_ids as string[]) || [];
         // master → always sees all postos
