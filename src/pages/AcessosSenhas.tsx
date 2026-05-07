@@ -78,7 +78,7 @@ const EMPTY_FORM = {
 // ─── component ──────────────────────────────────────────────────────────────
 
 export default function AcessosSenhas() {
-  const { allPostos, selectedPostoId, isMaster, nome: authNome } = useAuth();
+  const { allPostos, selectedPostoId, postoId: singlePostoId, postoNome: singlePostoNome, isMaster, nome: authNome } = useAuth();
 
   const [acessos, setAcessos]       = useState<Acesso[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -101,10 +101,12 @@ export default function AcessosSenhas() {
   const [filterPosto, setFilterPosto] = useState('__all__');
 
   const postoOptions = allPostos.length > 0 ? allPostos : [];
-  const postoMap = useMemo(
-    () => new Map(postoOptions.map((p) => [p.id, p.nome])),
-    [postoOptions],
-  );
+  const postoMap = useMemo(() => {
+    const map = new Map(postoOptions.map((p) => [p.id, p.nome]));
+    // Single-posto users have allPostos=[] but postoId/postoNome set — include it
+    if (singlePostoId && singlePostoNome) map.set(singlePostoId, singlePostoNome);
+    return map;
+  }, [postoOptions, singlePostoId, singlePostoNome]);
 
   useEffect(() => { load(selectedPostoId, isMaster); }, [selectedPostoId, isMaster]);
 
@@ -218,7 +220,7 @@ export default function AcessosSenhas() {
     } else {
       toast.success(editId ? 'Acesso atualizado' : 'Acesso cadastrado');
       setDialogOpen(false);
-      load();
+      load(selectedPostoId, isMaster);
     }
     setSaving(false);
   }
@@ -584,7 +586,7 @@ export default function AcessosSenhas() {
             </div>
 
             {/* Posto */}
-            {postoOptions.length > 0 && (
+            {postoOptions.length > 0 ? (
               <div className="space-y-1">
                 <Label className="text-xs">Posto vinculado (opcional)</Label>
                 <Select
@@ -602,7 +604,14 @@ export default function AcessosSenhas() {
                   </SelectContent>
                 </Select>
               </div>
-            )}
+            ) : singlePostoNome ? (
+              <div className="space-y-1">
+                <Label className="text-xs">Posto vinculado</Label>
+                <div className="h-9 px-3 flex items-center rounded-md border bg-muted/50 text-sm text-muted-foreground">
+                  {singlePostoNome}
+                </div>
+              </div>
+            ) : null}
 
             {/* Observações */}
             <div className="space-y-1">
