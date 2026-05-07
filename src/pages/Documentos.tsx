@@ -192,27 +192,33 @@ export default function Documentos() {
   }, [isAlvaras, isEmpresa, selectedPostoId]);
 
   const loadAlvaras = async () => {
+    if (!selectedPostoId) return;
     const { data, error } = await (supabase as any)
       .from('documentos_alvaras')
       .select('*')
+      .eq('posto_id', selectedPostoId)
       .order('data_vencimento', { ascending: true, nullsFirst: false });
     if (error) { console.error(error); return; }
     setAlvaras(data || []);
   };
 
   const loadNotas = async () => {
+    if (!selectedPostoId) return;
     const { data, error } = await (supabase as any)
       .from('notas_fiscais')
       .select('*')
+      .eq('posto_id', selectedPostoId)
       .order('created_at', { ascending: false });
     if (error) { console.error(error); return; }
     setNotas(data || []);
   };
 
   const loadEmpresa = async () => {
+    if (!selectedPostoId) return;
     const { data, error } = await (supabase as any)
       .from('documentos_empresa')
       .select('*')
+      .eq('posto_id', selectedPostoId)
       .order('tipo', { ascending: true });
     if (error) { console.error(error); return; }
     setEmpresa(data || []);
