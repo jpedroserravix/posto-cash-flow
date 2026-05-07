@@ -78,7 +78,7 @@ const EMPTY_FORM = {
 // ─── component ──────────────────────────────────────────────────────────────
 
 export default function AcessosSenhas() {
-  const { allPostos, selectedPostoId, nome: authNome } = useAuth();
+  const { allPostos, selectedPostoId, isMaster, nome: authNome } = useAuth();
 
   const [acessos, setAcessos]       = useState<Acesso[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -106,15 +106,24 @@ export default function AcessosSenhas() {
     [postoOptions],
   );
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(selectedPostoId, isMaster); }, [selectedPostoId, isMaster]);
 
-  async function load() {
+  async function load(postoId: string | null, masterUser: boolean) {
     setLoading(true);
     try {
-      const { data, error } = await (supabase as any)
+      let query = (supabase as any)
         .from('acessos_senhas')
         .select('*')
         .order('nome_servico', { ascending: true });
+
+      if (!masterUser) {
+        // Non-masters see only records tied to their selected posto (Geral excluded)
+        query = postoId
+          ? query.eq('posto_id', postoId)
+          : query.eq('posto_id', 'no-match'); // no posto selected → show nothing
+      }
+
+      const { data, error } = await query;
       if (error) { toast.error(`Erro ao carregar acessos: ${error.message}`); }
       else { setAcessos((data as Acesso[]) || []); }
     } catch (e: any) {
@@ -277,7 +286,7 @@ export default function AcessosSenhas() {
                 className="h-8 text-xs pl-8"
               />
             </div>
-            {postoOptions.length > 0 && (
+            {isMaster && postoOptions.length > 0 && (
               <Select value={filterPosto} onValueChange={setFilterPosto}>
                 <SelectTrigger className="h-8 text-xs w-44">
                   <SelectValue placeholder="Todos os postos" />

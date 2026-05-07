@@ -114,20 +114,20 @@ const headerNavGroups: NavGroup[] = [
   {
     label: 'Documentos',
     items: [
-      { to: '/alvaras',      label: 'Alvarás e Licenças',        icon: FileCheck2,  permission: 'alvaras' },
-      { to: '/garantias',    label: 'Notas Fiscais e Garantias', icon: ShoppingBag, permission: 'garantias' },
-      { to: '/docs-empresa', label: 'Documentos da Empresa',     icon: Building2,   permission: 'docs-empresa' },
+      { to: '/alvaras',       label: 'Alvarás e Licenças',        icon: FileCheck2,  permission: 'alvaras' },
+      { to: '/garantias',     label: 'Notas Fiscais e Garantias', icon: ShoppingBag, permission: 'garantias' },
+      { to: '/docs-empresa',  label: 'Documentos da Empresa',     icon: Building2,   permission: 'docs-empresa' },
+      { to: '/acessos-senhas', label: 'Acessos e Senhas',         icon: KeyRound,    permission: 'acessos-senhas' },
     ],
   },
   {
     label: 'Cadastros',
     items: [
-      { to: '/postos',   label: 'Postos',                icon: Building2,     permission: 'postos' },
-      { to: '/usuarios', label: 'Usuários',              icon: Users,         permission: 'usuarios' },
-      { to: '/bancos',   label: 'Contas Bancárias',      icon: Landmark,      permission: 'bancos' },
-      { to: '/cursos',          label: 'Cursos e Treinamentos', icon: GraduationCap, permission: 'cursos-treinamentos' },
-      { to: '/configuracoes',   label: 'Configurações',         icon: Settings,      permission: 'configuracoes' },
-      { to: '/acessos-senhas',  label: 'Acessos e Senhas',      icon: KeyRound,      permission: 'acessos-senhas' },
+      { to: '/postos',       label: 'Postos',                icon: Building2,     permission: 'postos' },
+      { to: '/usuarios',     label: 'Usuários',              icon: Users,         permission: 'usuarios' },
+      { to: '/bancos',       label: 'Contas Bancárias',      icon: Landmark,      permission: 'bancos' },
+      { to: '/cursos',       label: 'Cursos e Treinamentos', icon: GraduationCap, permission: 'cursos-treinamentos' },
+      { to: '/configuracoes', label: 'Configurações',        icon: Settings,      permission: 'configuracoes' },
     ],
   },
 ];
