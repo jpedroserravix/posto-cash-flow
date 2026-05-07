@@ -90,7 +90,15 @@ export default function Publico() {
       .select('id, nome')
       .order('nome', { ascending: true })
       .then(({ data }: any) => {
-        setPostos(data ?? []);
+        const lista = data ?? [];
+        setPostos(lista);
+        const serravix = lista.find((p: any) =>
+          p.nome.toLowerCase().includes('serravix')
+        );
+        if (serravix) {
+          setCurriculo((f) => ({ ...f, posto_id: serravix.id }));
+          setFeedback((f) => ({ ...f, posto_id: serravix.id }));
+        }
       });
   }, []);
 
@@ -176,6 +184,8 @@ export default function Publico() {
   // ── submit feedback ─────────────────────────────────────────────────────────
 
   async function handleSubmitFeedback() {
+    if (!feedback.nome.trim()) { toast.error('Informe seu nome'); return; }
+    if (!feedback.whatsapp.trim()) { toast.error('Informe o WhatsApp'); return; }
     if (!feedback.tipo) { toast.error('Selecione o tipo'); return; }
     if (!feedback.mensagem.trim()) { toast.error('Escreva uma mensagem'); return; }
     if (!feedback.posto_id) { toast.error('Selecione o posto'); return; }
@@ -183,10 +193,10 @@ export default function Publico() {
     setSendingFeedback(true);
 
     const { error } = await (supabase as any).from('publico_feedback').insert({
-      nome:     feedback.nome.trim() || null,
+      nome:     feedback.nome.trim(),
       tipo:     feedback.tipo,
       mensagem: feedback.mensagem.trim(),
-      whatsapp: feedback.whatsapp.trim() || null,
+      whatsapp: feedback.whatsapp.trim(),
       posto_id: feedback.posto_id,
     });
 
@@ -209,7 +219,7 @@ export default function Publico() {
             <Fuel className="w-5 h-5 text-white" />
           </div>
           <div>
-            <div className="font-bold text-lg leading-tight tracking-wider text-white">POSTO INTELIGENTE</div>
+            <div className="font-bold text-lg leading-tight tracking-wider text-white">Posto Serravix Comércio de Combustíveis</div>
             <div className="text-xs text-blue-200 leading-tight">Fale conosco</div>
           </div>
         </div>
@@ -357,24 +367,6 @@ export default function Publico() {
                   </div>
                 </div>
 
-                {/* Posto desejado */}
-                {postos.length > 0 && (
-                  <div className="space-y-1.5">
-                    <Label className="text-sm font-medium">Posto desejado</Label>
-                    <Select
-                      value={curriculo.posto_id}
-                      onValueChange={(v) => setCurriculo((f) => ({ ...f, posto_id: v === '__nenhum__' ? '' : v }))}
-                    >
-                      <SelectTrigger className="h-12 text-base">
-                        <SelectValue placeholder="Selecionar posto (opcional)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__nenhum__">Qualquer posto</SelectItem>
-                        {postos.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
 
                 {/* Cargo desejado */}
                 {!cargosLoading && cargos.length === 0 ? (
@@ -551,47 +543,29 @@ export default function Publico() {
             <div className="bg-white rounded-2xl border shadow-sm p-5 space-y-4">
               <div className="flex items-center gap-2 border-b pb-3">
                 <MessageSquare className="w-4 h-4 text-purple-600" />
-                <div>
-                  <h2 className="font-semibold text-base leading-tight">Envie seu feedback</h2>
-                  <p className="text-xs text-muted-foreground">Você pode enviar de forma anônima.</p>
-                </div>
+                <h2 className="font-semibold text-base leading-tight">Envie seu feedback</h2>
               </div>
 
               <div className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label className="text-sm font-medium">Seu nome</Label>
+                  <Label className="text-sm font-medium">Seu nome *</Label>
                   <Input
                     className="h-12 text-base"
-                    placeholder="Opcional — deixe em branco para ser anônimo"
+                    placeholder="Seu nome completo"
                     value={feedback.nome}
                     onChange={(e) => setFeedback((f) => ({ ...f, nome: e.target.value }))}
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label className="text-sm font-medium">WhatsApp</Label>
+                  <Label className="text-sm font-medium">WhatsApp *</Label>
                   <Input
                     className="h-12 text-base"
-                    placeholder="Opcional — (00) 00000-0000"
+                    placeholder="(00) 00000-0000"
                     type="tel"
                     value={feedback.whatsapp}
                     onChange={(e) => setFeedback((f) => ({ ...f, whatsapp: e.target.value }))}
                   />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-sm font-medium">Posto *</Label>
-                  <Select
-                    value={feedback.posto_id}
-                    onValueChange={(v) => setFeedback((f) => ({ ...f, posto_id: v }))}
-                  >
-                    <SelectTrigger className="h-12 text-base">
-                      <SelectValue placeholder="Selecione o posto" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {postos.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
                 </div>
 
                 <div className="space-y-1.5">
