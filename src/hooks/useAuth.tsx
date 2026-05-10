@@ -48,18 +48,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPermissoes([]);
   }, []);
 
-  const loadPostoData = useCallback(async (isAdmin: boolean, assignedPostoIds: string[]) => {
+  const loadPostoData = useCallback(async (isAdmin: boolean, assignedPostoIds: string[], postoPadraoId?: string | null) => {
     if (isAdmin) {
       const { data: postos } = await supabase.from('postos').select('id, nome, cnpj').order('nome');
       const nextPostos = postos || [];
       setAllPostos(nextPostos);
       setPostoId(null);
       setPostoNome(null);
-      setSelectedPostoIdState((current) =>
-        current && nextPostos.some((p) => p.id === current)
-          ? current
-          : nextPostos[0]?.id ?? null
-      );
+      setSelectedPostoIdState((current) => {
+        if (current && nextPostos.some((p) => p.id === current)) return current;
+        if (postoPadraoId && nextPostos.some((p) => p.id === postoPadraoId)) return postoPadraoId;
+        return nextPostos[0]?.id ?? null;
+      });
     } else if (assignedPostoIds.length === 0) {
       setAllPostos([]);
       setPostoId(null);
@@ -87,11 +87,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAllPostos(nextPostos);
       setPostoId(null);
       setPostoNome(null);
-      setSelectedPostoIdState((current) =>
-        current && nextPostos.some((p) => p.id === current)
-          ? current
-          : nextPostos[0]?.id ?? null
-      );
+      setSelectedPostoIdState((current) => {
+        if (current && nextPostos.some((p) => p.id === current)) return current;
+        if (postoPadraoId && nextPostos.some((p) => p.id === postoPadraoId)) return postoPadraoId;
+        return nextPostos[0]?.id ?? null;
+      });
     }
   }, []);
 
@@ -100,12 +100,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Try new user_profiles table first
       const { data: profileRaw } = await supabase
         .from('user_profiles' as any)
-        .select('nome, username, perfil, posto_ids, permissoes, ativo')
+        .select('nome, username, perfil, posto_ids, permissoes, ativo, posto_padrao_id')
         .eq('user_id', userId)
         .maybeSingle();
       const profile = (profileRaw as unknown) as {
         nome: string; username: string; perfil: string;
         posto_ids: string[]; permissoes: string[]; ativo: boolean;
+        posto_padrao_id: string | null;
       } | null;
 
       if (profile) {
@@ -135,7 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // admin with posto_ids set → restricted to those postos
         // gerente/frentista → always restricted to posto_ids
         const seeAllPostos = p === 'master' || (p === 'admin' && assignedIds.length === 0);
-        await loadPostoData(seeAllPostos, assignedIds);
+        await loadPostoData(seeAllPostos, assignedIds, profile.posto_padrao_id);
         return;
       }
 

@@ -10,7 +10,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { UserPlus, Pencil, Trash2, X, Save, UserX, UserCheck, KeyRound, ShieldCheck } from 'lucide-react';
+import { UserPlus, Pencil, Trash2, X, Save, UserX, UserCheck, KeyRound, ShieldCheck, Star } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ALL_PERMISSIONS, PROFILE_PRESETS } from '@/lib/permissions';
 
 // Temporary client that won't overwrite the admin's session
@@ -29,6 +30,7 @@ interface UserProfile {
   posto_ids: string[];
   permissoes: string[];
   ativo: boolean;
+  posto_padrao_id: string | null;
 }
 
 const ALL_PERFIS = [
@@ -45,6 +47,7 @@ const emptyForm = {
   perfil: 'frentista',
   posto_ids: [] as string[],
   permissoes: PROFILE_PRESETS.frentista as string[],
+  posto_padrao_id: '',
 };
 
 export default function Usuarios() {
@@ -69,7 +72,7 @@ export default function Usuarios() {
   const loadUsers = useCallback(async () => {
     const { data, error } = await supabase
       .from('user_profiles' as any)
-      .select('id, user_id, nome, username, perfil, posto_ids, permissoes, ativo')
+      .select('id, user_id, nome, username, perfil, posto_ids, permissoes, ativo, posto_padrao_id')
       .order('nome');
     if (!error) setUsers(((data as unknown) as UserProfile[]) || []);
   }, []);
@@ -101,12 +104,17 @@ export default function Usuarios() {
   };
 
   const togglePosto = (id: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      posto_ids: prev.posto_ids.includes(id)
+    setFormData((prev) => {
+      const next = prev.posto_ids.includes(id)
         ? prev.posto_ids.filter((p) => p !== id)
-        : [...prev.posto_ids, id],
-    }));
+        : [...prev.posto_ids, id];
+      return {
+        ...prev,
+        posto_ids: next,
+        // clear padrão if that posto was unchecked
+        posto_padrao_id: prev.posto_padrao_id === id ? '' : prev.posto_padrao_id,
+      };
+    });
   };
 
   const openNewForm = () => {
@@ -132,6 +140,7 @@ export default function Usuarios() {
       perfil: u.perfil,
       posto_ids: u.posto_ids ?? [],
       permissoes: u.permissoes ?? [],
+      posto_padrao_id: u.posto_padrao_id ?? '',
     });
     setShowForm(true);
   };
@@ -187,6 +196,9 @@ export default function Usuarios() {
           perfil: formData.perfil,
           posto_ids: formData.posto_ids,
           permissoes: formData.permissoes,
+          posto_padrao_id: formData.posto_ids.length > 1 && formData.posto_padrao_id
+            ? formData.posto_padrao_id
+            : null,
         })
         .eq('id', editingId);
 
@@ -228,6 +240,9 @@ export default function Usuarios() {
           posto_ids: formData.posto_ids,
           permissoes: formData.permissoes,
           ativo: true,
+          posto_padrao_id: formData.posto_ids.length > 1 && formData.posto_padrao_id
+            ? formData.posto_padrao_id
+            : null,
         });
 
       if (profileError) { toast.error('Erro ao salvar perfil: ' + profileError.message); setSaving(false); return; }
@@ -392,6 +407,32 @@ export default function Usuarios() {
                 )}
               </div>
 
+              {/* Posto padrão — only when user has multiple postos */}
+              {formData.posto_ids.length > 1 && (
+                <div>
+                  <Label className="text-xs mb-1 block flex items-center gap-1">
+                    <Star className="w-3 h-3 text-yellow-500" />
+                    Posto padrão ao logar
+                  </Label>
+                  <Select
+                    value={formData.posto_padrao_id || '__none__'}
+                    onValueChange={(v) => setFormData((p) => ({ ...p, posto_padrao_id: v === '__none__' ? '' : v }))}
+                  >
+                    <SelectTrigger className="h-9 text-sm max-w-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Primeiro da lista (padrão)</SelectItem>
+                      {postos
+                        .filter((p) => formData.posto_ids.includes(p.id))
+                        .map((p) => (
+                          <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               {/* Perfil + permissions */}
               <div className="space-y-3">
                 <div>
@@ -498,7 +539,14 @@ export default function Usuarios() {
                         {!u.ativo && <Badge variant="destructive" className="text-[10px]">Inativo</Badge>}
                       </div>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {postoNames(u.posto_ids ?? [])} &nbsp;·&nbsp; {u.permissoes?.length ?? 0} tela(s)
+                        {postoNames(u.posto_ids ?? [])}
+                        {u.posto_padrao_id && (u.posto_ids?.length ?? 0) > 1 && (
+                          <span className="ml-1 inline-flex items-center gap-0.5">
+                            · <Star className="w-2.5 h-2.5 text-yellow-500 fill-yellow-400 inline" />
+                            {postos.find((p) => p.id === u.posto_padrao_id)?.nome ?? ''}
+                          </span>
+                        )}
+                        &nbsp;·&nbsp; {u.permissoes?.length ?? 0} tela(s)
                       </p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
