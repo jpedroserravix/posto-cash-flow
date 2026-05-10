@@ -15,7 +15,7 @@ import {
   Fuel, LogOut, FileSpreadsheet, PenLine, BarChart3, Building2, Users,
   Landmark, Receipt, Zap, LayoutDashboard, FileCheck2, ShoppingBag,
   UserCircle, Clock, Calculator, History, ClipboardList, Package,
-  Info, Copy, Check, GraduationCap, LayoutGrid, Settings, KeyRound, ChevronDown, ShieldCheck, UserSearch, Inbox,
+  Info, Copy, Check, GraduationCap, LayoutGrid, Settings, KeyRound, ChevronDown, ShieldCheck, UserSearch, Inbox, BookOpen,
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -117,7 +117,8 @@ const headerNavGroups: NavGroup[] = [
       { to: '/alvaras',       label: 'Alvarás e Licenças',        icon: FileCheck2,  permission: 'alvaras' },
       { to: '/garantias',     label: 'Notas Fiscais e Garantias', icon: ShoppingBag, permission: 'garantias' },
       { to: '/docs-empresa',  label: 'Documentos da Empresa',     icon: Building2,   permission: 'docs-empresa' },
-      { to: '/acessos-senhas', label: 'Acessos e Senhas',         icon: KeyRound,    permission: 'acessos-senhas' },
+      { to: '/acessos-senhas',  label: 'Acessos e Senhas',         icon: KeyRound,    permission: 'acessos-senhas' },
+      { to: '/contabilidade',   label: 'Contabilidade',           icon: BookOpen,    permission: 'contabilidade' },
     ],
   },
   {

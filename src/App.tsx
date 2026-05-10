@@ -27,6 +27,7 @@ import Pedidos from "./pages/compras/Pedidos";
 import Cursos from "./pages/Cursos";
 import Configuracoes from "./pages/Configuracoes";
 import AcessosSenhas from "./pages/AcessosSenhas";
+import Contabilidade from "./pages/contabilidade/Contabilidade";
 import CaixaEntrada from "./pages/CaixaEntrada";
 import Publico from "./pages/Publico";
 import NotFound from "./pages/NotFound";
@@ -103,6 +104,7 @@ function AppRoutes() {
       <Route path="/cursos"           element={<ProtectedRoute permission="cursos-treinamentos"><Cursos /></ProtectedRoute>} />
       <Route path="/configuracoes"    element={<ProtectedRoute permission="configuracoes"><Configuracoes /></ProtectedRoute>} />
       <Route path="/acessos-senhas"   element={<ProtectedRoute permission="acessos-senhas"><AcessosSenhas /></ProtectedRoute>} />
+      <Route path="/contabilidade"    element={<ProtectedRoute permission="contabilidade"><Contabilidade /></ProtectedRoute>} />
       <Route path="/caixa-entrada"    element={<ProtectedRoute permission="caixa-entrada"><CaixaEntrada /></ProtectedRoute>} />
       <Route path="/publico"          element={<Publico />} />
       {/* backward-compat redirect */}

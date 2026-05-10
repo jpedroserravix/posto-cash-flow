@@ -18,6 +18,7 @@ export const ALL_PERMISSIONS = [
   { key: 'cursos-treinamentos',   label: 'Cursos e Treinamentos' },
   { key: 'configuracoes',         label: 'Configurações' },
   { key: 'acessos-senhas',        label: 'Acessos e Senhas' },
+  { key: 'contabilidade',         label: 'Contabilidade' },
   { key: 'historico-rede',        label: 'Histórico da Rede (todos os postos)' },
   { key: 'caixa-entrada',         label: 'Caixa de Entrada (Currículos e Feedback)' },
 ] as const;
@@ -55,6 +56,7 @@ export const ROUTE_PERMISSION_MAP: { path: string; permission: string }[] = [
   { path: '/cursos',            permission: 'cursos-treinamentos' },
   { path: '/configuracoes',    permission: 'configuracoes' },
   { path: '/acessos-senhas',   permission: 'acessos-senhas' },
+  { path: '/contabilidade',    permission: 'contabilidade' },
   { path: '/caixa-entrada',    permission: 'caixa-entrada' },
 ];
 
