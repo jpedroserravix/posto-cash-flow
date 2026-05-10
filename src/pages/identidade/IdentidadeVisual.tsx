@@ -11,8 +11,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Paperclip, ExternalLink, Download, Search, Palette, FileText } from 'lucide-react';
+import { Plus, Pencil, Trash2, Paperclip, ExternalLink, Download, Search, Palette, FileText, Share2 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { openInNewTab } from '@/lib/utils';
 import { ObsTooltip } from '@/components/ObsTooltip';
@@ -29,6 +30,8 @@ interface IdentidadeDoc {
   arquivo_type: string;
   observacoes: string | null;
   created_at: string;
+  isShared?: boolean;
+  sharedFromPostoId?: string;
 }
 
 interface PreviewFile { url: string; type: 'image' | 'pdf'; }
@@ -115,7 +118,12 @@ function FilePreview({ path, tipo, onOpen }: {
 // ─── component ───────────────────────────────────────────────────────────────
 
 export default function IdentidadeVisual() {
-  const { selectedPostoId } = useAuth();
+  const {
+    selectedPostoId,
+    allPostos,
+    postoId: singlePostoId,
+    postoNome: singlePostoNome,
+  } = useAuth();
 
   const [docs, setDocs]             = useState<IdentidadeDoc[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -127,23 +135,63 @@ export default function IdentidadeVisual() {
   const [deleteId, setDeleteId]     = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<PreviewFile | null>(null);
 
+  // share
+  const [shareDoc, setShareDoc]         = useState<IdentidadeDoc | null>(null);
+  const [shareSelected, setShareSelected] = useState<string[]>([]);
+  const [currentShares, setCurrentShares] = useState<string[]>([]);
+  const [shareSaving, setShareSaving]   = useState(false);
+
   // filters
   const [fTipo, setFTipo]     = useState('__all__');
   const [search, setSearch]   = useState('');
+
+  const postoMap = useMemo(() => {
+    const map = new Map<string, string>();
+    allPostos.forEach((p) => map.set(p.id, p.nome));
+    if (singlePostoId && singlePostoNome) map.set(singlePostoId, singlePostoNome);
+    return map;
+  }, [allPostos, singlePostoId, singlePostoNome]);
 
   useEffect(() => { load(); }, [selectedPostoId]);
 
   async function load() {
     if (!selectedPostoId) { setDocs([]); setLoading(false); return; }
     setLoading(true);
-    const { data, error } = await (supabase as any)
+
+    // fetch owned docs
+    const { data: owned, error: ownedErr } = await (supabase as any)
       .from('documentos_identidade_visual')
       .select('*')
       .eq('posto_id', selectedPostoId)
       .order('tipo', { ascending: true })
       .order('nome', { ascending: true });
-    if (error) toast.error('Erro ao carregar documentos');
-    else setDocs(data ?? []);
+    if (ownedErr) { toast.error('Erro ao carregar documentos'); setLoading(false); return; }
+
+    // fetch share references pointing to this posto
+    const { data: shares } = await (supabase as any)
+      .from('identidade_visual_compartilhada')
+      .select('doc_id')
+      .eq('posto_destino', selectedPostoId);
+
+    let sharedDocs: IdentidadeDoc[] = [];
+    if (shares && shares.length > 0) {
+      const docIds = shares.map((s: { doc_id: string }) => s.doc_id);
+      const { data: remote } = await (supabase as any)
+        .from('documentos_identidade_visual')
+        .select('*')
+        .in('id', docIds)
+        .order('tipo', { ascending: true })
+        .order('nome', { ascending: true });
+      if (remote) {
+        sharedDocs = (remote as IdentidadeDoc[]).map((d) => ({
+          ...d,
+          isShared: true,
+          sharedFromPostoId: d.posto_id,
+        }));
+      }
+    }
+
+    setDocs([...(owned ?? []), ...sharedDocs]);
     setLoading(false);
   }
 
@@ -171,6 +219,59 @@ export default function IdentidadeVisual() {
       (a, b) => order.indexOf(a[0] as any) - order.indexOf(b[0] as any)
     );
   }, [filtered]);
+
+  // ── share ─────────────────────────────────────────────────────────────────
+
+  async function openShare(doc: IdentidadeDoc) {
+    setShareDoc(doc);
+    const { data } = await (supabase as any)
+      .from('identidade_visual_compartilhada')
+      .select('posto_destino')
+      .eq('doc_id', doc.id);
+    const ids = (data ?? []).map((r: { posto_destino: string }) => r.posto_destino);
+    setCurrentShares(ids);
+    setShareSelected(ids);
+  }
+
+  function toggleSharePosto(id: string) {
+    setShareSelected((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
+
+  async function handleShareConfirm() {
+    if (!shareDoc) return;
+    setShareSaving(true);
+
+    const added   = shareSelected.filter((id) => !currentShares.includes(id));
+    const removed = currentShares.filter((id) => !shareSelected.includes(id));
+
+    let err: unknown = null;
+
+    if (added.length > 0) {
+      const rows = added.map((posto_destino) => ({ doc_id: shareDoc.id, posto_destino }));
+      const { error } = await (supabase as any).from('identidade_visual_compartilhada').insert(rows);
+      if (error) err = error;
+    }
+
+    if (removed.length > 0) {
+      const { error } = await (supabase as any)
+        .from('identidade_visual_compartilhada')
+        .delete()
+        .eq('doc_id', shareDoc.id)
+        .in('posto_destino', removed);
+      if (error) err = error;
+    }
+
+    if (err) {
+      toast.error('Erro ao salvar compartilhamentos');
+    } else {
+      toast.success('Compartilhamentos atualizados');
+      setShareDoc(null);
+      load();
+    }
+    setShareSaving(false);
+  }
 
   // ── dialog ────────────────────────────────────────────────────────────────
 
@@ -263,6 +364,11 @@ export default function IdentidadeVisual() {
 
   // ── render ────────────────────────────────────────────────────────────────
 
+  const canShare = allPostos.length > 1;
+  const sharePostos = shareDoc
+    ? allPostos.filter((p) => p.id !== shareDoc.posto_id)
+    : [];
+
   return (
     <div className="p-4 md:p-6 space-y-4">
       {/* Header */}
@@ -322,11 +428,22 @@ export default function IdentidadeVisual() {
                 <div className="divide-y">
                   {tipoDocs.map((d) => {
                     const url = getPublicUrl(d.arquivo_path);
+                    const owned = !d.isShared;
                     return (
                       <div key={d.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40 transition-colors">
                         <Thumbnail path={d.arquivo_path} tipo={d.arquivo_type} />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{d.nome}</p>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-sm font-medium truncate">{d.nome}</p>
+                            {d.isShared && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-blue-600 border-blue-300 shrink-0">
+                                Compartilhado
+                              </Badge>
+                            )}
+                          </div>
+                          {d.isShared && d.sharedFromPostoId && postoMap.get(d.sharedFromPostoId) && (
+                            <p className="text-xs text-muted-foreground">De: {postoMap.get(d.sharedFromPostoId)}</p>
+                          )}
                           {d.tipo === 'Outros' && d.tipo_custom && (
                             <p className="text-xs text-muted-foreground">{d.tipo_custom}</p>
                           )}
@@ -344,19 +461,31 @@ export default function IdentidadeVisual() {
                               <Download className="w-3.5 h-3.5" />
                             </button>
                           </a>
-                          <Button
-                            variant="ghost" size="icon" className="h-7 w-7"
-                            onClick={() => openEdit(d)} title="Editar"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost" size="icon"
-                            className="h-7 w-7 text-red-500 hover:text-red-600 hover:bg-red-50"
-                            onClick={() => setDeleteId(d.id)} title="Excluir"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
+                          {owned && canShare && (
+                            <Button
+                              variant="ghost" size="icon" className="h-7 w-7 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
+                              onClick={() => openShare(d)} title="Compartilhar"
+                            >
+                              <Share2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                          {owned && (
+                            <Button
+                              variant="ghost" size="icon" className="h-7 w-7"
+                              onClick={() => openEdit(d)} title="Editar"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                          {owned && (
+                            <Button
+                              variant="ghost" size="icon"
+                              className="h-7 w-7 text-red-500 hover:text-red-600 hover:bg-red-50"
+                              onClick={() => setDeleteId(d.id)} title="Excluir"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     );
@@ -439,6 +568,48 @@ export default function IdentidadeVisual() {
             <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)} disabled={saving}>Cancelar</Button>
             <Button size="sm" onClick={handleSave} disabled={saving}>
               {saving ? 'Salvando...' : editId ? 'Salvar' : 'Adicionar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Share Dialog ──────────────────────────────────────────────────── */}
+      <Dialog open={!!shareDoc} onOpenChange={(v) => { if (!v && !shareSaving) setShareDoc(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Share2 className="w-4 h-4" />
+              Compartilhar arquivo
+            </DialogTitle>
+          </DialogHeader>
+          {shareDoc && (
+            <div className="space-y-3 py-1">
+              <p className="text-sm text-muted-foreground">
+                Selecione os postos que poderão visualizar <span className="font-medium text-foreground">{shareDoc.nome}</span>:
+              </p>
+              {sharePostos.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhum outro posto disponível.</p>
+              ) : (
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                  {sharePostos.map((p) => (
+                    <label key={p.id} className="flex items-center gap-2.5 cursor-pointer group">
+                      <Checkbox
+                        id={`share-${p.id}`}
+                        checked={shareSelected.includes(p.id)}
+                        onCheckedChange={() => toggleSharePosto(p.id)}
+                        disabled={shareSaving}
+                      />
+                      <span className="text-sm group-hover:text-foreground transition-colors">{p.nome}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setShareDoc(null)} disabled={shareSaving}>Cancelar</Button>
+            <Button size="sm" onClick={handleShareConfirm} disabled={shareSaving || sharePostos.length === 0}>
+              {shareSaving ? 'Salvando...' : 'Confirmar'}
             </Button>
           </DialogFooter>
         </DialogContent>
