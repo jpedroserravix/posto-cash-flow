@@ -51,7 +51,7 @@ const emptyForm = {
 };
 
 export default function Usuarios() {
-  const { role, isMaster } = useAuth();
+  const { role, isMaster, user: currentUser } = useAuth();
   const [users, setUsers]     = useState<UserProfile[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -74,8 +74,23 @@ export default function Usuarios() {
       .from('user_profiles' as any)
       .select('id, user_id, nome, username, perfil, posto_ids, permissoes, ativo, posto_padrao_id')
       .order('nome');
-    if (!error) setUsers(((data as unknown) as UserProfile[]) || []);
-  }, []);
+    if (error) return;
+
+    let list = ((data as unknown) as UserProfile[]) ?? [];
+
+    // RLS may hide the master's own record from the general query.
+    // Always ensure the logged-in user appears in the list.
+    if (currentUser && !list.some((u) => u.user_id === currentUser.id)) {
+      const { data: own } = await supabase
+        .from('user_profiles' as any)
+        .select('id, user_id, nome, username, perfil, posto_ids, permissoes, ativo, posto_padrao_id')
+        .eq('user_id', currentUser.id)
+        .maybeSingle();
+      if (own) list = [own as unknown as UserProfile, ...list];
+    }
+
+    setUsers(list);
+  }, [currentUser]);
 
   const loadPostos = useCallback(async () => {
     const { data } = await supabase.from('postos').select('id, nome').order('nome');
