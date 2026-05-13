@@ -12,7 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Save, Upload, FileText, X, ExternalLink, Paperclip } from 'lucide-react';
+import { Save, Upload, FileText, X, ExternalLink, Paperclip, Gauge } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { openInNewTab } from '@/lib/utils';
 import { usePagination } from '@/hooks/usePagination';
@@ -36,6 +36,12 @@ interface QualityInfo {
   quality_conferido: string;
 }
 
+interface AfericaoInfo {
+  id: string;
+  pdf_path: string | null;
+  criado_por_nome: string | null;
+}
+
 interface Comprovante {
   id: string;
   file_path: string;
@@ -55,6 +61,7 @@ interface GroupData {
   observacao: string;
   resumoId?: string;
   quality?: QualityInfo;
+  afericoes: AfericaoInfo[];
   comprovantes: Comprovante[];
   turnosConferidos: string[];
 }
@@ -130,6 +137,7 @@ export default function ResumoDiario() {
       { data: conferencias },
       { data: qualityData },
       { data: comprovantesData },
+      { data: afericoesData },
     ] = await Promise.all([
       supabase.from('depositos_brinks').select('data_caixa, turno, valor, centro_custo')
         .eq('posto_id', selectedPostoId).not('data_caixa', 'is', null).not('turno', 'is', null)
@@ -143,6 +151,9 @@ export default function ResumoDiario() {
       (supabase as any).from('comprovantes_despesas')
         .select('id, data_caixa, file_path, file_name, file_type, observacao')
         .eq('posto_id', selectedPostoId).gte('data_caixa', dfRange.start).lte('data_caixa', dfRange.end),
+      (supabase as any).from('afericoes')
+        .select('id, data, pdf_path, criado_por_nome')
+        .eq('posto_id', selectedPostoId).gte('data', dfRange.start).lte('data', dfRange.end),
     ]);
 
     // Build turno aggregations
@@ -202,6 +213,14 @@ export default function ResumoDiario() {
       comprovantesMap.set(c.data_caixa, arr);
     });
 
+    // Aferições map (by data)
+    const afericaoMap = new Map<string, AfericaoInfo[]>();
+    (afericoesData as any[] ?? []).forEach((a) => {
+      const arr = afericaoMap.get(a.data) || [];
+      arr.push({ id: a.id, pdf_path: a.pdf_path ?? null, criado_por_nome: a.criado_por_nome ?? null });
+      afericaoMap.set(a.data, arr);
+    });
+
     const result: GroupData[] = Array.from(groupMap.entries())
       .map(([key, turnos]) => {
         const [data, centroCusto] = key.split('|');
@@ -220,6 +239,7 @@ export default function ResumoDiario() {
           observacao: conf?.observacao || '',
           resumoId: conf?.id,
           quality: qualityMap.get(data),
+          afericoes: afericaoMap.get(data) || [],
           comprovantes: comprovantesMap.get(data) || [],
           turnosConferidos: conf?.turnos_conferidos || [],
         };
@@ -514,6 +534,39 @@ export default function ResumoDiario() {
                           </TableRow>
                         </TableBody>
                       </Table>
+
+                      {/* Aferições PDF */}
+                      {group.afericoes.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {group.afericoes.filter((af) => af.pdf_path).map((af) => {
+                            const afUrl = getStorageUrl('despesas-comprovantes', af.pdf_path!);
+                            const afLabel = `Aferição de Bicos — ${dateLabel}`;
+                            return (
+                              <HoverCard key={af.id} openDelay={300} closeDelay={100}>
+                                <HoverCardTrigger asChild>
+                                  <button
+                                    className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-all hover:scale-105 hover:border-primary hover:text-foreground"
+                                    onClick={() => {
+                                      if (isMobile) { openInNewTab(afUrl); return; }
+                                      setPreviewFile({ url: afUrl, label: afLabel, fileType: 'pdf' });
+                                    }}
+                                  >
+                                    <Gauge className="h-3.5 w-3.5 text-blue-500" />
+                                    <span>Aferição de Bicos</span>
+                                  </button>
+                                </HoverCardTrigger>
+                                <HoverCardContent className="w-80 p-1.5" align="start" side="bottom">
+                                  {af.criado_por_nome && (
+                                    <p className="mb-1 px-0.5 text-[10px] text-muted-foreground">Por: {af.criado_por_nome}</p>
+                                  )}
+                                  <p className="mb-1 px-0.5 text-[10px] text-muted-foreground">Clique para abrir com zoom</p>
+                                  <iframe src={afUrl} className="h-52 w-full rounded border border-border" title={afLabel} />
+                                </HoverCardContent>
+                              </HoverCard>
+                            );
+                          })}
+                        </div>
+                      )}
 
                       {/* Quality PDF */}
                       <div className="flex flex-wrap items-center gap-2">
