@@ -14,6 +14,264 @@ export type Database = {
   }
   public: {
     Tables: {
+      acessos_senhas: {
+        Row: {
+          atualizado_por_nome: string | null
+          celular: string | null
+          created_at: string
+          criado_por_nome: string | null
+          email_recuperacao: string | null
+          id: string
+          login: string | null
+          nome_servico: string
+          observacoes: string | null
+          posto_id: string | null
+          senha: string | null
+          updated_at: string
+          url: string | null
+        }
+        Insert: {
+          atualizado_por_nome?: string | null
+          celular?: string | null
+          created_at?: string
+          criado_por_nome?: string | null
+          email_recuperacao?: string | null
+          id?: string
+          login?: string | null
+          nome_servico: string
+          observacoes?: string | null
+          posto_id?: string | null
+          senha?: string | null
+          updated_at?: string
+          url?: string | null
+        }
+        Update: {
+          atualizado_por_nome?: string | null
+          celular?: string | null
+          created_at?: string
+          criado_por_nome?: string | null
+          email_recuperacao?: string | null
+          id?: string
+          login?: string | null
+          nome_servico?: string
+          observacoes?: string | null
+          posto_id?: string | null
+          senha?: string | null
+          updated_at?: string
+          url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "acessos_senhas_posto_id_fkey"
+            columns: ["posto_id"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      afericoes: {
+        Row: {
+          created_at: string
+          criado_por_nome: string | null
+          data: string
+          foto_path: string | null
+          foto_type: string | null
+          id: string
+          pdf_path: string | null
+          posto_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          criado_por_nome?: string | null
+          data: string
+          foto_path?: string | null
+          foto_type?: string | null
+          id?: string
+          pdf_path?: string | null
+          posto_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          criado_por_nome?: string | null
+          data?: string
+          foto_path?: string | null
+          foto_type?: string | null
+          id?: string
+          pdf_path?: string | null
+          posto_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "afericoes_posto_id_fkey"
+            columns: ["posto_id"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      afericoes_itens: {
+        Row: {
+          afericao_id: string
+          afericao_lenta: number | null
+          afericao_rapida: number | null
+          bico: number
+          combustivel: string
+          created_at: string
+          id: string
+          is_repeticao: boolean
+        }
+        Insert: {
+          afericao_id: string
+          afericao_lenta?: number | null
+          afericao_rapida?: number | null
+          bico: number
+          combustivel: string
+          created_at?: string
+          id?: string
+          is_repeticao?: boolean
+        }
+        Update: {
+          afericao_id?: string
+          afericao_lenta?: number | null
+          afericao_rapida?: number | null
+          bico?: number
+          combustivel?: string
+          created_at?: string
+          id?: string
+          is_repeticao?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "afericoes_itens_afericao_id_fkey"
+            columns: ["afericao_id"]
+            isOneToOne: false
+            referencedRelation: "afericoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      candidatos_diarias: {
+        Row: {
+          candidato_id: string
+          created_at: string | null
+          data: string
+          horario_entrada: string
+          horario_saida: string
+          id: string
+          observacoes_gerente: string | null
+          posto_id: string
+          valor: number | null
+        }
+        Insert: {
+          candidato_id: string
+          created_at?: string | null
+          data: string
+          horario_entrada: string
+          horario_saida: string
+          id?: string
+          observacoes_gerente?: string | null
+          posto_id: string
+          valor?: number | null
+        }
+        Update: {
+          candidato_id?: string
+          created_at?: string | null
+          data?: string
+          horario_entrada?: string
+          horario_saida?: string
+          id?: string
+          observacoes_gerente?: string | null
+          posto_id?: string
+          valor?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "candidatos_diarias_candidato_id_fkey"
+            columns: ["candidato_id"]
+            isOneToOne: false
+            referencedRelation: "pessoal_candidatos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "candidatos_diarias_posto_id_fkey"
+            columns: ["posto_id"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      candidatos_entrevistas: {
+        Row: {
+          candidato_id: string
+          created_at: string | null
+          data_entrevista: string
+          dispensado_definitivamente: boolean | null
+          entrevistador: string | null
+          horario: string
+          id: string
+          local: string | null
+          motivo_reprovacao: string | null
+          observacoes: string | null
+          posto_id: string
+          resultado: string | null
+          status_resultante: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          candidato_id: string
+          created_at?: string | null
+          data_entrevista: string
+          dispensado_definitivamente?: boolean | null
+          entrevistador?: string | null
+          horario: string
+          id?: string
+          local?: string | null
+          motivo_reprovacao?: string | null
+          observacoes?: string | null
+          posto_id: string
+          resultado?: string | null
+          status_resultante?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          candidato_id?: string
+          created_at?: string | null
+          data_entrevista?: string
+          dispensado_definitivamente?: boolean | null
+          entrevistador?: string | null
+          horario?: string
+          id?: string
+          local?: string | null
+          motivo_reprovacao?: string | null
+          observacoes?: string | null
+          posto_id?: string
+          resultado?: string | null
+          status_resultante?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "candidatos_entrevistas_candidato_id_fkey"
+            columns: ["candidato_id"]
+            isOneToOne: false
+            referencedRelation: "pessoal_candidatos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "candidatos_entrevistas_posto_id_fkey"
+            columns: ["posto_id"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       comprovantes_despesas: {
         Row: {
           centro_custo: string | null
@@ -26,6 +284,7 @@ export type Database = {
           observacao: string | null
           posto_id: string
           tipo: string | null
+          titulo: string | null
           turno: string | null
         }
         Insert: {
@@ -39,6 +298,7 @@ export type Database = {
           observacao?: string | null
           posto_id: string
           tipo?: string | null
+          titulo?: string | null
           turno?: string | null
         }
         Update: {
@@ -52,6 +312,7 @@ export type Database = {
           observacao?: string | null
           posto_id?: string
           tipo?: string | null
+          titulo?: string | null
           turno?: string | null
         }
         Relationships: [
@@ -244,6 +505,7 @@ export type Database = {
           conciliado_banco_id: string | null
           conferido: string
           created_at: string
+          criado_por_nome: string | null
           data: string
           id: string
           observacao: string | null
@@ -259,6 +521,7 @@ export type Database = {
           conciliado_banco_id?: string | null
           conferido?: string
           created_at?: string
+          criado_por_nome?: string | null
           data: string
           id?: string
           observacao?: string | null
@@ -274,6 +537,7 @@ export type Database = {
           conciliado_banco_id?: string | null
           conferido?: string
           created_at?: string
+          criado_por_nome?: string | null
           data?: string
           id?: string
           observacao?: string | null
@@ -349,6 +613,53 @@ export type Database = {
           },
         ]
       }
+      documentos_contabilidade: {
+        Row: {
+          ano: number
+          arquivo_path: string
+          arquivo_type: string
+          created_at: string
+          id: string
+          mes: number
+          observacoes: string | null
+          posto_id: string
+          tipo: string
+          tipo_custom: string | null
+        }
+        Insert: {
+          ano: number
+          arquivo_path: string
+          arquivo_type: string
+          created_at?: string
+          id?: string
+          mes: number
+          observacoes?: string | null
+          posto_id: string
+          tipo: string
+          tipo_custom?: string | null
+        }
+        Update: {
+          ano?: number
+          arquivo_path?: string
+          arquivo_type?: string
+          created_at?: string
+          id?: string
+          mes?: number
+          observacoes?: string | null
+          posto_id?: string
+          tipo?: string
+          tipo_custom?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documentos_contabilidade_posto_id_fkey"
+            columns: ["posto_id"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       documentos_empresa: {
         Row: {
           arquivo_path: string | null
@@ -389,6 +700,50 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "documentos_empresa_posto_id_fkey"
+            columns: ["posto_id"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      documentos_identidade_visual: {
+        Row: {
+          arquivo_path: string
+          arquivo_type: string
+          created_at: string
+          id: string
+          nome: string
+          observacoes: string | null
+          posto_id: string
+          tipo: string
+          tipo_custom: string | null
+        }
+        Insert: {
+          arquivo_path: string
+          arquivo_type: string
+          created_at?: string
+          id?: string
+          nome: string
+          observacoes?: string | null
+          posto_id: string
+          tipo: string
+          tipo_custom?: string | null
+        }
+        Update: {
+          arquivo_path?: string
+          arquivo_type?: string
+          created_at?: string
+          id?: string
+          nome?: string
+          observacoes?: string | null
+          posto_id?: string
+          tipo?: string
+          tipo_custom?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documentos_identidade_visual_posto_id_fkey"
             columns: ["posto_id"]
             isOneToOne: false
             referencedRelation: "postos"
@@ -506,6 +861,69 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      identidade_visual_compartilhada: {
+        Row: {
+          created_at: string
+          doc_id: string
+          id: string
+          posto_destino: string
+        }
+        Insert: {
+          created_at?: string
+          doc_id: string
+          id?: string
+          posto_destino: string
+        }
+        Update: {
+          created_at?: string
+          doc_id?: string
+          id?: string
+          posto_destino?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "identidade_visual_compartilhada_doc_id_fkey"
+            columns: ["doc_id"]
+            isOneToOne: false
+            referencedRelation: "documentos_identidade_visual"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "identidade_visual_compartilhada_posto_destino_fkey"
+            columns: ["posto_destino"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      listas_configuracoes: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          id: string
+          lista: string
+          ordem: number
+          valor: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          lista: string
+          ordem?: number
+          valor: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          lista?: string
+          ordem?: number
+          valor?: string
+        }
+        Relationships: []
       }
       mural_recados: {
         Row: {
@@ -808,6 +1226,72 @@ export type Database = {
           },
         ]
       }
+      pessoal_candidatos: {
+        Row: {
+          cargo_pretendido: string
+          cpf: string
+          created_at: string
+          funcionario_id: string | null
+          id: string
+          nome: string
+          observacoes: string | null
+          posto_id: string
+          status: string
+          telefone: string | null
+          telefone_terceiro: boolean
+          terceiro_nome: string | null
+          terceiro_parentesco: string | null
+          updated_at: string
+        }
+        Insert: {
+          cargo_pretendido: string
+          cpf: string
+          created_at?: string
+          funcionario_id?: string | null
+          id?: string
+          nome: string
+          observacoes?: string | null
+          posto_id: string
+          status?: string
+          telefone?: string | null
+          telefone_terceiro?: boolean
+          terceiro_nome?: string | null
+          terceiro_parentesco?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cargo_pretendido?: string
+          cpf?: string
+          created_at?: string
+          funcionario_id?: string | null
+          id?: string
+          nome?: string
+          observacoes?: string | null
+          posto_id?: string
+          status?: string
+          telefone?: string | null
+          telefone_terceiro?: boolean
+          terceiro_nome?: string | null
+          terceiro_parentesco?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pessoal_candidatos_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "pessoal_funcionarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pessoal_candidatos_posto_id_fkey"
+            columns: ["posto_id"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pessoal_desligamentos: {
         Row: {
           arquivo_path: string | null
@@ -817,6 +1301,7 @@ export type Database = {
           id: string
           motivo: string
           observacoes: string | null
+          pode_recontratar: boolean | null
         }
         Insert: {
           arquivo_path?: string | null
@@ -826,6 +1311,7 @@ export type Database = {
           id?: string
           motivo: string
           observacoes?: string | null
+          pode_recontratar?: boolean | null
         }
         Update: {
           arquivo_path?: string | null
@@ -835,6 +1321,7 @@ export type Database = {
           id?: string
           motivo?: string
           observacoes?: string | null
+          pode_recontratar?: boolean | null
         }
         Relationships: [
           {
@@ -880,6 +1367,83 @@ export type Database = {
             columns: ["funcionario_id"]
             isOneToOne: false
             referencedRelation: "pessoal_funcionarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pessoal_entregas_epi: {
+        Row: {
+          comprovante_path: string | null
+          comprovante_type: string | null
+          created_at: string
+          data_entrega: string
+          funcionario_id: string
+          id: string
+          observacoes: string | null
+          posto_id: string
+        }
+        Insert: {
+          comprovante_path?: string | null
+          comprovante_type?: string | null
+          created_at?: string
+          data_entrega: string
+          funcionario_id: string
+          id?: string
+          observacoes?: string | null
+          posto_id: string
+        }
+        Update: {
+          comprovante_path?: string | null
+          comprovante_type?: string | null
+          created_at?: string
+          data_entrega?: string
+          funcionario_id?: string
+          id?: string
+          observacoes?: string | null
+          posto_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pessoal_entregas_epi_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "pessoal_funcionarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pessoal_entregas_epi_posto_id_fkey"
+            columns: ["posto_id"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pessoal_entregas_epi_itens: {
+        Row: {
+          entrega_id: string
+          id: string
+          quantidade: number
+          tipo_item: string
+        }
+        Insert: {
+          entrega_id: string
+          id?: string
+          quantidade: number
+          tipo_item: string
+        }
+        Update: {
+          entrega_id?: string
+          id?: string
+          quantidade?: number
+          tipo_item?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pessoal_entregas_epi_itens_entrega_id_fkey"
+            columns: ["entrega_id"]
+            isOneToOne: false
+            referencedRelation: "pessoal_entregas_epi"
             referencedColumns: ["id"]
           },
         ]
@@ -962,46 +1526,181 @@ export type Database = {
           },
         ]
       }
+      pessoal_ferias: {
+        Row: {
+          alerta_meses: number
+          arquivo_path: string | null
+          arquivo_type: string | null
+          created_at: string
+          data_fim: string
+          data_inicio: string
+          dias_gozados: number
+          dias_vendidos: number
+          funcionario_id: string
+          id: string
+          observacoes: string | null
+          periodo_aquisitivo_fim: string
+          periodo_aquisitivo_inicio: string
+          posto_id: string
+          saldo_dias: number
+          updated_at: string
+        }
+        Insert: {
+          alerta_meses?: number
+          arquivo_path?: string | null
+          arquivo_type?: string | null
+          created_at?: string
+          data_fim: string
+          data_inicio: string
+          dias_gozados: number
+          dias_vendidos?: number
+          funcionario_id: string
+          id?: string
+          observacoes?: string | null
+          periodo_aquisitivo_fim: string
+          periodo_aquisitivo_inicio: string
+          posto_id: string
+          saldo_dias?: number
+          updated_at?: string
+        }
+        Update: {
+          alerta_meses?: number
+          arquivo_path?: string | null
+          arquivo_type?: string | null
+          created_at?: string
+          data_fim?: string
+          data_inicio?: string
+          dias_gozados?: number
+          dias_vendidos?: number
+          funcionario_id?: string
+          id?: string
+          observacoes?: string | null
+          periodo_aquisitivo_fim?: string
+          periodo_aquisitivo_inicio?: string
+          posto_id?: string
+          saldo_dias?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pessoal_ferias_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "pessoal_funcionarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pessoal_ferias_posto_id_fkey"
+            columns: ["posto_id"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pessoal_funcionarios: {
         Row: {
+          adicional_noturno: boolean
+          carga_horaria_semanal: number
           cargo: string
           cpf: string
           created_at: string
           data_admissao: string
           data_nascimento: string | null
+          em_experiencia: boolean
           email: string | null
+          emergencia_nome: string | null
+          emergencia_parentesco: string | null
+          emergencia_parentesco_outro: string | null
+          emergencia_telefone: string | null
+          escala_outros: string | null
+          escala_trabalho: string | null
+          experiencia_efetivado: boolean
+          horario_entrada: string | null
+          horario_sabado_entrada: string | null
+          horario_sabado_saida: string | null
+          horario_saida: string | null
+          horas_extras_fixas_mes: number
           id: string
+          inicio_experiencia: string | null
+          intervalo_descanso: number | null
           nome: string
           observacoes: string | null
           posto_id: string
+          prazo_experiencia: number | null
+          prazo_renovacao: number | null
+          renovavel: boolean | null
+          rg: string | null
           status: string
           telefone: string | null
         }
         Insert: {
+          adicional_noturno?: boolean
+          carga_horaria_semanal?: number
           cargo: string
           cpf: string
           created_at?: string
           data_admissao: string
           data_nascimento?: string | null
+          em_experiencia?: boolean
           email?: string | null
+          emergencia_nome?: string | null
+          emergencia_parentesco?: string | null
+          emergencia_parentesco_outro?: string | null
+          emergencia_telefone?: string | null
+          escala_outros?: string | null
+          escala_trabalho?: string | null
+          experiencia_efetivado?: boolean
+          horario_entrada?: string | null
+          horario_sabado_entrada?: string | null
+          horario_sabado_saida?: string | null
+          horario_saida?: string | null
+          horas_extras_fixas_mes?: number
           id?: string
+          inicio_experiencia?: string | null
+          intervalo_descanso?: number | null
           nome: string
           observacoes?: string | null
           posto_id: string
+          prazo_experiencia?: number | null
+          prazo_renovacao?: number | null
+          renovavel?: boolean | null
+          rg?: string | null
           status?: string
           telefone?: string | null
         }
         Update: {
+          adicional_noturno?: boolean
+          carga_horaria_semanal?: number
           cargo?: string
           cpf?: string
           created_at?: string
           data_admissao?: string
           data_nascimento?: string | null
+          em_experiencia?: boolean
           email?: string | null
+          emergencia_nome?: string | null
+          emergencia_parentesco?: string | null
+          emergencia_parentesco_outro?: string | null
+          emergencia_telefone?: string | null
+          escala_outros?: string | null
+          escala_trabalho?: string | null
+          experiencia_efetivado?: boolean
+          horario_entrada?: string | null
+          horario_sabado_entrada?: string | null
+          horario_sabado_saida?: string | null
+          horario_saida?: string | null
+          horas_extras_fixas_mes?: number
           id?: string
+          inicio_experiencia?: string | null
+          intervalo_descanso?: number | null
           nome?: string
           observacoes?: string | null
           posto_id?: string
+          prazo_experiencia?: number | null
+          prazo_renovacao?: number | null
+          renovavel?: boolean | null
+          rg?: string | null
           status?: string
           telefone?: string | null
         }
@@ -1098,6 +1797,116 @@ export type Database = {
           nome?: string
         }
         Relationships: []
+      }
+      publico_curriculos: {
+        Row: {
+          arquivo_path: string | null
+          arquivo_type: string | null
+          bairro: string | null
+          candidato_id: string | null
+          cargo_desejado: string
+          cidade: string | null
+          cpf: string
+          created_at: string
+          experiencia: string | null
+          id: string
+          nome: string
+          posto_id: string | null
+          rg: string | null
+          status: string
+          whatsapp: string
+        }
+        Insert: {
+          arquivo_path?: string | null
+          arquivo_type?: string | null
+          bairro?: string | null
+          candidato_id?: string | null
+          cargo_desejado: string
+          cidade?: string | null
+          cpf: string
+          created_at?: string
+          experiencia?: string | null
+          id?: string
+          nome: string
+          posto_id?: string | null
+          rg?: string | null
+          status?: string
+          whatsapp: string
+        }
+        Update: {
+          arquivo_path?: string | null
+          arquivo_type?: string | null
+          bairro?: string | null
+          candidato_id?: string | null
+          cargo_desejado?: string
+          cidade?: string | null
+          cpf?: string
+          created_at?: string
+          experiencia?: string | null
+          id?: string
+          nome?: string
+          posto_id?: string | null
+          rg?: string | null
+          status?: string
+          whatsapp?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publico_curriculos_candidato_id_fkey"
+            columns: ["candidato_id"]
+            isOneToOne: false
+            referencedRelation: "pessoal_candidatos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publico_curriculos_posto_id_fkey"
+            columns: ["posto_id"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      publico_feedback: {
+        Row: {
+          created_at: string
+          id: string
+          mensagem: string
+          nome: string | null
+          posto_id: string | null
+          status: string
+          tipo: string
+          whatsapp: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          mensagem: string
+          nome?: string | null
+          posto_id?: string | null
+          status?: string
+          tipo: string
+          whatsapp?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          mensagem?: string
+          nome?: string | null
+          posto_id?: string | null
+          status?: string
+          tipo?: string
+          whatsapp?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publico_feedback_posto_id_fkey"
+            columns: ["posto_id"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       relatorio_quality: {
         Row: {
@@ -1234,6 +2043,7 @@ export type Database = {
           perfil: string
           permissoes: string[]
           posto_ids: string[]
+          posto_padrao_id: string | null
           user_id: string
           username: string
         }
@@ -1245,6 +2055,7 @@ export type Database = {
           perfil?: string
           permissoes?: string[]
           posto_ids?: string[]
+          posto_padrao_id?: string | null
           user_id: string
           username: string
         }
@@ -1256,10 +2067,19 @@ export type Database = {
           perfil?: string
           permissoes?: string[]
           posto_ids?: string[]
+          posto_padrao_id?: string | null
           user_id?: string
           username?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_profiles_posto_padrao_id_fkey"
+            columns: ["posto_padrao_id"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
@@ -1291,6 +2111,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      master_reset_user_password: {
+        Args: { new_password: string; target_user_id: string }
+        Returns: undefined
       }
     }
     Enums: {
