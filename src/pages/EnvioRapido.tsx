@@ -20,36 +20,40 @@ import { useListaConfig } from '@/hooks/useListaConfig';
 const TURNOS_LEGADO = ['Turno 1', 'Turno 2', 'Turno 3', 'Turno 4'];
 const TURNOS_MANUAL = ['Turno 1', 'Turno 2', 'Turno 3', 'Turno 4'];
 const CENTROS_CUSTO = ['PISTA', 'CONVENIÊNCIA', 'TROCA DE ÓLEO'];
+
 type Tipo =
   | 'Depósito Manual'
   | 'Nota Fiscal de Compra'
   | 'Despesa'
   | 'Manutenção'
   | 'Outros'
-  | 'Entrega de Uniforme/EPI';
+  | 'Entrega de Uniforme/EPI'
+  | 'Atestado'
+  | 'Advertência';
 
 // Ordem dos grupos e itens no seletor de tipo.
 // O primeiro item do primeiro grupo é o padrão ao abrir a tela.
 const TIPO_GROUPS: { label: string; items: { value: Tipo; label: string }[] }[] = [
   {
-    label: 'Compras',
-    items: [{ value: 'Nota Fiscal de Compra', label: 'Nota Fiscal de Compra' }],
-  },
-  {
     label: 'Comprovante Caixa',
     items: [
-      { value: 'Despesa',    label: 'Despesa' },
-      { value: 'Manutenção', label: 'Aferição' },
-      { value: 'Outros',     label: 'Outros' },
+      { value: 'Depósito Manual', label: 'Depósito Manual' },
+      { value: 'Despesa',         label: 'Despesa' },
+      { value: 'Manutenção',      label: 'Aferição' },
+      { value: 'Outros',          label: 'Outros' },
     ],
   },
   {
-    label: 'Financeiro',
-    items: [{ value: 'Depósito Manual', label: 'Depósito Manual' }],
+    label: 'Compras / Pedidos',
+    items: [{ value: 'Nota Fiscal de Compra', label: 'Nota Fiscal de Compra' }],
   },
   {
     label: 'Pessoal',
-    items: [{ value: 'Entrega de Uniforme/EPI', label: 'Entrega de Uniforme/EPI' }],
+    items: [
+      { value: 'Entrega de Uniforme/EPI', label: 'Entrega de Uniforme/EPI' },
+      { value: 'Atestado',                label: 'Atestado' },
+      { value: 'Advertência',             label: 'Advertência' },
+    ],
   },
 ];
 
@@ -59,18 +63,23 @@ const TIPO_DEFAULT: Tipo = TIPO_GROUPS[0].items[0].value;
 
 interface FormState {
   // legado + manual
-  data_caixa:  string;
-  turno:       string;
+  data_caixa:   string;
+  turno:        string;
   centro_custo: string;
   // depósito manual
-  valor:       string;
+  valor:        string;
   // nota fiscal de compra
   data_chegada: string;
   fornecedor:   string;
-  observacoes: string;
+  observacoes:  string;
   // entrega de uniforme/epi
   funcionario_epi: string;
   data_entrega:    string;
+  // outros (comprovante caixa)
+  titulo:          string;
+  // atestado / advertência
+  funcionario_pessoal: string;
+  data_ocorrencia:     string;
 }
 
 const emptyForm: FormState = {
@@ -81,8 +90,11 @@ const emptyForm: FormState = {
   data_chegada: '',
   fornecedor:   '',
   observacoes:  '',
-  funcionario_epi: '',
-  data_entrega:    '',
+  funcionario_epi:     '',
+  data_entrega:        '',
+  titulo:              '',
+  funcionario_pessoal: '',
+  data_ocorrencia:     '',
 };
 
 // EPI item row
@@ -99,7 +111,7 @@ function parseMoney(v: string): number | null {
 }
 
 function formatDate(iso: string): string {
-  const d = iso.split('T')[0]; // "2026-04-16"
+  const d = iso.split('T')[0];
   const [y, m, day] = d.split('-');
   return `${day}/${m}/${y}`;
 }
@@ -109,20 +121,21 @@ function formatDate(iso: string): string {
 export default function EnvioRapido() {
   const { selectedPostoId, user, nome, username } = useAuth();
 
-  const [tipo, setTipo]           = useState<Tipo>(TIPO_DEFAULT);
-  const [form, setForm]           = useState<FormState>(emptyForm);
+  const [tipo, setTipo]                 = useState<Tipo>(TIPO_DEFAULT);
+  const [form, setForm]                 = useState<FormState>(emptyForm);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedBoleto, setSelectedBoleto]         = useState<File | null>(null);
   const [selectedMercadoria, setSelectedMercadoria] = useState<File | null>(null);
-  const [loading, setLoading]     = useState(false);
+  const [loading, setLoading]           = useState(false);
 
-  // ── EPI ───────────────────────────────────────────────────────────────────
+  // ── EPI / Pessoal funcionários ─────────────────────────────────────────────
   const tiposEPI = useListaConfig('tipos_uniforme_epi', EPI_FALLBACK);
-  const [epiItems, setEpiItems]   = useState<EPIItem[]>([emptyEPIItem()]);
+  const [epiItems, setEpiItems]         = useState<EPIItem[]>([emptyEPIItem()]);
   const [epiFuncionarios, setEpiFuncionarios] = useState<{ id: string; nome: string }[]>([]);
 
   useEffect(() => {
-    if (tipo !== 'Entrega de Uniforme/EPI' || !selectedPostoId) {
+    const needs = tipo === 'Entrega de Uniforme/EPI' || tipo === 'Atestado' || tipo === 'Advertência';
+    if (!needs || !selectedPostoId) {
       setEpiFuncionarios([]);
       return;
     }
@@ -148,18 +161,22 @@ export default function EnvioRapido() {
   const [pedidosPendentes, setPedidosPendentes] = useState<PedidoPendente[]>([]);
   const [selectedPedidoId, setSelectedPedidoId] = useState<string>('');
 
-  const cameraInputRef         = useRef<HTMLInputElement>(null);
-  const fileInputRef           = useRef<HTMLInputElement>(null);
-  const boletoCameraRef        = useRef<HTMLInputElement>(null);
-  const boletoFileRef          = useRef<HTMLInputElement>(null);
-  const mercadoriaCameraRef    = useRef<HTMLInputElement>(null);
-  const mercadoriaFileRef      = useRef<HTMLInputElement>(null);
+  const cameraInputRef      = useRef<HTMLInputElement>(null);
+  const fileInputRef        = useRef<HTMLInputElement>(null);
+  const boletoCameraRef     = useRef<HTMLInputElement>(null);
+  const boletoFileRef       = useRef<HTMLInputElement>(null);
+  const mercadoriaCameraRef = useRef<HTMLInputElement>(null);
+  const mercadoriaFileRef   = useRef<HTMLInputElement>(null);
 
   // ── flags ──────────────────────────────────────────────────────────────────
-  const isLegado     = tipo === 'Despesa' || tipo === 'Manutenção' || tipo === 'Outros';
-  const isManual     = tipo === 'Depósito Manual';
-  const isNotaCompra = tipo === 'Nota Fiscal de Compra';
-  const isEPI        = tipo === 'Entrega de Uniforme/EPI';
+  const isLegado            = tipo === 'Despesa' || tipo === 'Manutenção' || tipo === 'Outros';
+  const isOutros            = tipo === 'Outros';
+  const isManual            = tipo === 'Depósito Manual';
+  const isNotaCompra        = tipo === 'Nota Fiscal de Compra';
+  const isEPI               = tipo === 'Entrega de Uniforme/EPI';
+  const isAtestado          = tipo === 'Atestado';
+  const isAdvertencia       = tipo === 'Advertência';
+  const isPessoalOcorrencia = isAtestado || isAdvertencia;
 
   // Carrega pedidos aguardando entrega quando tipo = Nota Fiscal de Compra
   useEffect(() => {
@@ -222,12 +239,19 @@ export default function EnvioRapido() {
   // ── canSubmit ──────────────────────────────────────────────────────────────
   const canSubmit = (() => {
     if (loading || !selectedPostoId) return false;
-    if (isLegado)     return !!selectedFile && !!form.data_caixa && !!form.turno;
+    if (isLegado) {
+      const base = !!selectedFile && !!form.data_caixa && !!form.turno;
+      if (isOutros) return base && !!form.titulo;
+      return base;
+    }
     if (isManual)     return !!form.valor && !!form.data_caixa && !!form.turno;
     if (isNotaCompra) return !!form.fornecedor && !!form.data_chegada && !!selectedFile;
     if (isEPI) {
       const hasValidItem = epiItems.some((i) => i.tipo && parseInt(i.quantidade) > 0);
       return !!form.funcionario_epi && !!form.data_entrega && !!selectedFile && hasValidItem;
+    }
+    if (isPessoalOcorrencia) {
+      return !!selectedFile && !!form.funcionario_pessoal && !!form.data_ocorrencia;
     }
     return false;
   })();
@@ -246,14 +270,18 @@ export default function EnvioRapido() {
         );
         if (!up) throw new Error('Upload falhou');
         const { error } = await (supabase as any).from('comprovantes_despesas').insert({
-          posto_id:   selectedPostoId,
-          data_caixa: form.data_caixa,
-          file_path:  up.path,
-          file_name:  selectedFile!.name,
-          file_type:  up.fileType,
-          turno:      form.turno,
+          posto_id:     selectedPostoId,
+          data_caixa:   form.data_caixa,
+          file_path:    up.path,
+          file_name:    selectedFile!.name,
+          file_type:    up.fileType,
+          turno:        form.turno,
           tipo,
           centro_custo: form.centro_custo,
+          ...(isOutros ? {
+            titulo:     form.titulo,
+            observacao: form.observacoes || null,
+          } : {}),
         });
         if (error) throw error;
         toast.success('Comprovante enviado!');
@@ -273,13 +301,13 @@ export default function EnvioRapido() {
         const valorNum = parseMoney(form.valor);
         if (!valorNum) throw new Error('Valor inválido');
         const { error } = await (supabase as any).from('depositos_manuais').insert({
-          posto_id:      selectedPostoId,
-          data:          form.data_caixa,
-          turno:         form.turno.toUpperCase(),   // "Turno 1" → "TURNO 1"
-          centro_custo:  form.centro_custo,
-          valor_lancado: valorNum,
+          posto_id:         selectedPostoId,
+          data:             form.data_caixa,
+          turno:            form.turno.toUpperCase(),
+          centro_custo:     form.centro_custo,
+          valor_lancado:    valorNum,
           valor_depositado: null,
-          conferido:     'PENDENTE',
+          conferido:        'PENDENTE',
           ...(comprovante_path ? { comprovante_path, comprovante_type } : {}),
         });
         if (error) throw error;
@@ -319,24 +347,23 @@ export default function EnvioRapido() {
         const enviadoPorNome = nome || username || user?.email || null;
         const pedidoId = selectedPedidoId || null;
         const { error } = await (supabase as any).from('notas_fiscais_compra').insert({
-          posto_id:           selectedPostoId,
-          enviado_por:        user?.id ?? null,
-          enviado_por_nome:   enviadoPorNome,
-          fornecedor:         form.fornecedor,
-          data_chegada:       form.data_chegada,
-          observacoes:        form.observacoes || null,
-          nf_path:            nfUp.path,
-          nf_type:            nfUp.fileType,
-          boleto_path:        boletoPath,
-          boleto_type:        boletoType,
-          mercadoria_path:    mercadoriaPath,
-          mercadoria_type:    mercadoriaType,
-          pedido_id:          pedidoId,
-          status:             'Pendente',
+          posto_id:         selectedPostoId,
+          enviado_por:      user?.id ?? null,
+          enviado_por_nome: enviadoPorNome,
+          fornecedor:       form.fornecedor,
+          data_chegada:     form.data_chegada,
+          observacoes:      form.observacoes || null,
+          nf_path:          nfUp.path,
+          nf_type:          nfUp.fileType,
+          boleto_path:      boletoPath,
+          boleto_type:      boletoType,
+          mercadoria_path:  mercadoriaPath,
+          mercadoria_type:  mercadoriaType,
+          pedido_id:        pedidoId,
+          status:           'Pendente',
         });
         if (error) throw error;
 
-        // Se vinculou a um pedido, marca como Recebido automaticamente
         if (pedidoId) {
           const now = new Date().toISOString();
           await (supabase as any)
@@ -364,12 +391,12 @@ export default function EnvioRapido() {
         const { data: entrega, error: entregaErr } = await (supabase as any)
           .from('pessoal_entregas_epi')
           .insert({
-            funcionario_id:    form.funcionario_epi,
-            posto_id:          selectedPostoId,
-            data_entrega:      form.data_entrega,
-            comprovante_path:  up.path,
-            comprovante_type:  up.fileType,
-            observacoes:       form.observacoes || null,
+            funcionario_id:   form.funcionario_epi,
+            posto_id:         selectedPostoId,
+            data_entrega:     form.data_entrega,
+            comprovante_path: up.path,
+            comprovante_type: up.fileType,
+            observacoes:      form.observacoes || null,
           })
           .select()
           .single();
@@ -387,6 +414,27 @@ export default function EnvioRapido() {
 
         toast.success('Entrega de EPI registrada com sucesso!');
         setEpiItems([emptyEPIItem()]);
+      }
+
+      // ── Atestado / Advertência ───────────────────────────────────────────
+      else if (isPessoalOcorrencia) {
+        const up = await uploadFile(
+          'pessoal-documentos',
+          `ocorrencias/${form.funcionario_pessoal}`,
+        );
+        if (!up) throw new Error('Upload do arquivo falhou');
+
+        const { error } = await (supabase as any).from('pessoal_ocorrencias').insert({
+          funcionario_id: form.funcionario_pessoal,
+          posto_id:       selectedPostoId,
+          data:           form.data_ocorrencia,
+          tipo,
+          descricao:      form.observacoes || null,
+          arquivo_path:   up.path,
+        });
+        if (error) throw error;
+
+        toast.success(`${tipo} registrado! Aparecerá em Ponto e Ocorrências.`);
       }
 
       // reset
@@ -410,13 +458,13 @@ export default function EnvioRapido() {
   };
 
   // ── derived ────────────────────────────────────────────────────────────────
-  const previewUrl         = selectedFile       ? URL.createObjectURL(selectedFile)       : null;
-  const boletoPreview      = selectedBoleto     ? URL.createObjectURL(selectedBoleto)     : null;
-  const mercadoriaPreview  = selectedMercadoria ? URL.createObjectURL(selectedMercadoria) : null;
-  const isImage            = selectedFile?.type.startsWith('image/');
-  const isBoletoImage      = selectedBoleto?.type.startsWith('image/');
-  const isMercadoriaImage  = selectedMercadoria?.type.startsWith('image/');
-  const fileRequired  = !isManual && !isNotaCompra && !isEPI; // for isNotaCompra/isEPI, file is required but handled separately
+  const previewUrl        = selectedFile       ? URL.createObjectURL(selectedFile)       : null;
+  const boletoPreview     = selectedBoleto     ? URL.createObjectURL(selectedBoleto)     : null;
+  const mercadoriaPreview = selectedMercadoria ? URL.createObjectURL(selectedMercadoria) : null;
+  const isImage           = selectedFile?.type.startsWith('image/');
+  const isBoletoImage     = selectedBoleto?.type.startsWith('image/');
+  const isMercadoriaImage = selectedMercadoria?.type.startsWith('image/');
+  const fileRequired      = !isManual && !isNotaCompra && !isEPI && !isPessoalOcorrencia;
 
   if (!selectedPostoId) {
     return (
@@ -494,7 +542,11 @@ export default function EnvioRapido() {
                 const newTipo = v as Tipo;
                 setTipo(newTipo);
                 const today = new Date().toISOString().split('T')[0];
-                setForm({ ...emptyForm, data_entrega: newTipo === 'Entrega de Uniforme/EPI' ? today : '' });
+                setForm({
+                  ...emptyForm,
+                  data_entrega:    newTipo === 'Entrega de Uniforme/EPI' ? today : '',
+                  data_ocorrencia: (newTipo === 'Atestado' || newTipo === 'Advertência') ? today : '',
+                });
                 clearFile();
                 clearBoleto();
                 clearMercadoria();
@@ -522,6 +574,26 @@ export default function EnvioRapido() {
           {isEPI ? (
             <FilePickerField
               label="Comprovante assinado *"
+              file={selectedFile}
+              previewUrl={previewUrl}
+              isImage={!!isImage}
+              onClear={clearFile}
+              onCamera={() => cameraInputRef.current?.click()}
+              onFile={() => fileInputRef.current?.click()}
+            />
+          ) : isAtestado ? (
+            <FilePickerField
+              label="Foto do Atestado *"
+              file={selectedFile}
+              previewUrl={previewUrl}
+              isImage={!!isImage}
+              onClear={clearFile}
+              onCamera={() => cameraInputRef.current?.click()}
+              onFile={() => fileInputRef.current?.click()}
+            />
+          ) : isAdvertencia ? (
+            <FilePickerField
+              label="Foto da Advertência assinada *"
               file={selectedFile}
               previewUrl={previewUrl}
               isImage={!!isImage}
@@ -628,6 +700,17 @@ export default function EnvioRapido() {
           {/* ── Legado: Despesa / Manutenção / Outros ── */}
           {isLegado && (
             <>
+              {isOutros && (
+                <div className="space-y-2">
+                  <Label>Título *</Label>
+                  <Input
+                    value={form.titulo}
+                    onChange={field('titulo')}
+                    placeholder="Ex: Pagamento de frete"
+                    className="h-12 text-sm"
+                  />
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Data do Caixa</Label>
                 <Input
@@ -663,6 +746,21 @@ export default function EnvioRapido() {
                   </SelectContent>
                 </Select>
               </div>
+              {isOutros && (
+                <div className="space-y-2">
+                  <Label>
+                    Observação{' '}
+                    <span className="text-muted-foreground font-normal text-xs">(opcional)</span>
+                  </Label>
+                  <Textarea
+                    value={form.observacoes}
+                    onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))}
+                    placeholder="Informações adicionais..."
+                    className="text-sm resize-none"
+                    rows={3}
+                  />
+                </div>
+              )}
             </>
           )}
 
@@ -919,6 +1017,58 @@ export default function EnvioRapido() {
               <div className="space-y-2">
                 <Label>
                   Observações{' '}
+                  <span className="text-muted-foreground font-normal text-xs">(opcional)</span>
+                </Label>
+                <Textarea
+                  value={form.observacoes}
+                  onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))}
+                  placeholder="Informações adicionais..."
+                  className="text-sm resize-none"
+                  rows={3}
+                />
+              </div>
+            </>
+          )}
+
+          {/* ── Atestado / Advertência ── */}
+          {isPessoalOcorrencia && (
+            <>
+              {/* Funcionário */}
+              <div className="space-y-2">
+                <Label>Funcionário *</Label>
+                <Select
+                  value={form.funcionario_pessoal}
+                  onValueChange={(v) => setForm((f) => ({ ...f, funcionario_pessoal: v }))}
+                >
+                  <SelectTrigger className="h-12 text-sm">
+                    <SelectValue placeholder="Selecionar funcionário" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {epiFuncionarios.map((f) => (
+                      <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>
+                    ))}
+                    {epiFuncionarios.length === 0 && (
+                      <SelectItem value="__none__" disabled>Nenhum funcionário ativo</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Data */}
+              <div className="space-y-2">
+                <Label>Data *</Label>
+                <Input
+                  type="date"
+                  value={form.data_ocorrencia}
+                  onChange={(e) => setForm((f) => ({ ...f, data_ocorrencia: e.target.value }))}
+                  className="h-12 text-sm"
+                />
+              </div>
+
+              {/* Observação */}
+              <div className="space-y-2">
+                <Label>
+                  Observação{' '}
                   <span className="text-muted-foreground font-normal text-xs">(opcional)</span>
                 </Label>
                 <Textarea
