@@ -308,6 +308,7 @@ export default function EnvioRapido() {
           valor_lancado:    valorNum,
           valor_depositado: null,
           conferido:        'PENDENTE',
+          criado_por_nome:  nome || username || user?.email || null,
           ...(comprovante_path ? { comprovante_path, comprovante_type } : {}),
         });
         if (error) throw error;

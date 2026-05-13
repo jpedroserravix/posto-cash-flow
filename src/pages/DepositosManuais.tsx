@@ -42,6 +42,7 @@ interface ManualDeposit {
   conciliado_banco_id: string | null;
   comprovante_path: string | null;
   comprovante_type: string | null;
+  criado_por_nome: string | null;
 }
 
 interface PreviewFile {
@@ -59,7 +60,7 @@ interface ContaBancaria {
 export default function DepositosManuais() {
   const centrosCusto = useListaConfig('centros_custo', CENTROS_CUSTO_FALLBACK);
 
-  const { selectedPostoId, role } = useAuth();
+  const { selectedPostoId, role, nome, username, user } = useAuth();
   const isMobile = useIsMobile();
   const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter();
   const [deposits, setDeposits] = useState<ManualDeposit[]>([]);
@@ -274,7 +275,10 @@ export default function DepositosManuais() {
       toast.success('Atualizado');
       cancelEdit();
     } else {
-      const { error } = await supabase.from('depositos_manuais').insert(record);
+      const { error } = await supabase.from('depositos_manuais').insert({
+        ...record,
+        criado_por_nome: nome || username || user?.email || null,
+      });
       if (error) { toast.error('Erro: ' + error.message); return; }
       toast.success('Lançamento adicionado');
       setFormData({ data: '', turno: '', centro_custo: '', valor_lancado: '', valor_depositado: '', observacao: '' });
@@ -591,7 +595,12 @@ export default function DepositosManuais() {
                                 <span className="text-xs text-muted-foreground">—</span>
                               )}
                             </TableCell>
-                            <TableCell className="text-xs">{formatDate(d.data)}</TableCell>
+                            <TableCell className="text-xs">
+                              <div>{formatDate(d.data)}</div>
+                              {d.criado_por_nome && (
+                                <div className="text-[10px] text-muted-foreground mt-0.5">{d.criado_por_nome}</div>
+                              )}
+                            </TableCell>
                             <TableCell className="text-xs">{d.turno}</TableCell>
                             <TableCell className="text-xs">{d.centro_custo || '—'}</TableCell>
                             <TableCell className="text-right text-xs font-medium">{formatCurrency(d.valor_lancado)}</TableCell>
