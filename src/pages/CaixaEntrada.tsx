@@ -14,7 +14,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { FileText, UserPlus, Search, Trash2 } from 'lucide-react';
+import { FileText, UserPlus, Search, Trash2, Download } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
@@ -99,6 +101,106 @@ function formatCPF(raw: string) {
 function formatDate(str: string) {
   const [y, m, d] = str.slice(0, 10).split('-');
   return `${d}/${m}/${y}`;
+}
+
+// ─── PDF export ──────────────────────────────────────────────────────────────
+
+function pdfHeader(doc: jsPDF, subtitle: string): number {
+  const now = new Date().toLocaleDateString('pt-BR');
+  doc.setFontSize(15);
+  doc.setFont('helvetica', 'bold');
+  doc.text('POSTO INTELIGENTE', 14, 20);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100);
+  doc.text(`${subtitle} · Exportado em ${now}`, 14, 27);
+  doc.setTextColor(0);
+  return 36;
+}
+
+function exportCurriculosPDF(rows: Curriculo[]) {
+  const doc = new jsPDF({ orientation: 'landscape' });
+  const startY = pdfHeader(doc, `Currículos (${rows.length})`);
+  autoTable(doc, {
+    startY,
+    head: [['Data', 'Nome', 'CPF', 'WhatsApp', 'Cidade', 'Bairro', 'Cargo desejado', 'Status']],
+    body: rows.map((c) => [
+      formatDate(c.created_at), c.nome, formatCPF(c.cpf), c.whatsapp,
+      c.cidade ?? '—', c.bairro ?? '—', c.cargo_desejado, c.status,
+    ]),
+    styles: { fontSize: 8 },
+    headStyles: { fillColor: [30, 41, 59] },
+  });
+  doc.save(`curriculos_${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
+function exportCurriculoPDF(c: Curriculo, postoNome?: string) {
+  const doc = new jsPDF();
+  const startY = pdfHeader(doc, 'Currículo');
+  const exps = parseExperiencias(c.experiencia);
+  const rows: [string, string][] = [
+    ['Nome', c.nome], ['CPF', formatCPF(c.cpf)], ['RG', c.rg ?? '—'],
+    ['WhatsApp', c.whatsapp], ['Cidade', c.cidade ?? '—'], ['Bairro', c.bairro ?? '—'],
+    ['Cargo desejado', c.cargo_desejado],
+    ...(postoNome ? [['Posto desejado', postoNome] as [string, string]] : []),
+    ['Data de envio', formatDate(c.created_at)], ['Status', c.status],
+  ];
+  autoTable(doc, {
+    startY, body: rows, styles: { fontSize: 9 }, theme: 'grid',
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 42, fillColor: [245, 245, 245] } },
+  });
+  let y: number = ((doc as any).lastAutoTable?.finalY ?? startY + 40) + 10;
+  if (exps.length > 0) {
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Experiências Anteriores', 14, y);
+    y += 6;
+    autoTable(doc, {
+      startY: y,
+      head: [['Cargo', 'Empresa', 'Período', 'Descrição']],
+      body: exps.map((e) => [
+        e.cargo, e.empresa ?? '—',
+        [e.inicio, e.fim].filter(Boolean).join(' → ') || '—',
+        e.descricao ?? '—',
+      ]),
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [30, 41, 59] },
+    });
+  }
+  doc.save(`curriculo_${c.nome.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30)}.pdf`);
+}
+
+function exportFeedbacksPDF(rows: Feedback[], postoNome: (id: string | null) => string) {
+  const doc = new jsPDF({ orientation: 'landscape' });
+  const startY = pdfHeader(doc, `Feedbacks (${rows.length})`);
+  autoTable(doc, {
+    startY,
+    head: [['Data', 'Nome', 'Tipo', 'Mensagem', 'WhatsApp', 'Posto', 'Status']],
+    body: rows.map((f) => [
+      formatDate(f.created_at), f.nome ?? 'Anônimo', f.tipo, f.mensagem,
+      f.whatsapp ?? '—', postoNome(f.posto_id), f.status,
+    ]),
+    styles: { fontSize: 8 },
+    headStyles: { fillColor: [30, 41, 59] },
+    columnStyles: { 3: { cellWidth: 90 } },
+  });
+  doc.save(`feedbacks_${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
+function exportFeedbackPDF(f: Feedback, postoNome: string) {
+  const doc = new jsPDF();
+  const startY = pdfHeader(doc, 'Feedback');
+  autoTable(doc, {
+    startY,
+    body: [
+      ['Nome', f.nome ?? 'Anônimo'], ['Tipo', f.tipo], ['Status', f.status],
+      ['WhatsApp', f.whatsapp ?? '—'], ['Posto', postoNome],
+      ['Data', formatDate(f.created_at)], ['Mensagem', f.mensagem],
+    ],
+    styles: { fontSize: 9 }, theme: 'grid',
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 42, fillColor: [245, 245, 245] } },
+  });
+  doc.save(`feedback_${(f.nome ?? 'anonimo').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30)}.pdf`);
 }
 
 // ─── component ────────────────────────────────────────────────────────────────
@@ -340,6 +442,14 @@ export default function CaixaEntrada() {
                 {CURRICULO_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
               </SelectContent>
             </Select>
+            <Button
+              variant="outline" size="sm" className="h-8 text-xs gap-1.5 ml-auto"
+              disabled={filteredCurriculos.length === 0}
+              onClick={() => exportCurriculosPDF(filteredCurriculos)}
+            >
+              <Download className="w-3.5 h-3.5" />
+              Exportar PDF
+            </Button>
           </div>
 
           <Card>
@@ -471,6 +581,17 @@ export default function CaixaEntrada() {
                 {FEEDBACK_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
               </SelectContent>
             </Select>
+            <Button
+              variant="outline" size="sm" className="h-8 text-xs gap-1.5 ml-auto"
+              disabled={filteredFeedbacks.length === 0}
+              onClick={() => exportFeedbacksPDF(
+                filteredFeedbacks,
+                (id) => allPostos.find((p) => p.id === id)?.nome ?? '—',
+              )}
+            >
+              <Download className="w-3.5 h-3.5" />
+              Exportar PDF
+            </Button>
           </div>
 
           <Card>
@@ -486,15 +607,15 @@ export default function CaixaEntrada() {
                       <TableHead className="text-xs">Tipo</TableHead>
                       <TableHead className="text-xs">Mensagem</TableHead>
                       <TableHead className="text-xs">Status</TableHead>
-                      {isAdmin && <TableHead className="text-xs w-10"></TableHead>}
+                      <TableHead className="text-xs w-20"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loadingFeedbacks && (
-                      <TableRow><TableCell colSpan={isAdmin ? 8 : 7} className="text-center text-xs text-muted-foreground py-8">Carregando...</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={8} className="text-center text-xs text-muted-foreground py-8">Carregando...</TableCell></TableRow>
                     )}
                     {!loadingFeedbacks && paginaFeedbacks.paginatedData.length === 0 && (
-                      <TableRow><TableCell colSpan={isAdmin ? 8 : 7} className="text-center text-xs text-muted-foreground py-8">Nenhum feedback encontrado.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={8} className="text-center text-xs text-muted-foreground py-8">Nenhum feedback encontrado.</TableCell></TableRow>
                     )}
                     {paginaFeedbacks.paginatedData.map((f) => (
                       <TableRow key={f.id} className="text-xs">
@@ -520,18 +641,28 @@ export default function CaixaEntrada() {
                             </SelectContent>
                           </Select>
                         </TableCell>
-                        {isAdmin && (
-                          <TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
                             <Button
                               variant="ghost" size="icon"
-                              className="h-7 w-7 text-muted-foreground hover:text-red-500 hover:bg-red-50"
-                              onClick={() => setDeleteTarget({ type: 'feedback', id: f.id })}
-                              title="Excluir feedback"
+                              className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                              onClick={() => exportFeedbackPDF(f, allPostos.find((p) => p.id === f.posto_id)?.nome ?? '—')}
+                              title="Exportar PDF"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Download className="w-3.5 h-3.5" />
                             </Button>
-                          </TableCell>
-                        )}
+                            {isAdmin && (
+                              <Button
+                                variant="ghost" size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-red-500 hover:bg-red-50"
+                                onClick={() => setDeleteTarget({ type: 'feedback', id: f.id })}
+                                title="Excluir feedback"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -615,6 +746,18 @@ export default function CaixaEntrada() {
           })()}
           <DialogFooter className="gap-2">
             <Button variant="outline" size="sm" onClick={() => setDetailOpen(false)}>Fechar</Button>
+            {detailTarget && (
+              <Button
+                variant="outline" size="sm" className="gap-1.5"
+                onClick={() => exportCurriculoPDF(
+                  detailTarget,
+                  allPostos.find((p) => p.id === detailTarget.posto_id)?.nome,
+                )}
+              >
+                <Download className="w-3.5 h-3.5" />
+                Exportar PDF
+              </Button>
+            )}
             {detailTarget && !detailTarget.candidato_id && (
               <Button
                 size="sm" className="bg-green-600 hover:bg-green-700 gap-1.5"
