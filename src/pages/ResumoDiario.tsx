@@ -45,20 +45,14 @@ interface AfericaoInfo {
 
 interface Comprovante {
   id: string;
-  file_path: string;
-  file_name: string;
-  file_type: 'pdf' | 'image';
+  file_path: string | null;
+  file_name: string | null;
+  file_type: 'pdf' | 'image' | null;
   observacao: string | null;
   tipo: string | null;
   titulo: string | null;
   descricao_despesa: string | null;
-  item_conferido: boolean;
-}
-
-interface ManualItem {
-  id: string;
-  turno: string | null;
-  valor_lancado: number;
+  centro_custo: string | null;
   item_conferido: boolean;
 }
 
@@ -75,7 +69,6 @@ interface GroupData {
   quality?: QualityInfo;
   afericoes: AfericaoInfo[];
   comprovantes: Comprovante[];
-  manuaisEnvio: ManualItem[];
   turnosConferidos: string[];
 }
 
@@ -120,7 +113,7 @@ export default function ResumoDiario() {
 
   // Comprovantes state
   const [uploadingComprovDate, setUploadingComprovDate] = useState<string | null>(null);
-  const [deletingComprovante, setDeletingComprovante] = useState<{ id: string; file_path: string } | null>(null);
+  const [deletingComprovante, setDeletingComprovante] = useState<{ id: string; file_path: string | null } | null>(null);
   const comprovantesFileInputRef = useRef<HTMLInputElement>(null);
 
   // Comprovante observation edits (keyed by comprovante id, auto-saved)
@@ -155,14 +148,14 @@ export default function ResumoDiario() {
       supabase.from('depositos_brinks').select('data_caixa, turno, valor, centro_custo')
         .eq('posto_id', selectedPostoId).not('data_caixa', 'is', null).not('turno', 'is', null)
         .gte('data_caixa', dfRange.start).lte('data_caixa', dfRange.end),
-      supabase.from('depositos_manuais').select('id, data, turno, valor_lancado, centro_custo, item_conferido')
+      supabase.from('depositos_manuais').select('data, turno, valor_lancado, centro_custo')
         .eq('posto_id', selectedPostoId).gte('data', dfRange.start).lte('data', dfRange.end),
       supabase.from('resumo_conferencia').select('*')
         .eq('posto_id', selectedPostoId).gte('data', dfRange.start).lte('data', dfRange.end),
       supabase.from('relatorio_quality').select('data_caixa, pdf_path, quality_conferido')
         .eq('posto_id', selectedPostoId).gte('data_caixa', dfRange.start).lte('data_caixa', dfRange.end),
       (supabase as any).from('comprovantes_despesas')
-        .select('id, data_caixa, file_path, file_name, file_type, observacao, tipo, titulo, descricao_despesa, item_conferido')
+        .select('id, data_caixa, file_path, file_name, file_type, observacao, tipo, titulo, descricao_despesa, item_conferido, centro_custo')
         .eq('posto_id', selectedPostoId).gte('data_caixa', dfRange.start).lte('data_caixa', dfRange.end),
       (supabase as any).from('afericoes')
         .select('id, data, pdf_path, criado_por_nome, item_conferido')
@@ -179,14 +172,8 @@ export default function ResumoDiario() {
       turnoMap.set(key, ex);
     });
 
-    // Build manuaisEnvio map (keyed by data|cc) for right-column display
-    const manuaisEnvioMap = new Map<string, ManualItem[]>();
     manuais?.forEach((m) => {
       if (!m.centro_custo) return;
-      const gKey = `${m.data}|${m.centro_custo}`;
-      const arr = manuaisEnvioMap.get(gKey) || [];
-      arr.push({ id: (m as any).id, turno: m.turno ?? null, valor_lancado: m.valor_lancado, item_conferido: (m as any).item_conferido ?? false });
-      manuaisEnvioMap.set(gKey, arr);
       const key = `${m.data}|${m.centro_custo}|${m.turno}`;
       const ex = turnoMap.get(key) || { brinks: 0, manual: 0 };
       ex.manual += m.valor_lancado;
@@ -229,7 +216,7 @@ export default function ResumoDiario() {
     const comprovantesMap = new Map<string, Comprovante[]>();
     (comprovantesData as any[] ?? []).forEach((c) => {
       const arr = comprovantesMap.get(c.data_caixa) || [];
-      arr.push({ id: c.id, file_path: c.file_path, file_name: c.file_name, file_type: c.file_type, observacao: c.observacao ?? null, tipo: c.tipo ?? null, titulo: c.titulo ?? null, descricao_despesa: c.descricao_despesa ?? null, item_conferido: c.item_conferido ?? false });
+      arr.push({ id: c.id, file_path: c.file_path ?? null, file_name: c.file_name ?? null, file_type: c.file_type ?? null, observacao: c.observacao ?? null, tipo: c.tipo ?? null, titulo: c.titulo ?? null, descricao_despesa: c.descricao_despesa ?? null, item_conferido: c.item_conferido ?? false, centro_custo: c.centro_custo ?? null });
       comprovantesMap.set(c.data_caixa, arr);
     });
 
@@ -261,7 +248,6 @@ export default function ResumoDiario() {
           quality: qualityMap.get(data),
           afericoes: afericaoMap.get(data) || [],
           comprovantes: comprovantesMap.get(data) || [],
-          manuaisEnvio: manuaisEnvioMap.get(key) || [],
           turnosConferidos: conf?.turnos_conferidos || [],
         };
       })
@@ -425,7 +411,9 @@ export default function ResumoDiario() {
 
   const handleDeleteComprovante = async () => {
     if (!deletingComprovante) return;
-    await supabase.storage.from('despesas-comprovantes').remove([deletingComprovante.file_path]);
+    if (deletingComprovante.file_path) {
+      await supabase.storage.from('despesas-comprovantes').remove([deletingComprovante.file_path]);
+    }
     await (supabase as any).from('comprovantes_despesas').delete().eq('id', deletingComprovante.id);
     toast.success('Comprovante removido.');
     setDeletingComprovante(null);
@@ -458,16 +446,6 @@ export default function ResumoDiario() {
     if (error) {
       toast.error('Erro ao salvar');
       setGroups((prev) => prev.map((g) => ({ ...g, comprovantes: g.comprovantes.map((c) => c.id === compId ? { ...c, item_conferido: currentVal } : c) })));
-    }
-  };
-
-  const handleToggleManual = async (manualId: string, currentVal: boolean) => {
-    const newVal = !currentVal;
-    setGroups((prev) => prev.map((g) => ({ ...g, manuaisEnvio: g.manuaisEnvio.map((m) => m.id === manualId ? { ...m, item_conferido: newVal } : m) })));
-    const { error } = await supabase.from('depositos_manuais').update({ item_conferido: newVal } as any).eq('id', manualId);
-    if (error) {
-      toast.error('Erro ao salvar');
-      setGroups((prev) => prev.map((g) => ({ ...g, manuaisEnvio: g.manuaisEnvio.map((m) => m.id === manualId ? { ...m, item_conferido: currentVal } : m) })));
     }
   };
 
@@ -533,6 +511,10 @@ export default function ResumoDiario() {
               ? getStorageUrl('quality-pdfs', group.quality.pdf_path)
               : null;
             const dateLabel = new Date(`${group.data}T00:00:00`).toLocaleDateString('pt-BR');
+            const visibleComprovantes = group.comprovantes.filter(
+              (c) => c.tipo !== 'Nota a Prazo' || c.centro_custo === group.centroCusto
+            );
+            const totalItens = group.afericoes.length + visibleComprovantes.length;
 
             return (
               <Card key={`${group.data}-${group.centroCusto}`} className={borderColor(group.conferido)}>
@@ -635,10 +617,8 @@ export default function ResumoDiario() {
                         <div className="flex items-center gap-1.5">
                           <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
                           <span className="text-xs text-muted-foreground font-medium">Itens do Caixa</span>
-                          {(group.afericoes.length + group.manuaisEnvio.length + group.comprovantes.length) > 0 && (
-                            <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
-                              {group.afericoes.length + group.manuaisEnvio.length + group.comprovantes.length}
-                            </Badge>
+                          {totalItens > 0 && (
+                            <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">{totalItens}</Badge>
                           )}
                         </div>
                         <Button size="sm" variant="ghost" className="h-6 text-xs"
@@ -647,7 +627,7 @@ export default function ResumoDiario() {
                         </Button>
                       </div>
 
-                      {group.afericoes.length === 0 && group.manuaisEnvio.length === 0 && group.comprovantes.length === 0 && (
+                      {group.afericoes.length === 0 && visibleComprovantes.length === 0 && (
                         <p className="text-xs text-muted-foreground py-2">Nenhum item de caixa.</p>
                       )}
 
@@ -689,28 +669,16 @@ export default function ResumoDiario() {
                         );
                       })}
 
-                      {/* Depósitos Manuais (Envio Rápido) */}
-                      {group.manuaisEnvio.map((m) => (
-                        <div key={m.id} className="flex items-center gap-2 rounded-md border p-2">
-                          <Checkbox
-                            checked={m.item_conferido}
-                            onCheckedChange={() => handleToggleManual(m.id, m.item_conferido)}
-                            className="h-4 w-4 shrink-0"
-                          />
-                          <span className="flex-1 text-xs">
-                            Depósito Manual — {fmt(m.valor_lancado)}{m.turno ? ` (Turno ${m.turno})` : ''}
-                          </span>
-                        </div>
-                      ))}
-
-                      {/* Comprovantes */}
-                      {group.comprovantes.map((comp) => {
-                        const compUrl = getStorageUrl('despesas-comprovantes', comp.file_path);
+                      {/* Comprovantes (Despesa, Outros, Nota a Prazo) */}
+                      {visibleComprovantes.map((comp) => {
+                        const compUrl = comp.file_path ? getStorageUrl('despesas-comprovantes', comp.file_path) : null;
                         const compLabel = comp.tipo === 'Despesa'
                           ? `Despesa${comp.descricao_despesa ? ` — ${comp.descricao_despesa}` : ''}`
                           : comp.tipo === 'Outros'
                             ? `Outros${comp.titulo ? ` — ${comp.titulo}` : ''}`
-                            : comp.file_name;
+                            : comp.tipo === 'Nota a Prazo'
+                              ? 'Nota a Prazo'
+                              : comp.file_name ?? '(arquivo)';
                         return (
                           <div key={comp.id} className="group/comp flex items-start gap-2 rounded-md border p-2">
                             <Checkbox
@@ -718,36 +686,38 @@ export default function ResumoDiario() {
                               onCheckedChange={() => handleToggleComprovante(comp.id, comp.item_conferido)}
                               className="h-4 w-4 shrink-0 mt-0.5"
                             />
-                            {/* Preview trigger */}
-                            <div className="relative shrink-0">
-                              <HoverCard openDelay={300} closeDelay={100}>
-                                <HoverCardTrigger asChild>
-                                  <button
-                                    className="flex items-center gap-1 rounded border border-border px-1.5 py-1 text-xs text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
-                                    onClick={() => {
-                                      if (comp.file_type !== 'image' && isMobile) { openInNewTab(compUrl); return; }
-                                      setPreviewFile({ url: compUrl, label: comp.file_name, fileType: comp.file_type });
-                                    }}
-                                  >
+                            {/* Preview trigger — only when file exists */}
+                            {compUrl && (
+                              <div className="relative shrink-0">
+                                <HoverCard openDelay={300} closeDelay={100}>
+                                  <HoverCardTrigger asChild>
+                                    <button
+                                      className="flex items-center gap-1 rounded border border-border px-1.5 py-1 text-xs text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
+                                      onClick={() => {
+                                        if (comp.file_type !== 'image' && isMobile) { openInNewTab(compUrl); return; }
+                                        setPreviewFile({ url: compUrl, label: comp.file_name ?? compLabel, fileType: comp.file_type ?? 'pdf' });
+                                      }}
+                                    >
+                                      {comp.file_type === 'image' ? (
+                                        <img src={compUrl} className="h-5 w-5 rounded object-cover" alt="" />
+                                      ) : (
+                                        <FileText className="h-4 w-4 text-red-500" />
+                                      )}
+                                    </button>
+                                  </HoverCardTrigger>
+                                  <HoverCardContent className="w-64 p-1.5" align="start" side="bottom">
                                     {comp.file_type === 'image' ? (
-                                      <img src={compUrl} className="h-5 w-5 rounded object-cover" alt="" />
+                                      <img src={compUrl} className="w-full max-h-48 rounded border object-contain" alt={comp.file_name ?? ''} />
                                     ) : (
-                                      <FileText className="h-4 w-4 text-red-500" />
+                                      <>
+                                        <p className="mb-1 px-0.5 text-[10px] text-muted-foreground">Clique para abrir com zoom</p>
+                                        <iframe src={compUrl} className="h-40 w-full rounded border border-border" title={comp.file_name ?? ''} />
+                                      </>
                                     )}
-                                  </button>
-                                </HoverCardTrigger>
-                                <HoverCardContent className="w-64 p-1.5" align="start" side="bottom">
-                                  {comp.file_type === 'image' ? (
-                                    <img src={compUrl} className="w-full max-h-48 rounded border object-contain" alt={comp.file_name} />
-                                  ) : (
-                                    <>
-                                      <p className="mb-1 px-0.5 text-[10px] text-muted-foreground">Clique para abrir com zoom</p>
-                                      <iframe src={compUrl} className="h-40 w-full rounded border border-border" title={comp.file_name} />
-                                    </>
-                                  )}
-                                </HoverCardContent>
-                              </HoverCard>
-                            </div>
+                                  </HoverCardContent>
+                                </HoverCard>
+                              </div>
+                            )}
 
                             {/* Label + observation */}
                             <div className="flex-1 min-w-0 space-y-0.5">

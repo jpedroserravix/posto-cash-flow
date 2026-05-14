@@ -34,6 +34,7 @@ type Tipo =
   | 'Despesa'
   | 'Manutenção'
   | 'Outros'
+  | 'Nota a Prazo'
   | 'Entrega de Uniforme/EPI'
   | 'Atestado'
   | 'Advertência';
@@ -48,6 +49,7 @@ const TIPO_GROUPS: { label: string; items: { value: Tipo; label: string }[] }[] 
       { value: 'Despesa',         label: 'Despesa' },
       { value: 'Manutenção',      label: 'Aferição' },
       { value: 'Outros',          label: 'Outros' },
+      { value: 'Nota a Prazo',    label: 'Nota a Prazo' },
     ],
   },
   {
@@ -223,6 +225,7 @@ export default function EnvioRapido() {
   const isOutros            = tipo === 'Outros';
   const isManual            = tipo === 'Depósito Manual';
   const isNotaCompra        = tipo === 'Nota Fiscal de Compra';
+  const isNotaPrazo         = tipo === 'Nota a Prazo';
   const isEPI               = tipo === 'Entrega de Uniforme/EPI';
   const isAtestado          = tipo === 'Atestado';
   const isAdvertencia       = tipo === 'Advertência';
@@ -288,6 +291,7 @@ export default function EnvioRapido() {
       return base && !!form.descricao_despesa;
     }
     if (isManual)     return !!form.valor && !!form.data_caixa && !!form.turno;
+    if (isNotaPrazo)  return !!form.data_caixa && !!form.turno && !!form.centro_custo;
     if (isNotaCompra) return !!form.fornecedor && !!form.data_chegada && !!selectedFile;
     if (isEPI) {
       const hasValidItem = epiItems.some((i) => i.tipo && parseInt(i.quantidade) > 0);
@@ -401,6 +405,29 @@ export default function EnvioRapido() {
         });
         if (error) throw error;
         toast.success('Depósito manual registrado! Aparecerá em Depósitos Manuais.');
+      }
+
+      // ── Nota a Prazo ─────────────────────────────────────────────────────
+      else if (isNotaPrazo) {
+        let filePath: string | null = null;
+        let fileName: string | null = null;
+        let fileTypeSaved: string | null = null;
+        if (selectedFile) {
+          const up = await uploadFile('despesas-comprovantes', `${selectedPostoId}/${form.data_caixa}`);
+          if (up) { filePath = up.path; fileName = selectedFile.name; fileTypeSaved = up.fileType; }
+        }
+        const { error } = await (supabase as any).from('comprovantes_despesas').insert({
+          posto_id:     selectedPostoId,
+          data_caixa:   form.data_caixa,
+          turno:        form.turno,
+          centro_custo: form.centro_custo,
+          tipo:         'Nota a Prazo',
+          file_path:    filePath,
+          file_name:    fileName,
+          file_type:    fileTypeSaved,
+        });
+        if (error) throw error;
+        toast.success('Nota a Prazo registrada!');
       }
 
       // ── Nota Fiscal de Compra ────────────────────────────────────────────
@@ -563,7 +590,7 @@ export default function EnvioRapido() {
   const isImage           = selectedFile?.type.startsWith('image/');
   const isBoletoImage     = selectedBoleto?.type.startsWith('image/');
   const isMercadoriaImage = selectedMercadoria?.type.startsWith('image/');
-  const fileRequired      = !isManual && !isNotaCompra && !isEPI && !isPessoalOcorrencia && !isAfericao;
+  const fileRequired      = !isManual && !isNotaCompra && !isEPI && !isPessoalOcorrencia && !isAfericao && !isNotaPrazo;
 
   if (!selectedPostoId) {
     return (
@@ -993,6 +1020,30 @@ export default function EnvioRapido() {
               </div>
               <div className="space-y-2">
                 <Label>Centro de Custo</Label>
+                <Select value={form.centro_custo} onValueChange={sel('centro_custo')}>
+                  <SelectTrigger className="h-12 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>{CENTROS_CUSTO.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
+
+          {/* ── Nota a Prazo ── */}
+          {isNotaPrazo && (
+            <>
+              <div className="space-y-2">
+                <Label>Data do Caixa *</Label>
+                <Input type="date" value={form.data_caixa} onChange={field('data_caixa')} className="h-12 text-sm" />
+              </div>
+              <div className="space-y-2">
+                <Label>Turno *</Label>
+                <Select value={form.turno} onValueChange={sel('turno')}>
+                  <SelectTrigger className="h-12 text-sm"><SelectValue placeholder="Selecione o turno" /></SelectTrigger>
+                  <SelectContent>{TURNOS_LEGADO.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Centro de Custo *</Label>
                 <Select value={form.centro_custo} onValueChange={sel('centro_custo')}>
                   <SelectTrigger className="h-12 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>{CENTROS_CUSTO.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
