@@ -79,6 +79,7 @@ interface FormState {
   funcionario_epi:     string;
   data_entrega:        string;
   titulo:              string;
+  descricao_despesa:   string;
   funcionario_pessoal: string;
   data_ocorrencia:     string;
 }
@@ -94,6 +95,7 @@ const emptyForm: FormState = {
   funcionario_epi:     '',
   data_entrega:        '',
   titulo:              '',
+  descricao_despesa:   '',
   funcionario_pessoal: '',
   data_ocorrencia:     '',
 };
@@ -283,7 +285,7 @@ export default function EnvioRapido() {
     if (isLegado) {
       const base = !!selectedFile && !!form.data_caixa && !!form.turno;
       if (isOutros) return base && !!form.titulo;
-      return base;
+      return base && !!form.descricao_despesa;
     }
     if (isManual)     return !!form.valor && !!form.data_caixa && !!form.turno;
     if (isNotaCompra) return !!form.fornecedor && !!form.data_chegada && !!selectedFile;
@@ -368,7 +370,9 @@ export default function EnvioRapido() {
           turno:        form.turno,
           tipo,
           centro_custo: form.centro_custo,
-          ...(isOutros ? { titulo: form.titulo, observacao: form.observacoes || null } : {}),
+          ...(isOutros
+            ? { titulo: form.titulo, observacao: form.observacoes || null }
+            : { descricao_despesa: form.descricao_despesa, observacao: form.observacoes || null }),
         });
         if (error) throw error;
         toast.success('Comprovante enviado!');
@@ -937,6 +941,12 @@ export default function EnvioRapido() {
                   <Input value={form.titulo} onChange={field('titulo')} placeholder="Ex: Pagamento de frete" className="h-12 text-sm" />
                 </div>
               )}
+              {!isOutros && (
+                <div className="space-y-2">
+                  <Label>Descrição da despesa *</Label>
+                  <Input value={form.descricao_despesa} onChange={field('descricao_despesa')} placeholder="Ex: Material de limpeza" className="h-12 text-sm" />
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Data do Caixa</Label>
                 <Input type="date" value={form.data_caixa} onChange={field('data_caixa')} className="h-12 text-sm" />
@@ -955,13 +965,11 @@ export default function EnvioRapido() {
                   <SelectContent>{CENTROS_CUSTO.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              {isOutros && (
-                <div className="space-y-2">
-                  <Label>Observação <span className="text-muted-foreground font-normal text-xs">(opcional)</span></Label>
-                  <Textarea value={form.observacoes} onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))}
-                    placeholder="Informações adicionais..." className="text-sm resize-none" rows={3} />
-                </div>
-              )}
+              <div className="space-y-2">
+                <Label>Observação <span className="text-muted-foreground font-normal text-xs">(opcional)</span></Label>
+                <Textarea value={form.observacoes} onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))}
+                  placeholder="Informações adicionais..." className="text-sm resize-none" rows={3} />
+              </div>
             </>
           )}
 
