@@ -701,99 +701,191 @@ export default function EnvioRapido() {
               {/* Tabela de bicos */}
               <div className="space-y-2">
                 <Label>Bicos *</Label>
-                <div className="overflow-x-auto rounded-md border">
-                  <table className="w-full text-xs border-collapse">
-                    <thead>
-                      <tr className="border-b bg-muted/40">
-                        <th className="py-2 px-2 text-left font-medium">Bico</th>
-                        <th className="py-2 px-2 text-left font-medium">Combustível</th>
-                        <th className="py-2 px-2 text-right font-medium whitespace-nowrap">Af. Rápida (ml)</th>
-                        <th className="py-2 px-2 text-right font-medium whitespace-nowrap">Af. Lenta (ml)</th>
-                        <th className="py-2 px-2 text-center font-medium">Repetir</th>
-                        <th className="py-2 px-1 w-7" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {afericaoItems.map((item, idx) => {
-                        const rapida = item.afericao_rapida !== '' ? parseFloat(item.afericao_rapida) : null;
-                        const lenta  = item.afericao_lenta  !== '' ? parseFloat(item.afericao_lenta)  : null;
-                        return (
-                          <tr key={item._id} className={cn('border-b last:border-0', item.is_repeticao && 'bg-muted/20')}>
-                            <td className="py-1.5 px-1">
-                              <Input
-                                type="number" min="1"
-                                value={item.bico}
-                                onChange={(e) => updateAfericaoItem(idx, 'bico', e.target.value)}
-                                className="h-8 w-14 text-xs"
-                                placeholder="Nº"
-                              />
-                            </td>
-                            <td className="py-1.5 px-1">
-                              <Select value={item.combustivel}
-                                onValueChange={(v) => updateAfericaoItem(idx, 'combustivel', v)}>
-                                <SelectTrigger className="h-8 text-xs min-w-[130px]">
-                                  <SelectValue placeholder="Combustível" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {combustiveis.map((c) => (
-                                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </td>
-                            <td className="py-1.5 px-1">
-                              <Input
-                                type="number" step="any"
-                                value={item.afericao_rapida}
-                                onChange={(e) => updateAfericaoItem(idx, 'afericao_rapida', e.target.value)}
-                                className={cn(
-                                  'h-8 w-20 text-xs text-right',
-                                  rapida !== null && rapida > 0 && 'text-green-600',
-                                  rapida !== null && rapida < 0 && 'text-red-500',
-                                )}
-                                placeholder="0"
-                              />
-                            </td>
-                            <td className="py-1.5 px-1">
-                              <Input
-                                type="number" step="any"
-                                value={item.afericao_lenta}
-                                onChange={(e) => updateAfericaoItem(idx, 'afericao_lenta', e.target.value)}
-                                className={cn(
-                                  'h-8 w-20 text-xs text-right',
-                                  lenta !== null && lenta > 0 && 'text-green-600',
-                                  lenta !== null && lenta < 0 && 'text-red-500',
-                                )}
-                                placeholder="0"
-                              />
-                            </td>
-                            <td className="py-1.5 px-1 text-center">
-                              <Checkbox
-                                checked={item._repetir}
-                                onCheckedChange={(checked) => handleRepetir(idx, !!checked)}
-                              />
-                            </td>
-                            <td className="py-1.5 px-1">
-                              {afericaoItems.length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => setAfericaoItems((prev) => prev.filter((_, i) => i !== idx))}
-                                  className="rounded-full p-1 hover:bg-muted text-muted-foreground hover:text-destructive"
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                </button>
+
+                {/* ── Mobile: cards empilhados ── */}
+                <div className="space-y-3 sm:hidden">
+                  {afericaoItems.map((item, idx) => {
+                    const rapida = item.afericao_rapida !== '' ? parseFloat(item.afericao_rapida) : null;
+                    const lenta  = item.afericao_lenta  !== '' ? parseFloat(item.afericao_lenta)  : null;
+                    return (
+                      <div key={item._id} className={cn('rounded-lg border p-3 space-y-3', item.is_repeticao && 'bg-muted/20')}>
+                        {/* Linha 1: Bico + Combustível */}
+                        <div className="flex gap-2 items-center">
+                          <Input
+                            type="number" min="1"
+                            value={item.bico}
+                            onChange={(e) => updateAfericaoItem(idx, 'bico', e.target.value)}
+                            className="h-11 w-20 text-sm shrink-0"
+                            placeholder="Bico"
+                          />
+                          <Select value={item.combustivel}
+                            onValueChange={(v) => updateAfericaoItem(idx, 'combustivel', v)}>
+                            <SelectTrigger className="h-11 text-sm flex-1">
+                              <SelectValue placeholder="Combustível" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {combustiveis.map((c) => (
+                                <SelectItem key={c} value={c}>{c}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {/* Linha 2: Aferição Rápida + Lenta */}
+                        <div className="flex gap-2">
+                          <div className="flex-1 space-y-1">
+                            <p className="text-xs text-muted-foreground">Af. Rápida (ml)</p>
+                            <Input
+                              type="number" step="any"
+                              value={item.afericao_rapida}
+                              onChange={(e) => updateAfericaoItem(idx, 'afericao_rapida', e.target.value)}
+                              className={cn(
+                                'h-11 text-sm text-right',
+                                rapida !== null && rapida > 0 && 'text-green-600',
+                                rapida !== null && rapida < 0 && 'text-red-500',
                               )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                              placeholder="0"
+                            />
+                          </div>
+                          <div className="flex-1 space-y-1">
+                            <p className="text-xs text-muted-foreground">Af. Lenta (ml)</p>
+                            <Input
+                              type="number" step="any"
+                              value={item.afericao_lenta}
+                              onChange={(e) => updateAfericaoItem(idx, 'afericao_lenta', e.target.value)}
+                              className={cn(
+                                'h-11 text-sm text-right',
+                                lenta !== null && lenta > 0 && 'text-green-600',
+                                lenta !== null && lenta < 0 && 'text-red-500',
+                              )}
+                              placeholder="0"
+                            />
+                          </div>
+                        </div>
+                        {/* Linha 3: Repetir + Remover */}
+                        <div className="flex items-center justify-between">
+                          <label className="flex items-center gap-2 cursor-pointer select-none text-sm min-h-[44px]">
+                            <Checkbox
+                              checked={item._repetir}
+                              onCheckedChange={(checked) => handleRepetir(idx, !!checked)}
+                              className="h-5 w-5"
+                            />
+                            Repetir
+                          </label>
+                          {afericaoItems.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setAfericaoItems((prev) => prev.filter((_, i) => i !== idx))}
+                              className="flex items-center gap-1.5 rounded-md px-3 min-h-[44px] text-sm text-destructive hover:bg-destructive/10"
+                            >
+                              <X className="h-4 w-4" /> Remover
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <Button type="button" variant="outline" className="h-12 gap-2 w-full text-sm"
+                    onClick={() => setAfericaoItems((prev) => [...prev, emptyAfericaoItem()])}>
+                    <Plus className="h-4 w-4" /> Adicionar Bico
+                  </Button>
                 </div>
-                <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1 w-full"
-                  onClick={() => setAfericaoItems((prev) => [...prev, emptyAfericaoItem()])}>
-                  <Plus className="h-3.5 w-3.5" /> Adicionar Bico
-                </Button>
+
+                {/* ── Desktop: tabela compacta ── */}
+                <div className="hidden sm:block">
+                  <div className="overflow-x-auto rounded-md border">
+                    <table className="w-full text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b bg-muted/40">
+                          <th className="py-2 px-2 text-left font-medium">Bico</th>
+                          <th className="py-2 px-2 text-left font-medium">Combustível</th>
+                          <th className="py-2 px-2 text-right font-medium whitespace-nowrap">Af. Rápida (ml)</th>
+                          <th className="py-2 px-2 text-right font-medium whitespace-nowrap">Af. Lenta (ml)</th>
+                          <th className="py-2 px-2 text-center font-medium">Repetir</th>
+                          <th className="py-2 px-1 w-7" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {afericaoItems.map((item, idx) => {
+                          const rapida = item.afericao_rapida !== '' ? parseFloat(item.afericao_rapida) : null;
+                          const lenta  = item.afericao_lenta  !== '' ? parseFloat(item.afericao_lenta)  : null;
+                          return (
+                            <tr key={item._id} className={cn('border-b last:border-0', item.is_repeticao && 'bg-muted/20')}>
+                              <td className="py-1.5 px-1">
+                                <Input
+                                  type="number" min="1"
+                                  value={item.bico}
+                                  onChange={(e) => updateAfericaoItem(idx, 'bico', e.target.value)}
+                                  className="h-8 w-14 text-xs"
+                                  placeholder="Nº"
+                                />
+                              </td>
+                              <td className="py-1.5 px-1">
+                                <Select value={item.combustivel}
+                                  onValueChange={(v) => updateAfericaoItem(idx, 'combustivel', v)}>
+                                  <SelectTrigger className="h-8 text-xs min-w-[130px]">
+                                    <SelectValue placeholder="Combustível" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {combustiveis.map((c) => (
+                                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </td>
+                              <td className="py-1.5 px-1">
+                                <Input
+                                  type="number" step="any"
+                                  value={item.afericao_rapida}
+                                  onChange={(e) => updateAfericaoItem(idx, 'afericao_rapida', e.target.value)}
+                                  className={cn(
+                                    'h-8 w-20 text-xs text-right',
+                                    rapida !== null && rapida > 0 && 'text-green-600',
+                                    rapida !== null && rapida < 0 && 'text-red-500',
+                                  )}
+                                  placeholder="0"
+                                />
+                              </td>
+                              <td className="py-1.5 px-1">
+                                <Input
+                                  type="number" step="any"
+                                  value={item.afericao_lenta}
+                                  onChange={(e) => updateAfericaoItem(idx, 'afericao_lenta', e.target.value)}
+                                  className={cn(
+                                    'h-8 w-20 text-xs text-right',
+                                    lenta !== null && lenta > 0 && 'text-green-600',
+                                    lenta !== null && lenta < 0 && 'text-red-500',
+                                  )}
+                                  placeholder="0"
+                                />
+                              </td>
+                              <td className="py-1.5 px-1 text-center">
+                                <Checkbox
+                                  checked={item._repetir}
+                                  onCheckedChange={(checked) => handleRepetir(idx, !!checked)}
+                                />
+                              </td>
+                              <td className="py-1.5 px-1">
+                                {afericaoItems.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setAfericaoItems((prev) => prev.filter((_, i) => i !== idx))}
+                                    className="rounded-full p-1 hover:bg-muted text-muted-foreground hover:text-destructive"
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" className="mt-2 h-8 text-xs gap-1 w-full"
+                    onClick={() => setAfericaoItems((prev) => [...prev, emptyAfericaoItem()])}>
+                    <Plus className="h-3.5 w-3.5" /> Adicionar Bico
+                  </Button>
+                </div>
               </div>
 
               {/* Foto opcional */}
