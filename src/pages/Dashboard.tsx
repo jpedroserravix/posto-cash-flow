@@ -9,8 +9,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Plus, Trash2, AlertTriangle, Clock, FileWarning, GraduationCap, X, CalendarX2, CalendarClock, Inbox } from 'lucide-react';
+import { Plus, Trash2, AlertTriangle, Clock, FileWarning, GraduationCap, X, CalendarX2, CalendarClock, Inbox, Settings } from 'lucide-react';
 import { computeFeriasAlert, type FeriasRecord } from '@/lib/feriasPeriodos';
 import frases from '@/data/frasesSantos.json';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -94,6 +96,26 @@ const EXPIRACAO_OPTIONS = [
   { value: 'never', label: 'Indeterminado' },
 ];
 
+// ─── alert prefs ─────────────────────────────────────────────────────────────
+
+const ALERT_PREFS_DEFS = [
+  { key: 'alvaras',      label: 'Documentos/Alvarás vencendo' },
+  { key: 'treinamentos', label: 'Certificados/Cursos vencendo' },
+  { key: 'ferias',       label: 'Férias vencendo' },
+  { key: 'contratos',    label: 'Contratos de experiência vencendo' },
+  { key: 'entrevistas',  label: 'Entrevistas agendadas' },
+  { key: 'curriculos',   label: 'Currículos novos (Caixa de Entrada)' },
+  { key: 'feedbacks',    label: 'Feedbacks novos (Caixa de Entrada)' },
+];
+
+const TIPO_TO_PREF: Record<AlertaItem['tipo'], string> = {
+  alvara:      'alvaras',
+  treinamento: 'treinamentos',
+  ferias:      'ferias',
+  contrato:    'contratos',
+  entrevista:  'entrevistas',
+};
+
 // ─── frase do dia ─────────────────────────────────────────────────────────────
 
 const fraseDia = (frases as { dia: number; santo: string; frase: string }[])[
@@ -122,6 +144,12 @@ export default function Dashboard() {
   // ── alertas state ──────────────────────────────────────────────────────────
   const [alertas, setAlertas] = useState<AlertaItem[]>([]);
 
+  // ── alert prefs state ──────────────────────────────────────────────────────
+  const [alertPrefs, setAlertPrefs]       = useState<Record<string, boolean>>({});
+  const [showAlertConfig, setShowAlertConfig] = useState(false);
+  const [localPrefs, setLocalPrefs]       = useState<Record<string, boolean>>({});
+  const [savingPrefs, setSavingPrefs]     = useState(false);
+
   // ── caixa de entrada state ─────────────────────────────────────────────────
   const [novos, setNovos] = useState({ curriculos: 0, feedbacks: 0 });
 
@@ -137,6 +165,38 @@ export default function Dashboard() {
   useEffect(() => {
     if (hasPermission('caixa-entrada')) loadNovos();
   }, [hasPermission]);
+
+  useEffect(() => {
+    if (user) loadAlertPrefs();
+  }, [user?.id]);
+
+  async function loadAlertPrefs() {
+    if (!user) return;
+    const { data } = await (supabase as any)
+      .from('user_alert_prefs')
+      .select('prefs')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    setAlertPrefs(data?.prefs ?? {});
+  }
+
+  async function saveAlertPrefs(prefs: Record<string, boolean>) {
+    if (!user) return;
+    setSavingPrefs(true);
+    const { error } = await (supabase as any)
+      .from('user_alert_prefs')
+      .upsert({ user_id: user.id, prefs, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+    setSavingPrefs(false);
+    if (error) { toast.error('Erro ao salvar preferências'); return; }
+    setAlertPrefs(prefs);
+    setShowAlertConfig(false);
+    toast.success('Preferências de alertas salvas');
+  }
+
+  function openAlertConfig() {
+    setLocalPrefs({ ...alertPrefs });
+    setShowAlertConfig(true);
+  }
 
   async function loadNovos() {
     const [{ count: c1 }, { count: c2 }] = await Promise.all([
@@ -350,6 +410,18 @@ export default function Dashboard() {
     loadRecados();
   }
 
+  // ── derived from alert prefs ───────────────────────────────────────────────
+
+  const isPrefOn = (key: string) => alertPrefs[key] !== false;
+
+  const alertasFiltrados = useMemo(
+    () => alertas.filter((a) => isPrefOn(TIPO_TO_PREF[a.tipo])),
+    [alertas, alertPrefs],
+  );
+
+  const showCurriculos = isPrefOn('curriculos');
+  const showFeedbacks  = isPrefOn('feedbacks');
+
   // ── render ─────────────────────────────────────────────────────────────────
 
   if (postoIds.length === 0) {
@@ -511,18 +583,18 @@ export default function Dashboard() {
       </div>
 
       {/* ── SEÇÃO 2.5: CAIXA DE ENTRADA ──────────────────────────────────── */}
-      {hasPermission('caixa-entrada') && (novos.curriculos > 0 || novos.feedbacks > 0) && (
+      {hasPermission('caixa-entrada') && ((showCurriculos && novos.curriculos > 0) || (showFeedbacks && novos.feedbacks > 0)) && (
         <Link to="/caixa-entrada" className="block">
           <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/20 px-4 py-3 flex items-center gap-3 hover:bg-blue-100 dark:hover:bg-blue-950/40 transition-colors">
             <Inbox className="w-4 h-4 text-blue-600 shrink-0" />
             <div className="flex-1 flex flex-wrap items-center gap-2 text-sm text-blue-800 dark:text-blue-200">
               <span className="font-medium">Caixa de Entrada</span>
-              {novos.curriculos > 0 && (
+              {showCurriculos && novos.curriculos > 0 && (
                 <Badge className="bg-blue-600 hover:bg-blue-600 text-white text-[10px]">
                   {novos.curriculos} {novos.curriculos === 1 ? 'novo currículo' : 'novos currículos'}
                 </Badge>
               )}
-              {novos.feedbacks > 0 && (
+              {showFeedbacks && novos.feedbacks > 0 && (
                 <Badge className="bg-purple-600 hover:bg-purple-600 text-white text-[10px]">
                   {novos.feedbacks} {novos.feedbacks === 1 ? 'novo feedback' : 'novos feedbacks'}
                 </Badge>
@@ -535,26 +607,33 @@ export default function Dashboard() {
 
       {/* ── SEÇÃO 3: ALERTAS DE DOCUMENTOS ───────────────────────────────── */}
       <div className="space-y-3">
-        <h2 className="text-base font-semibold">Alertas — Documentos e Treinamentos</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold">Alertas — Documentos e Treinamentos</h2>
+          {role === 'admin' && (
+            <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={openAlertConfig} title="Configurar alertas">
+              <Settings className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
 
-        {alertas.length === 0 ? (
+        {alertasFiltrados.length === 0 ? (
           <Card>
             <CardContent className="py-6 text-center">
               <p className="text-sm text-muted-foreground">
-                Nenhum documento ou treinamento vencendo nos próximos 90 dias.
+                Nenhum alerta no momento.
               </p>
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            {alertas.map((a) => {
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {alertasFiltrados.map((a) => {
               const isVencido = a.dias < 0;
               const isProximo = a.dias >= 0 && a.dias <= 30;
 
               return (
                 <div
                   key={`${a.tipo}-${a.id}`}
-                  className={`rounded-lg border px-3 py-2.5 flex items-start gap-2.5 ${
+                  className={`rounded-lg border px-4 py-3 flex items-start gap-3 ${
                     isVencido
                       ? 'border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/20'
                       : isProximo
@@ -565,15 +644,15 @@ export default function Dashboard() {
                   {/* Icon */}
                   <div className="shrink-0 mt-0.5">
                     {a.tipo === 'treinamento' ? (
-                      <GraduationCap className={`w-4 h-4 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
+                      <GraduationCap className={`w-5 h-5 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
                     ) : a.tipo === 'contrato' ? (
-                      <Clock className={`w-4 h-4 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
+                      <Clock className={`w-5 h-5 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
                     ) : a.tipo === 'ferias' ? (
-                      <CalendarX2 className={`w-4 h-4 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
+                      <CalendarX2 className={`w-5 h-5 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
                     ) : a.tipo === 'entrevista' ? (
-                      <CalendarClock className={`w-4 h-4 ${isProximo ? 'text-purple-600' : 'text-muted-foreground'}`} />
+                      <CalendarClock className={`w-5 h-5 ${isProximo ? 'text-purple-600' : 'text-muted-foreground'}`} />
                     ) : (
-                      <FileWarning className={`w-4 h-4 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
+                      <FileWarning className={`w-5 h-5 ${isVencido ? 'text-red-500' : isProximo ? 'text-yellow-600' : 'text-muted-foreground'}`} />
                     )}
                   </div>
 
@@ -581,7 +660,7 @@ export default function Dashboard() {
                   <div className="flex-1 min-w-0">
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <p className="text-xs font-medium leading-tight truncate cursor-default">{a.nome}</p>
+                        <p className="text-sm font-semibold leading-snug truncate cursor-default">{a.nome}</p>
                       </TooltipTrigger>
                       <TooltipContent side="top" align="start" className="max-w-xs break-words">
                         <p className="text-sm">{a.nome}</p>
@@ -590,7 +669,7 @@ export default function Dashboard() {
                     {a.detalhe && (
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <p className="text-[10px] text-muted-foreground truncate cursor-default">{a.detalhe}</p>
+                          <p className="text-xs text-muted-foreground truncate cursor-default mt-0.5">{a.detalhe}</p>
                         </TooltipTrigger>
                         <TooltipContent side="top" align="start" className="max-w-xs break-words">
                           <p className="text-sm">{a.detalhe}</p>
@@ -598,14 +677,14 @@ export default function Dashboard() {
                       </Tooltip>
                     )}
                     {allPostos.length > 1 && a.postoNome && (
-                      <p className="text-[10px] text-muted-foreground truncate">{a.postoNome}</p>
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">{a.postoNome}</p>
                     )}
                   </div>
 
                   {/* Days badge */}
                   <div className="shrink-0 text-right">
                     <Badge
-                      className={`text-[10px] whitespace-nowrap ${
+                      className={`text-xs whitespace-nowrap ${
                         isVencido
                           ? 'bg-red-500 hover:bg-red-500 text-white'
                           : isProximo
@@ -619,7 +698,7 @@ export default function Dashboard() {
                           ? 'Hoje'
                           : `${a.dias}d`}
                     </Badge>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                    <p className="text-xs text-muted-foreground mt-1">
                       {new Date(a.dataVencimento + 'T00:00:00').toLocaleDateString('pt-BR')}
                     </p>
                   </div>
@@ -629,6 +708,40 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* ── MODAL: Configuração de alertas ───────────────────────────────── */}
+      <Dialog open={showAlertConfig} onOpenChange={setShowAlertConfig}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Configurar Alertas</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground -mt-2">
+            Escolha quais alertas aparecem no seu Dashboard.
+          </p>
+          <div className="space-y-3 py-1">
+            {ALERT_PREFS_DEFS.map(({ key, label }) => (
+              <label key={key} className="flex items-center gap-3 cursor-pointer select-none min-h-[36px]">
+                <Checkbox
+                  checked={localPrefs[key] !== false}
+                  onCheckedChange={(checked) =>
+                    setLocalPrefs((prev) => ({ ...prev, [key]: !!checked }))
+                  }
+                  className="h-5 w-5 shrink-0"
+                />
+                <span className="text-sm leading-tight">{label}</span>
+              </label>
+            ))}
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <Button variant="outline" size="sm" onClick={() => setShowAlertConfig(false)}>
+              Cancelar
+            </Button>
+            <Button size="sm" disabled={savingPrefs} onClick={() => saveAlertPrefs(localPrefs)}>
+              {savingPrefs ? 'Salvando...' : 'Salvar'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );
