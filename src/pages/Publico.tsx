@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
-import { Fuel, Briefcase, MessageSquare, CheckCircle2 } from 'lucide-react';
+import { Fuel, Briefcase, MessageSquare, CheckCircle2, Plus, X } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 
 // ─── types ────────────────────────────────────────────────────────────────────
@@ -104,7 +104,7 @@ export default function Publico() {
 
   // curriculo
   const [curriculo, setCurriculo] = useState({ ...EMPTY_CURRICULO });
-  const [experiencias, setExperiencias] = useState<Experiencia[]>([EMPTY_EXP(), EMPTY_EXP(), EMPTY_EXP()]);
+  const [experiencias, setExperiencias] = useState<Experiencia[]>([EMPTY_EXP()]);
   const [curricuFile, setCurricuFile] = useState<File | null>(null);
   const [curriculoSent, setCurriculoSent] = useState(false);
   const [sendingCurriculo, setSendingCurriculo] = useState(false);
@@ -271,7 +271,7 @@ export default function Publico() {
                 onClick={() => {
                   setCurriculoSent(false);
                   setCurriculo({ ...EMPTY_CURRICULO });
-                  setExperiencias([EMPTY_EXP(), EMPTY_EXP(), EMPTY_EXP()]);
+                  setExperiencias([EMPTY_EXP()]);
                   setCurricuFile(null);
                   // posto_id já está em EMPTY_CURRICULO como ''
                 }}
@@ -393,14 +393,26 @@ export default function Publico() {
 
                 {/* Experiências estruturadas */}
                 <div className="space-y-3">
-                  <p className="text-sm font-medium">Descreva suas últimas 3 experiências</p>
+                  <p className="text-sm font-medium">Experiência profissional <span className="font-normal text-muted-foreground">(opcional)</span></p>
 
                   {experiencias.map((exp, i) => (
                       <div
                         key={i}
                         className="rounded-xl border border-slate-200 bg-slate-50/40 p-4 space-y-3"
                       >
-                        <span className="text-sm font-bold text-slate-500">{i + 1}.</span>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-bold text-slate-500">{i + 1}.</span>
+                          {experiencias.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setExperiencias((prev) => prev.filter((_, idx) => idx !== i))}
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                              aria-label="Remover experiência"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
 
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1">
@@ -493,6 +505,17 @@ export default function Publico() {
                         </div>
                       </div>
                     ))}
+
+                  {experiencias.length < 4 && (
+                    <button
+                      type="button"
+                      onClick={() => setExperiencias((prev) => [...prev, EMPTY_EXP()])}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-slate-300 text-sm text-slate-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50/40 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Adicionar experiência
+                    </button>
+                  )}
                 </div>
 
                 {/* Arquivo */}
