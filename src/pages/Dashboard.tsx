@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Plus, Trash2, AlertTriangle, Clock, FileWarning, GraduationCap, X, CalendarX2, CalendarClock, Inbox, Settings } from 'lucide-react';
+import { Plus, Trash2, AlertTriangle, Clock, FileWarning, GraduationCap, X, CalendarX2, CalendarClock, Inbox, Settings, Gauge } from 'lucide-react';
 import { computeFeriasAlert, type FeriasRecord } from '@/lib/feriasPeriodos';
 import frases from '@/data/frasesSantos.json';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -38,6 +38,12 @@ interface AlertaItem {
   postoNome: string;
   dias: number;
   dataVencimento: string;
+}
+
+interface AfericaoInfo {
+  postoId: string;
+  postoNome: string;
+  datas: string[];
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -70,6 +76,18 @@ function daysUntil(dateStr: string): number {
   const today = new Date(new Date().toISOString().split('T')[0] + 'T00:00:00');
   const exp = new Date(dateStr + 'T00:00:00');
   return Math.ceil((exp.getTime() - today.getTime()) / 86_400_000);
+}
+
+function daysSince(dateStr: string): number {
+  const today = new Date(new Date().toISOString().split('T')[0] + 'T00:00:00');
+  const past = new Date(dateStr + 'T00:00:00');
+  return Math.floor((today.getTime() - past.getTime()) / 86_400_000);
+}
+
+function formatDateShort(dateStr: string): string {
+  if (!dateStr) return '—';
+  const [, m, d] = dateStr.split('-');
+  return `${d}/${m}`;
 }
 
 function addDaysToDate(dateStr: string, days: number): string {
@@ -106,6 +124,7 @@ const ALERT_PREFS_DEFS = [
   { key: 'entrevistas',  label: 'Entrevistas agendadas' },
   { key: 'curriculos',   label: 'Currículos novos (Caixa de Entrada)' },
   { key: 'feedbacks',    label: 'Feedbacks novos (Caixa de Entrada)' },
+  { key: 'afericoes',    label: 'Aferições por posto' },
 ];
 
 const TIPO_TO_PREF: Record<AlertaItem['tipo'], string> = {
@@ -150,6 +169,9 @@ export default function Dashboard() {
   const [localPrefs, setLocalPrefs]       = useState<Record<string, boolean>>({});
   const [savingPrefs, setSavingPrefs]     = useState(false);
 
+  // ── aferições state ────────────────────────────────────────────────────────
+  const [afericoesPorPosto, setAfericoesPorPosto] = useState<AfericaoInfo[]>([]);
+
   // ── caixa de entrada state ─────────────────────────────────────────────────
   const [novos, setNovos] = useState({ curriculos: 0, feedbacks: 0 });
 
@@ -159,6 +181,7 @@ export default function Dashboard() {
     if (postoIds.length > 0) {
       loadRecados();
       loadAlertas();
+      loadAfericoes();
     }
   }, [postoIds]);
 
@@ -178,6 +201,30 @@ export default function Dashboard() {
       .eq('user_id', user.id)
       .maybeSingle();
     setAlertPrefs(data?.prefs ?? {});
+  }
+
+  async function loadAfericoes() {
+    const { data, error } = await (supabase as any)
+      .from('afericoes')
+      .select('posto_id, data')
+      .in('posto_id', postoIds)
+      .order('data', { ascending: false });
+    if (error) return;
+
+    const grouped = new Map<string, string[]>();
+    (data ?? []).forEach((row: any) => {
+      const arr = grouped.get(row.posto_id) ?? [];
+      if (arr.length < 3) arr.push(row.data);
+      grouped.set(row.posto_id, arr);
+    });
+
+    setAfericoesPorPosto(
+      postoIds.map((pid) => ({
+        postoId: pid,
+        postoNome: allPostos.find((p) => p.id === pid)?.nome ?? '',
+        datas: grouped.get(pid) ?? [],
+      }))
+    );
   }
 
   async function saveAlertPrefs(prefs: Record<string, boolean>) {
@@ -708,6 +755,46 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* ── SEÇÃO 4: AFERIÇÕES ────────────────────────────────────────────── */}
+      {isPrefOn('afericoes') && afericoesPorPosto.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-base font-semibold flex items-center gap-2">
+            <Gauge className="w-4 h-4" />
+            Aferições
+          </h2>
+          <Card>
+            <CardContent className="py-3 px-4 divide-y divide-border">
+              {afericoesPorPosto.map(({ postoId, postoNome, datas }) => {
+                const semAfericao = datas.length === 0;
+                const diasSemAfericao = datas.length > 0 ? daysSince(datas[0]) : null;
+                const atrasado = diasSemAfericao !== null && diasSemAfericao > 14;
+
+                const infoText = semAfericao
+                  ? 'Nenhuma aferição registrada'
+                  : atrasado
+                  ? `Sem aferição há ${diasSemAfericao} ${diasSemAfericao === 1 ? 'dia' : 'dias'}`
+                  : `Últimas aferições: ${datas.map(formatDateShort).join(', ')}`;
+
+                const textClass = atrasado
+                  ? 'text-red-600 dark:text-red-400'
+                  : semAfericao
+                  ? 'text-muted-foreground'
+                  : 'text-foreground';
+
+                return (
+                  <div key={postoId} className="py-2 first:pt-0 last:pb-0 text-sm">
+                    {allPostos.length > 1 && postoNome && (
+                      <span className={`font-semibold ${textClass}`}>{postoNome} — </span>
+                    )}
+                    <span className={textClass}>{infoText}</span>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* ── MODAL: Configuração de alertas ───────────────────────────────── */}
       <Dialog open={showAlertConfig} onOpenChange={setShowAlertConfig}>
