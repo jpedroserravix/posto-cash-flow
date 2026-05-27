@@ -107,8 +107,8 @@ export default function DepositosManuais() {
       .from('depositos_manuais')
       .select('*')
       .eq('posto_id', selectedPostoId)
-      .order('data', { ascending: true })
-      .order('created_at', { ascending: true });
+      .order('data', { ascending: false })
+      .order('created_at', { ascending: false });
     setAllDeposits(data || []);
   };
 
@@ -120,8 +120,8 @@ export default function DepositosManuais() {
       .eq('posto_id', selectedPostoId)
       .gte('data', dfRange.start)
       .lte('data', dfRange.end)
-      .order('data', { ascending: true })
-      .order('created_at', { ascending: true });
+      .order('data', { ascending: false })
+      .order('created_at', { ascending: false });
     setDeposits(data || []);
   };
 
