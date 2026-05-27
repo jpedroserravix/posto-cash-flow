@@ -218,16 +218,21 @@ export default function DepositosManuais() {
     return result;
   }, [deposits, filterData, filterTurno, filterCentroCusto, filterObservacao, filterStatus, sortCol, sortDir]);
 
-  // Historical cumulative balance map — computed from ALL deposits regardless of date filter
+  // Historical cumulative balance — iterate oldest-first so newest row shows the highest (most current) saldo
   const historicalSaldoMap = useMemo(() => {
     let acc = 0;
     const map: Record<string, number> = {};
-    for (const d of allDeposits) {
+    for (const d of [...allDeposits].reverse()) {
       acc += d.valor_lancado - (d.valor_depositado || 0);
       map[d.id] = acc;
     }
     return map;
   }, [allDeposits]);
+
+  const totalSaldo = useMemo(
+    () => allDeposits.reduce((acc, d) => acc + d.valor_lancado - (d.valor_depositado || 0), 0),
+    [allDeposits],
+  );
 
   const depositsWithSaldo = filteredData.map(d => ({
     ...d,
@@ -424,6 +429,17 @@ export default function DepositosManuais() {
           {showForm ? <><X className="w-4 h-4 mr-1" />Cancelar</> : <><Plus className="w-4 h-4 mr-1" />Novo Lançamento</>}
         </Button>
       </div>
+
+      {/* Total accumulated balance — independent of date filter */}
+      <Card>
+        <CardContent className="pt-4 pb-4">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Saldo Pendente Histórico</p>
+          <p className={`text-3xl font-bold mt-1 ${totalSaldo === 0 ? 'text-success' : totalSaldo > 0 ? 'text-warning' : 'text-destructive'}`}>
+            {formatCurrency(totalSaldo)}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">Acumulado total desde o primeiro lançamento</p>
+        </CardContent>
+      </Card>
 
       <DateFilter preset={dfPreset} range={dfRange} onChange={setDfPreset} />
 
