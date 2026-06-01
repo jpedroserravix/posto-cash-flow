@@ -160,6 +160,7 @@ export default function PontoOcorrencias() {
       .from('pessoal_funcionarios')
       .select('id, nome, status')
       .eq('posto_id', postoId)
+      .eq('status', 'ativo')
       .order('nome');
     setFuncionarios(data ?? []);
   }
