@@ -243,6 +243,7 @@ export default function Dashboard() {
   async function loadCaixasPendencias() {
     if (!targetPostoId) return;
 
+    const today = new Date().toISOString().split('T')[0];
     const months = [2, 1, 0].map((ago) => {
       const d = new Date();
       d.setDate(1);
@@ -250,22 +251,23 @@ export default function Dashboard() {
       const y = d.getFullYear();
       const mo = d.getMonth();
       const start = `${y}-${String(mo + 1).padStart(2, '0')}-01`;
-      const end = `${y}-${String(mo + 1).padStart(2, '0')}-${String(new Date(y, mo + 1, 0).getDate()).padStart(2, '0')}`;
+      const lastDay = `${y}-${String(mo + 1).padStart(2, '0')}-${String(new Date(y, mo + 1, 0).getDate()).padStart(2, '0')}`;
+      const end = lastDay < today ? lastDay : today; // não contar dias futuros
       const raw = d.toLocaleDateString('pt-BR', { month: 'long' });
       const label = raw.charAt(0).toUpperCase() + raw.slice(1);
       return { start, end, label };
     });
 
     const rangeStart = months[0].start;
-    const rangeEnd = months[2].end;
+    const rangeEnd = today; // nunca buscar além de hoje
 
     const [{ data: brinks }, { data: manuais }, { data: conferencias }] = await Promise.all([
       supabase.from('depositos_brinks').select('data_caixa, centro_custo, turno')
         .eq('posto_id', targetPostoId).not('data_caixa', 'is', null)
-        .not('turno', 'is', null).not('centro_custo', 'is', null)
+        .not('centro_custo', 'is', null)
         .gte('data_caixa', rangeStart).lte('data_caixa', rangeEnd),
       supabase.from('depositos_manuais').select('data, centro_custo, turno')
-        .eq('posto_id', targetPostoId).not('turno', 'is', null)
+        .eq('posto_id', targetPostoId)
         .not('centro_custo', 'is', null).gte('data', rangeStart).lte('data', rangeEnd),
       supabase.from('resumo_conferencia').select('data, centro_custo, turnos_conferidos')
         .eq('posto_id', targetPostoId).gte('data', rangeStart).lte('data', rangeEnd),
@@ -276,18 +278,29 @@ export default function Dashboard() {
       const mManuais = (manuais ?? []).filter((m: any) => m.data >= start && m.data <= end);
       const mConfs = (conferencias ?? []).filter((c: any) => c.data >= start && c.data <= end);
 
+      // depositGroups: todos os (data, cc) com QUALQUER movimento
+      // turnosMap: apenas turnos não-nulos por grupo
+      const depositGroups = new Set<string>();
       const turnosMap = new Map<string, Set<string>>();
+
       mBrinks.forEach((b: any) => {
         const key = `${b.data_caixa}|${b.centro_custo}`;
-        const s = turnosMap.get(key) ?? new Set<string>();
-        s.add(b.turno);
-        turnosMap.set(key, s);
+        depositGroups.add(key);
+        if (b.turno) {
+          const s = turnosMap.get(key) ?? new Set<string>();
+          s.add(b.turno);
+          turnosMap.set(key, s);
+        }
       });
       mManuais.forEach((mn: any) => {
+        if (!mn.data) return;
         const key = `${mn.data}|${mn.centro_custo}`;
-        const s = turnosMap.get(key) ?? new Set<string>();
-        s.add(mn.turno);
-        turnosMap.set(key, s);
+        depositGroups.add(key);
+        if (mn.turno) {
+          const s = turnosMap.get(key) ?? new Set<string>();
+          s.add(mn.turno);
+          turnosMap.set(key, s);
+        }
       });
 
       const confMap = new Map<string, string[]>();
@@ -296,9 +309,16 @@ export default function Dashboard() {
       });
 
       let count = 0;
-      turnosMap.forEach((turnos, key) => {
-        const conferidos = confMap.get(key) ?? [];
-        if (Array.from(turnos).some((t) => !conferidos.includes(t))) count++;
+      depositGroups.forEach((key) => {
+        if (!confMap.has(key)) {
+          // caso (a): tem movimento mas nunca foi conferido
+          count++;
+        } else {
+          // caso (b): conferência existe mas turnos incompletos
+          const conferidos = confMap.get(key)!;
+          const turnos = turnosMap.get(key);
+          if (turnos && Array.from(turnos).some((t) => !conferidos.includes(t))) count++;
+        }
       });
 
       return { label, count };
