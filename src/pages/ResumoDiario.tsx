@@ -85,7 +85,7 @@ export default function ResumoDiario() {
   const isMobile = useIsMobile();
   const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter();
   const [groups, setGroups] = useState<GroupData[]>([]);
-  const [mesVigentePendencias, setMesVigentePendencias] = useState<number>(0);
+  const [mesVigentePendencias, setMesVigentePendencias] = useState<{ pendente: number; divergencia: number }>({ pendente: 0, divergencia: 0 });
 
   // Centro de custo filter (null = todos selecionados)
   const [ccFilter, setCcFilter] = useState<Set<string> | null>(null);
@@ -293,12 +293,13 @@ export default function ResumoDiario() {
       if (!statusMap.has(key) || c.turno === null) statusMap.set(key, c.conferido);
     });
 
-    // sem registro em resumo_conferencia = PENDENTE por padrão
-    let count = 0;
+    let pendente = 0, divergencia = 0;
     depositGroups.forEach((key) => {
-      if ((statusMap.get(key) ?? 'PENDENTE') !== 'OK') count++;
+      const status = statusMap.get(key) ?? 'PENDENTE';
+      if (status === 'DIVERGÊNCIA') divergencia++;
+      else if (status !== 'OK') pendente++;
     });
-    setMesVigentePendencias(count);
+    setMesVigentePendencias({ pendente, divergencia });
   };
 
   // ─── helpers ───────────────────────────────────────────────────────────────
@@ -514,15 +515,23 @@ export default function ResumoDiario() {
     <div className="space-y-4">
       <h1 className="text-xl font-bold">Resumo Diário / CAIXAS</h1>
 
-      {mesVigentePendencias > 0 && (
-        <div className="flex items-center gap-2 rounded-md border border-yellow-300 bg-yellow-50 px-4 py-2.5 text-sm text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950/20 dark:text-yellow-300">
-          <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-600 dark:text-yellow-400" />
-          <span>
-            <strong>{mesVigentePendencias}</strong>{' '}
-            {mesVigentePendencias === 1 ? 'caixa com pendência' : 'caixas com pendência'} neste mês
-          </span>
-        </div>
-      )}
+      {(mesVigentePendencias.pendente > 0 || mesVigentePendencias.divergencia > 0) && (() => {
+        const { pendente, divergencia } = mesVigentePendencias;
+        const hasDivergencia = divergencia > 0;
+        const parts: string[] = [];
+        if (pendente > 0) parts.push(`${pendente} ${pendente === 1 ? 'caixa pendente' : 'caixas pendentes'}`);
+        if (divergencia > 0) parts.push(`${divergencia} ${divergencia === 1 ? 'caixa com divergência' : 'caixas com divergência'}`);
+        return (
+          <div className={`flex items-center gap-2 rounded-md border px-4 py-2.5 text-sm ${
+            hasDivergencia
+              ? 'border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300'
+              : 'border-yellow-300 bg-yellow-50 text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950/20 dark:text-yellow-300'
+          }`}>
+            <AlertTriangle className={`h-4 w-4 shrink-0 ${hasDivergencia ? 'text-red-500 dark:text-red-400' : 'text-yellow-600 dark:text-yellow-400'}`} />
+            <span>{parts.join(' • ')}</span>
+          </div>
+        );
+      })()}
 
       <DateFilter preset={dfPreset} range={dfRange} onChange={setDfPreset} />
 

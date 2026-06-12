@@ -48,7 +48,8 @@ interface AfericaoInfo {
 
 interface CaixaMesPendencia {
   label: string;
-  count: number;
+  pendente: number;
+  divergencia: number;
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -289,12 +290,14 @@ export default function Dashboard() {
         if (!statusMap.has(key) || c.turno === null) statusMap.set(key, c.conferido);
       });
 
-      let count = 0;
+      let pendente = 0, divergencia = 0;
       depositGroups.forEach((key) => {
-        if ((statusMap.get(key) ?? 'PENDENTE') !== 'OK') count++;
+        const status = statusMap.get(key) ?? 'PENDENTE';
+        if (status === 'DIVERGÊNCIA') divergencia++;
+        else if (status !== 'OK') pendente++;
       });
 
-      return { label, count };
+      return { label, pendente, divergencia };
     });
 
     setCaixasPendencias(result);
@@ -871,7 +874,8 @@ export default function Dashboard() {
 
       {/* ── SEÇÃO 5: CAIXAS COM PENDÊNCIA ────────────────────────────────── */}
       {isPrefOn('caixas') && caixasPendencias.length > 0 && (() => {
-        const allOk = caixasPendencias.every((m) => m.count === 0);
+        const allOk = caixasPendencias.every((m) => m.pendente === 0 && m.divergencia === 0);
+        const anyDivergencia = caixasPendencias.some((m) => m.divergencia > 0);
         return (
           <div className="space-y-3">
             <h2 className="text-base font-semibold flex items-center gap-2">
@@ -882,16 +886,31 @@ export default function Dashboard() {
               <Card className={`cursor-pointer transition-colors hover:bg-muted/50 ${
                 allOk
                   ? 'border-green-300 bg-green-50/40 dark:border-green-700 dark:bg-green-950/10'
+                  : anyDivergencia
+                  ? 'border-red-300 bg-red-50/40 dark:border-red-800 dark:bg-red-950/10'
                   : 'border-yellow-300 bg-yellow-50/40 dark:border-yellow-700 dark:bg-yellow-950/10'
               }`}>
                 <CardContent className="py-3 px-4">
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
-                    {caixasPendencias.map(({ label, count }) => (
-                      <span key={label} className="flex items-center gap-1.5">
+                    {caixasPendencias.map(({ label, pendente, divergencia }) => (
+                      <span key={label} className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-muted-foreground">{label}:</span>
-                        <Badge className={`text-xs ${count > 0 ? 'bg-yellow-500 hover:bg-yellow-500' : 'bg-green-600 hover:bg-green-600'} text-white`}>
-                          {count}
-                        </Badge>
+                        {pendente === 0 && divergencia === 0 ? (
+                          <Badge className="text-xs bg-green-600 hover:bg-green-600 text-white">OK</Badge>
+                        ) : (
+                          <>
+                            {pendente > 0 && (
+                              <Badge className="text-xs bg-yellow-500 hover:bg-yellow-500 text-white">
+                                {pendente} pend.
+                              </Badge>
+                            )}
+                            {divergencia > 0 && (
+                              <Badge className="text-xs bg-red-500 hover:bg-red-500 text-white">
+                                {divergencia} div.
+                              </Badge>
+                            )}
+                          </>
+                        )}
                       </span>
                     ))}
                     {allOk && (
