@@ -70,6 +70,7 @@ interface Comprovante {
 interface FaltaDialogState {
   data: string;
   centroCusto: string;
+  tipo: 'Falta de Caixa' | 'Sobra de Caixa';
   funcionarioId: string;
   valor: string;
   observacao: string;
@@ -345,7 +346,7 @@ export default function ResumoDiario() {
 
   const handleLancarFaltaCaixa = async () => {
     if (!faltaDialog || !selectedPostoId) return;
-    const { data: dataCaixa, centroCusto, funcionarioId, valor, observacao } = faltaDialog;
+    const { data: dataCaixa, centroCusto, tipo, funcionarioId, valor, observacao } = faltaDialog;
 
     if (!funcionarioId) { toast.error('Selecione um funcionário'); return; }
     const valorNum = parseFloat(valor.replace(',', '.'));
@@ -355,8 +356,10 @@ export default function ResumoDiario() {
 
     const func = funcionariosAtivos.find((f) => f.id === funcionarioId);
     const cc = centroCusto === 'SEM CENTRO' ? null : centroCusto;
+    // Falta = valor negativo (desconta); Sobra = positivo (abona)
+    const signedValor = tipo === 'Falta de Caixa' ? -valorNum : valorNum;
 
-    // 1. Criar ocorrência em pessoal_ocorrencias
+    // 1. Criar ocorrência em pessoal_ocorrencias (sempre tipo 'Desconto Quebra de Caixa', sinal distingue)
     const { data: ocRec, error: ocErr } = await (supabase as any)
       .from('pessoal_ocorrencias')
       .insert({
@@ -364,7 +367,7 @@ export default function ResumoDiario() {
         funcionario_id: funcionarioId,
         data: dataCaixa,
         tipo: 'Desconto Quebra de Caixa',
-        valor: valorNum,
+        valor: signedValor,
         descricao: observacao || null,
       })
       .select('id')
@@ -383,12 +386,12 @@ export default function ResumoDiario() {
         posto_id: selectedPostoId,
         data_caixa: dataCaixa,
         centro_custo: cc,
-        tipo: 'Falta de Caixa',
+        tipo,
         descricao_despesa: observacao || null,
         funcionario_id: funcionarioId,
         funcionario_nome: func?.nome ?? '',
         ocorrencia_id: ocRec.id,
-        valor: valorNum,
+        valor: signedValor,
       });
 
     if (compErr) {
@@ -828,7 +831,7 @@ export default function ResumoDiario() {
                         </div>
                         <div className="flex items-center gap-1">
                           <Button size="sm" variant="ghost" className="h-6 text-xs"
-                            onClick={() => setFaltaDialog({ data: group.data, centroCusto: group.centroCusto, funcionarioId: '', valor: '', observacao: '', saving: false })}>
+                            onClick={() => setFaltaDialog({ data: group.data, centroCusto: group.centroCusto, tipo: 'Falta de Caixa', funcionarioId: '', valor: '', observacao: '', saving: false })}>
                             <UserMinus className="mr-1 h-3 w-3" />Falta de Caixa
                           </Button>
                           <Button size="sm" variant="ghost" className="h-6 text-xs"
@@ -919,7 +922,9 @@ export default function ResumoDiario() {
                               ? 'Nota a Prazo'
                               : comp.tipo === 'Falta de Caixa'
                                 ? `Falta de Caixa${comp.funcionario_nome ? ` — ${comp.funcionario_nome}` : ''}${comp.valor != null ? ` — ${fmt(comp.valor)}` : ''}`
-                                : comp.file_name ?? '(arquivo)';
+                                : comp.tipo === 'Sobra de Caixa'
+                                  ? `Sobra de Caixa${comp.funcionario_nome ? ` — ${comp.funcionario_nome}` : ''}${comp.valor != null ? ` — +${fmt(comp.valor)}` : ''}`
+                                  : comp.file_name ?? '(arquivo)';
                         return (
                           <div key={comp.id} className={`group/comp flex items-start gap-2 rounded-md border p-2 ${comp.cancelado ? 'bg-muted/40 opacity-70' : ''}`}>
                             {!comp.cancelado && (
@@ -964,7 +969,12 @@ export default function ResumoDiario() {
 
                             {/* Label + observation (or cancelled info) */}
                             <div className="flex-1 min-w-0 space-y-0.5">
-                              <div className={`text-[10px] truncate ${comp.cancelado ? 'line-through text-muted-foreground' : 'text-muted-foreground'}`}>{compLabel}</div>
+                              <div className={`text-[10px] truncate ${
+                                comp.cancelado ? 'line-through text-muted-foreground' :
+                                comp.tipo === 'Falta de Caixa' ? 'text-red-600 dark:text-red-400 font-medium' :
+                                comp.tipo === 'Sobra de Caixa' ? 'text-green-600 dark:text-green-400 font-medium' :
+                                'text-muted-foreground'
+                              }`}>{compLabel}</div>
                               {comp.cancelado ? (
                                 <p className="text-[10px] text-muted-foreground">
                                   Cancelado por {comp.cancelado_por_nome} em {formatDateTime(comp.cancelado_em)}
@@ -1059,6 +1069,22 @@ export default function ResumoDiario() {
             </p>
           )}
           <div className="space-y-3 py-1">
+            <div className="flex rounded-md border overflow-hidden">
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-xs font-medium transition-colors ${faltaDialog?.tipo === 'Falta de Caixa' ? 'bg-red-500 text-white' : 'bg-background text-muted-foreground hover:bg-muted'}`}
+                onClick={() => setFaltaDialog((prev) => prev ? { ...prev, tipo: 'Falta de Caixa' } : null)}
+              >
+                Falta
+              </button>
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-xs font-medium transition-colors border-l ${faltaDialog?.tipo === 'Sobra de Caixa' ? 'bg-green-600 text-white' : 'bg-background text-muted-foreground hover:bg-muted'}`}
+                onClick={() => setFaltaDialog((prev) => prev ? { ...prev, tipo: 'Sobra de Caixa' } : null)}
+              >
+                Sobra
+              </button>
+            </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Funcionário *</Label>
               <Select

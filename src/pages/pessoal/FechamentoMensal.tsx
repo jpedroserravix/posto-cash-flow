@@ -336,7 +336,7 @@ export default function FechamentoMensal() {
         st.suspensoes,
         (st.auto_descontos > 0 ? -st.auto_descontos : 0).toFixed(2),
         (st.auto_vale_quinzenal > 0 ? -st.auto_vale_quinzenal : 0).toFixed(2),
-        (st.auto_quebra_desc > 0 ? -st.auto_quebra_desc : 0).toFixed(2),
+        st.auto_quebra_desc.toFixed(2),
         st.auto_quebra_credito.toFixed(2),
         fech?.observacoes ?? edit.observacoes,
       ];
@@ -527,10 +527,14 @@ export default function FechamentoMensal() {
                         )}
                       </TableCell>
 
-                      {/* Desconto Quebra de Caixa — read-only, auto-computed from ocorrências */}
+                      {/* Quebra de Caixa — valor líquido assinado (negativo=falta, positivo=sobra) */}
                       <TableCell>
-                        {st.auto_quebra_desc > 0 ? (
-                          <span className="text-red-600 font-medium whitespace-nowrap">{negBRL(st.auto_quebra_desc)}</span>
+                        {st.auto_quebra_desc !== 0 ? (
+                          st.auto_quebra_desc < 0 ? (
+                            <span className="text-red-600 font-medium whitespace-nowrap">{formatBRL(st.auto_quebra_desc)}</span>
+                          ) : (
+                            <span className="text-green-700 font-medium whitespace-nowrap">+{formatBRL(st.auto_quebra_desc)}</span>
+                          )
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
