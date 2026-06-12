@@ -12,7 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Save, Upload, FileText, X, ExternalLink, Paperclip, Gauge, AlertTriangle } from 'lucide-react';
+import { Save, Upload, FileText, X, ExternalLink, Paperclip, Gauge, AlertTriangle, Ban, RotateCcw } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { openInNewTab } from '@/lib/utils';
 import { usePagination } from '@/hooks/usePagination';
@@ -41,6 +41,9 @@ interface AfericaoInfo {
   pdf_path: string | null;
   criado_por_nome: string | null;
   item_conferido: boolean;
+  cancelado: boolean;
+  cancelado_por_nome: string | null;
+  cancelado_em: string | null;
 }
 
 interface Comprovante {
@@ -54,6 +57,9 @@ interface Comprovante {
   descricao_despesa: string | null;
   centro_custo: string | null;
   item_conferido: boolean;
+  cancelado: boolean;
+  cancelado_por_nome: string | null;
+  cancelado_em: string | null;
 }
 
 interface GroupData {
@@ -81,7 +87,7 @@ interface PreviewFile {
 // ─── component ───────────────────────────────────────────────────────────────
 
 export default function ResumoDiario() {
-  const { selectedPostoId } = useAuth();
+  const { selectedPostoId, nome } = useAuth();
   const isMobile = useIsMobile();
   const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter();
   const [groups, setGroups] = useState<GroupData[]>([]);
@@ -114,8 +120,10 @@ export default function ResumoDiario() {
 
   // Comprovantes state
   const [uploadingComprovDate, setUploadingComprovDate] = useState<string | null>(null);
-  const [deletingComprovante, setDeletingComprovante] = useState<{ id: string; file_path: string | null } | null>(null);
   const comprovantesFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Cancel item (soft delete) state
+  const [cancelingItem, setCancelingItem] = useState<{ type: 'comprovante' | 'afericao'; id: string } | null>(null);
 
   // Comprovante observation edits (keyed by comprovante id, auto-saved)
   const [compObsEdits, setCompObsEdits] = useState<Map<string, string>>(new Map());
@@ -160,10 +168,10 @@ export default function ResumoDiario() {
       supabase.from('relatorio_quality').select('data_caixa, pdf_path, quality_conferido')
         .eq('posto_id', selectedPostoId).gte('data_caixa', dfRange.start).lte('data_caixa', dfRange.end),
       (supabase as any).from('comprovantes_despesas')
-        .select('id, data_caixa, file_path, file_name, file_type, observacao, tipo, titulo, descricao_despesa, item_conferido, centro_custo')
+        .select('id, data_caixa, file_path, file_name, file_type, observacao, tipo, titulo, descricao_despesa, item_conferido, centro_custo, cancelado, cancelado_por_nome, cancelado_em')
         .eq('posto_id', selectedPostoId).gte('data_caixa', dfRange.start).lte('data_caixa', dfRange.end),
       (supabase as any).from('afericoes')
-        .select('id, data, pdf_path, criado_por_nome, item_conferido')
+        .select('id, data, pdf_path, criado_por_nome, item_conferido, cancelado, cancelado_por_nome, cancelado_em')
         .eq('posto_id', selectedPostoId).gte('data', dfRange.start).lte('data', dfRange.end),
     ]);
 
@@ -221,7 +229,7 @@ export default function ResumoDiario() {
     const comprovantesMap = new Map<string, Comprovante[]>();
     (comprovantesData as any[] ?? []).forEach((c) => {
       const arr = comprovantesMap.get(c.data_caixa) || [];
-      arr.push({ id: c.id, file_path: c.file_path ?? null, file_name: c.file_name ?? null, file_type: c.file_type ?? null, observacao: c.observacao ?? null, tipo: c.tipo ?? null, titulo: c.titulo ?? null, descricao_despesa: c.descricao_despesa ?? null, item_conferido: c.item_conferido ?? false, centro_custo: c.centro_custo ?? null });
+      arr.push({ id: c.id, file_path: c.file_path ?? null, file_name: c.file_name ?? null, file_type: c.file_type ?? null, observacao: c.observacao ?? null, tipo: c.tipo ?? null, titulo: c.titulo ?? null, descricao_despesa: c.descricao_despesa ?? null, item_conferido: c.item_conferido ?? false, centro_custo: c.centro_custo ?? null, cancelado: c.cancelado ?? false, cancelado_por_nome: c.cancelado_por_nome ?? null, cancelado_em: c.cancelado_em ?? null });
       comprovantesMap.set(c.data_caixa, arr);
     });
 
@@ -229,7 +237,7 @@ export default function ResumoDiario() {
     const afericaoMap = new Map<string, AfericaoInfo[]>();
     (afericoesData as any[] ?? []).forEach((a) => {
       const arr = afericaoMap.get(a.data) || [];
-      arr.push({ id: a.id, pdf_path: a.pdf_path ?? null, criado_por_nome: a.criado_por_nome ?? null, item_conferido: a.item_conferido ?? false });
+      arr.push({ id: a.id, pdf_path: a.pdf_path ?? null, criado_por_nome: a.criado_por_nome ?? null, item_conferido: a.item_conferido ?? false, cancelado: a.cancelado ?? false, cancelado_por_nome: a.cancelado_por_nome ?? null, cancelado_em: a.cancelado_em ?? null });
       afericaoMap.set(a.data, arr);
     });
 
@@ -455,15 +463,47 @@ export default function ResumoDiario() {
     setUploadingComprovDate(null);
   };
 
-  const handleDeleteComprovante = async () => {
-    if (!deletingComprovante) return;
-    if (deletingComprovante.file_path) {
-      await supabase.storage.from('despesas-comprovantes').remove([deletingComprovante.file_path]);
+  const formatDateTime = (iso: string | null) => {
+    if (!iso) return '';
+    return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
+  const handleCancelItem = async () => {
+    if (!cancelingItem) return;
+    const canceladoPorNome = nome || 'Usuário';
+    const canceladoEm = new Date().toISOString();
+    const patch = { cancelado: true, cancelado_por_nome: canceladoPorNome, cancelado_em: canceladoEm };
+
+    if (cancelingItem.type === 'comprovante') {
+      setGroups((prev) => prev.map((g) => ({ ...g, comprovantes: g.comprovantes.map((c) => c.id === cancelingItem.id ? { ...c, ...patch } : c) })));
+      setCancelingItem(null);
+      const { error } = await (supabase as any).from('comprovantes_despesas').update(patch).eq('id', cancelingItem.id);
+      if (error) {
+        toast.error('Erro ao cancelar item');
+        setGroups((prev) => prev.map((g) => ({ ...g, comprovantes: g.comprovantes.map((c) => c.id === cancelingItem.id ? { ...c, cancelado: false, cancelado_por_nome: null, cancelado_em: null } : c) })));
+      }
+    } else {
+      setGroups((prev) => prev.map((g) => ({ ...g, afericoes: g.afericoes.map((a) => a.id === cancelingItem.id ? { ...a, ...patch } : a) })));
+      setCancelingItem(null);
+      const { error } = await (supabase as any).from('afericoes').update(patch).eq('id', cancelingItem.id);
+      if (error) {
+        toast.error('Erro ao cancelar aferição');
+        setGroups((prev) => prev.map((g) => ({ ...g, afericoes: g.afericoes.map((a) => a.id === cancelingItem.id ? { ...a, cancelado: false, cancelado_por_nome: null, cancelado_em: null } : a) })));
+      }
     }
-    await (supabase as any).from('comprovantes_despesas').delete().eq('id', deletingComprovante.id);
-    toast.success('Comprovante removido.');
-    setDeletingComprovante(null);
-    loadResumo();
+  };
+
+  const handleRestoreItem = async (type: 'comprovante' | 'afericao', id: string) => {
+    const patch = { cancelado: false, cancelado_por_nome: null, cancelado_em: null };
+    if (type === 'comprovante') {
+      setGroups((prev) => prev.map((g) => ({ ...g, comprovantes: g.comprovantes.map((c) => c.id === id ? { ...c, ...patch } : c) })));
+      const { error } = await (supabase as any).from('comprovantes_despesas').update(patch).eq('id', id);
+      if (error) { toast.error('Erro ao restaurar item'); loadResumo(); }
+    } else {
+      setGroups((prev) => prev.map((g) => ({ ...g, afericoes: g.afericoes.map((a) => a.id === id ? { ...a, ...patch } : a) })));
+      const { error } = await (supabase as any).from('afericoes').update(patch).eq('id', id);
+      if (error) { toast.error('Erro ao restaurar aferição'); loadResumo(); }
+    }
   };
 
   // ─── comprovante observation auto-save ─────────────────────────────────────
@@ -578,7 +618,8 @@ export default function ResumoDiario() {
             const visibleComprovantes = group.comprovantes.filter(
               (c) => c.tipo !== 'Nota a Prazo' || c.centro_custo === group.centroCusto
             );
-            const totalItens = group.afericoes.length + visibleComprovantes.length;
+            const totalItens = group.afericoes.filter((a) => !a.cancelado).length
+              + visibleComprovantes.filter((c) => !c.cancelado).length;
 
             return (
               <Card key={`${group.data}-${group.centroCusto}`} className={borderColor(group.conferido)}>
@@ -699,15 +740,26 @@ export default function ResumoDiario() {
                       {group.afericoes.map((af) => {
                         const afUrl = af.pdf_path ? getStorageUrl('despesas-comprovantes', af.pdf_path) : null;
                         return (
-                          <div key={af.id} className="flex items-center gap-2 rounded-md border p-2">
-                            <Checkbox
-                              checked={af.item_conferido}
-                              onCheckedChange={() => handleToggleAfericao(af.id, af.item_conferido)}
-                              className="h-4 w-4 shrink-0"
-                            />
-                            <Gauge className="h-4 w-4 text-blue-500 shrink-0" />
-                            <span className="flex-1 text-xs">Aferição de Bicos{af.criado_por_nome ? ` — ${af.criado_por_nome}` : ''}</span>
-                            {afUrl && (
+                          <div key={af.id} className={`group/af flex items-center gap-2 rounded-md border p-2 ${af.cancelado ? 'bg-muted/40 opacity-70' : ''}`}>
+                            {!af.cancelado && (
+                              <Checkbox
+                                checked={af.item_conferido}
+                                onCheckedChange={() => handleToggleAfericao(af.id, af.item_conferido)}
+                                className="h-4 w-4 shrink-0"
+                              />
+                            )}
+                            <Gauge className={`h-4 w-4 shrink-0 ${af.cancelado ? 'text-muted-foreground' : 'text-blue-500'}`} />
+                            <div className="flex-1 min-w-0">
+                              <span className={`text-xs ${af.cancelado ? 'line-through text-muted-foreground' : ''}`}>
+                                Aferição de Bicos{af.criado_por_nome ? ` — ${af.criado_por_nome}` : ''}
+                              </span>
+                              {af.cancelado && af.cancelado_por_nome && (
+                                <p className="text-[10px] text-muted-foreground mt-0.5">
+                                  Cancelado por {af.cancelado_por_nome} em {formatDateTime(af.cancelado_em)}
+                                </p>
+                              )}
+                            </div>
+                            {afUrl && !af.cancelado && (
                               <HoverCard openDelay={300} closeDelay={100}>
                                 <HoverCardTrigger asChild>
                                   <button
@@ -729,6 +781,23 @@ export default function ResumoDiario() {
                                 </HoverCardContent>
                               </HoverCard>
                             )}
+                            {af.cancelado ? (
+                              <button
+                                className="shrink-0 flex h-5 w-5 items-center justify-center rounded-full border border-border text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
+                                title="Restaurar"
+                                onClick={() => handleRestoreItem('afericao', af.id)}
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                              </button>
+                            ) : (
+                              <button
+                                className="opacity-0 group-hover/af:opacity-100 transition-opacity shrink-0 flex h-5 w-5 items-center justify-center rounded-full border border-border text-muted-foreground hover:border-destructive hover:text-destructive"
+                                title="Cancelar aferição"
+                                onClick={() => setCancelingItem({ type: 'afericao', id: af.id })}
+                              >
+                                <Ban className="h-3 w-3" />
+                              </button>
+                            )}
                           </div>
                         );
                       })}
@@ -744,14 +813,16 @@ export default function ResumoDiario() {
                               ? 'Nota a Prazo'
                               : comp.file_name ?? '(arquivo)';
                         return (
-                          <div key={comp.id} className="group/comp flex items-start gap-2 rounded-md border p-2">
-                            <Checkbox
-                              checked={comp.item_conferido}
-                              onCheckedChange={() => handleToggleComprovante(comp.id, comp.item_conferido)}
-                              className="h-4 w-4 shrink-0 mt-0.5"
-                            />
-                            {/* Preview trigger — only when file exists */}
-                            {compUrl && (
+                          <div key={comp.id} className={`group/comp flex items-start gap-2 rounded-md border p-2 ${comp.cancelado ? 'bg-muted/40 opacity-70' : ''}`}>
+                            {!comp.cancelado && (
+                              <Checkbox
+                                checked={comp.item_conferido}
+                                onCheckedChange={() => handleToggleComprovante(comp.id, comp.item_conferido)}
+                                className="h-4 w-4 shrink-0 mt-0.5"
+                              />
+                            )}
+                            {/* Preview trigger — only when file exists and not cancelled */}
+                            {compUrl && !comp.cancelado && (
                               <div className="relative shrink-0">
                                 <HoverCard openDelay={300} closeDelay={100}>
                                   <HoverCardTrigger asChild>
@@ -783,25 +854,41 @@ export default function ResumoDiario() {
                               </div>
                             )}
 
-                            {/* Label + observation */}
+                            {/* Label + observation (or cancelled info) */}
                             <div className="flex-1 min-w-0 space-y-0.5">
-                              <div className="text-[10px] text-muted-foreground truncate">{compLabel}</div>
-                              <Input
-                                className="h-6 text-xs border-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-b-primary bg-transparent"
-                                value={getCompObs(comp)}
-                                onChange={(e) => handleCompObsChange(comp.id, e.target.value)}
-                                placeholder="Observação..."
-                              />
+                              <div className={`text-[10px] truncate ${comp.cancelado ? 'line-through text-muted-foreground' : 'text-muted-foreground'}`}>{compLabel}</div>
+                              {comp.cancelado ? (
+                                <p className="text-[10px] text-muted-foreground">
+                                  Cancelado por {comp.cancelado_por_nome} em {formatDateTime(comp.cancelado_em)}
+                                </p>
+                              ) : (
+                                <Input
+                                  className="h-6 text-xs border-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-b-primary bg-transparent"
+                                  value={getCompObs(comp)}
+                                  onChange={(e) => handleCompObsChange(comp.id, e.target.value)}
+                                  placeholder="Observação..."
+                                />
+                              )}
                             </div>
 
-                            {/* Delete */}
-                            <button
-                              className="opacity-0 group-hover/comp:opacity-100 transition-opacity shrink-0 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground"
-                              onClick={() => setDeletingComprovante({ id: comp.id, file_path: comp.file_path })}
-                              title="Remover"
-                            >
-                              <X className="h-2.5 w-2.5" />
-                            </button>
+                            {/* Cancel / Restore */}
+                            {comp.cancelado ? (
+                              <button
+                                className="shrink-0 flex h-5 w-5 items-center justify-center rounded-full border border-border text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
+                                title="Restaurar"
+                                onClick={() => handleRestoreItem('comprovante', comp.id)}
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                              </button>
+                            ) : (
+                              <button
+                                className="opacity-0 group-hover/comp:opacity-100 transition-opacity shrink-0 flex h-5 w-5 items-center justify-center rounded-full border border-border text-muted-foreground hover:border-destructive hover:text-destructive"
+                                onClick={() => setCancelingItem({ type: 'comprovante', id: comp.id })}
+                                title="Cancelar item"
+                              >
+                                <Ban className="h-3 w-3" />
+                              </button>
+                            )}
                           </div>
                         );
                       })}
@@ -900,17 +987,23 @@ export default function ResumoDiario() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ── Delete comprovante ── */}
-      <AlertDialog open={deletingComprovante !== null} onOpenChange={(o) => { if (!o) setDeletingComprovante(null); }}>
+      {/* ── Cancelar item (soft delete) ── */}
+      <AlertDialog open={cancelingItem !== null} onOpenChange={(o) => { if (!o) setCancelingItem(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir comprovante?</AlertDialogTitle>
-            <AlertDialogDescription>O arquivo será removido permanentemente. Esta ação não pode ser desfeita.</AlertDialogDescription>
+            <AlertDialogTitle>Cancelar item?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O item ficará marcado como cancelado e não entrará em contagens ou conferência.
+              Você pode restaurá-lo depois se necessário.
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDeleteComprovante}>
-              Excluir
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleCancelItem}
+            >
+              Cancelar item
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
