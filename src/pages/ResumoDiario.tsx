@@ -267,61 +267,36 @@ export default function ResumoDiario() {
     const y = now.getFullYear();
     const m = now.getMonth();
     const start = `${y}-${String(m + 1).padStart(2, '0')}-01`;
-    const today = now.toISOString().split('T')[0]; // cap at today — não contar dias futuros
+    const today = now.toISOString().split('T')[0];
 
     const [{ data: brinks }, { data: manuais }, { data: conferencias }] = await Promise.all([
-      supabase.from('depositos_brinks').select('data_caixa, centro_custo, turno')
-        .eq('posto_id', selectedPostoId).not('data_caixa', 'is', null)
-        .not('centro_custo', 'is', null)
+      supabase.from('depositos_brinks').select('data_caixa, centro_custo')
+        .eq('posto_id', selectedPostoId)
+        .not('data_caixa', 'is', null).not('centro_custo', 'is', null)
         .gte('data_caixa', start).lte('data_caixa', today),
-      supabase.from('depositos_manuais').select('data, centro_custo, turno')
+      supabase.from('depositos_manuais').select('data, centro_custo')
         .eq('posto_id', selectedPostoId)
         .not('centro_custo', 'is', null).gte('data', start).lte('data', today),
-      supabase.from('resumo_conferencia').select('data, centro_custo, turnos_conferidos')
+      supabase.from('resumo_conferencia').select('data, centro_custo, conferido, turno')
         .eq('posto_id', selectedPostoId).gte('data', start).lte('data', today),
     ]);
 
-    // depositGroups: todos os (data, cc) com QUALQUER movimento (turno nulo ou não)
-    // turnosMap: apenas turnos não-nulos por grupo (para checar completude)
+    // depositGroups: todos os (data, cc) que têm movimento no período
     const depositGroups = new Set<string>();
-    const turnosMap = new Map<string, Set<string>>();
+    (brinks ?? []).forEach((b: any) => depositGroups.add(`${b.data_caixa}|${b.centro_custo}`));
+    (manuais ?? []).forEach((mn: any) => { if (mn.data) depositGroups.add(`${mn.data}|${mn.centro_custo}`); });
 
-    (brinks ?? []).forEach((b: any) => {
-      const key = `${b.data_caixa}|${b.centro_custo}`;
-      depositGroups.add(key);
-      if (b.turno) {
-        const s = turnosMap.get(key) ?? new Set<string>();
-        s.add(b.turno);
-        turnosMap.set(key, s);
-      }
-    });
-    (manuais ?? []).forEach((mn: any) => {
-      if (!mn.data) return;
-      const key = `${mn.data}|${mn.centro_custo}`;
-      depositGroups.add(key);
-      if (mn.turno) {
-        const s = turnosMap.get(key) ?? new Set<string>();
-        s.add(mn.turno);
-        turnosMap.set(key, s);
-      }
-    });
-
-    const confMap = new Map<string, string[]>();
+    // statusMap: (data, cc) → conferido; linha com turno=null tem preferência (igual ao card)
+    const statusMap = new Map<string, string>();
     (conferencias ?? []).forEach((c: any) => {
-      confMap.set(`${c.data}|${c.centro_custo ?? 'SEM CENTRO'}`, c.turnos_conferidos ?? []);
+      const key = `${c.data}|${c.centro_custo ?? 'SEM CENTRO'}`;
+      if (!statusMap.has(key) || c.turno === null) statusMap.set(key, c.conferido);
     });
 
+    // sem registro em resumo_conferencia = PENDENTE por padrão
     let count = 0;
     depositGroups.forEach((key) => {
-      if (!confMap.has(key)) {
-        // caso (a): tem movimento mas nunca foi conferido
-        count++;
-      } else {
-        // caso (b): conferência existe mas turnos incompletos
-        const conferidos = confMap.get(key)!;
-        const turnos = turnosMap.get(key);
-        if (turnos && Array.from(turnos).some((t) => !conferidos.includes(t))) count++;
-      }
+      if ((statusMap.get(key) ?? 'PENDENTE') !== 'OK') count++;
     });
     setMesVigentePendencias(count);
   };

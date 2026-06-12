@@ -262,14 +262,14 @@ export default function Dashboard() {
     const rangeEnd = today; // nunca buscar além de hoje
 
     const [{ data: brinks }, { data: manuais }, { data: conferencias }] = await Promise.all([
-      supabase.from('depositos_brinks').select('data_caixa, centro_custo, turno')
-        .eq('posto_id', targetPostoId).not('data_caixa', 'is', null)
-        .not('centro_custo', 'is', null)
+      supabase.from('depositos_brinks').select('data_caixa, centro_custo')
+        .eq('posto_id', targetPostoId)
+        .not('data_caixa', 'is', null).not('centro_custo', 'is', null)
         .gte('data_caixa', rangeStart).lte('data_caixa', rangeEnd),
-      supabase.from('depositos_manuais').select('data, centro_custo, turno')
+      supabase.from('depositos_manuais').select('data, centro_custo')
         .eq('posto_id', targetPostoId)
         .not('centro_custo', 'is', null).gte('data', rangeStart).lte('data', rangeEnd),
-      supabase.from('resumo_conferencia').select('data, centro_custo, turnos_conferidos')
+      supabase.from('resumo_conferencia').select('data, centro_custo, conferido, turno')
         .eq('posto_id', targetPostoId).gte('data', rangeStart).lte('data', rangeEnd),
     ]);
 
@@ -278,47 +278,20 @@ export default function Dashboard() {
       const mManuais = (manuais ?? []).filter((m: any) => m.data >= start && m.data <= end);
       const mConfs = (conferencias ?? []).filter((c: any) => c.data >= start && c.data <= end);
 
-      // depositGroups: todos os (data, cc) com QUALQUER movimento
-      // turnosMap: apenas turnos não-nulos por grupo
       const depositGroups = new Set<string>();
-      const turnosMap = new Map<string, Set<string>>();
+      mBrinks.forEach((b: any) => depositGroups.add(`${b.data_caixa}|${b.centro_custo}`));
+      mManuais.forEach((mn: any) => { if (mn.data) depositGroups.add(`${mn.data}|${mn.centro_custo}`); });
 
-      mBrinks.forEach((b: any) => {
-        const key = `${b.data_caixa}|${b.centro_custo}`;
-        depositGroups.add(key);
-        if (b.turno) {
-          const s = turnosMap.get(key) ?? new Set<string>();
-          s.add(b.turno);
-          turnosMap.set(key, s);
-        }
-      });
-      mManuais.forEach((mn: any) => {
-        if (!mn.data) return;
-        const key = `${mn.data}|${mn.centro_custo}`;
-        depositGroups.add(key);
-        if (mn.turno) {
-          const s = turnosMap.get(key) ?? new Set<string>();
-          s.add(mn.turno);
-          turnosMap.set(key, s);
-        }
-      });
-
-      const confMap = new Map<string, string[]>();
+      // statusMap: (data, cc) → conferido; linha com turno=null tem preferência
+      const statusMap = new Map<string, string>();
       mConfs.forEach((c: any) => {
-        confMap.set(`${c.data}|${c.centro_custo ?? 'SEM CENTRO'}`, c.turnos_conferidos ?? []);
+        const key = `${c.data}|${c.centro_custo ?? 'SEM CENTRO'}`;
+        if (!statusMap.has(key) || c.turno === null) statusMap.set(key, c.conferido);
       });
 
       let count = 0;
       depositGroups.forEach((key) => {
-        if (!confMap.has(key)) {
-          // caso (a): tem movimento mas nunca foi conferido
-          count++;
-        } else {
-          // caso (b): conferência existe mas turnos incompletos
-          const conferidos = confMap.get(key)!;
-          const turnos = turnosMap.get(key);
-          if (turnos && Array.from(turnos).some((t) => !conferidos.includes(t))) count++;
-        }
+        if ((statusMap.get(key) ?? 'PENDENTE') !== 'OK') count++;
       });
 
       return { label, count };
