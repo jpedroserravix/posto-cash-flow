@@ -12,7 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Save, Upload, FileText, X, ExternalLink, Paperclip, Gauge } from 'lucide-react';
+import { Save, Upload, FileText, X, ExternalLink, Paperclip, Gauge, AlertTriangle } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { openInNewTab } from '@/lib/utils';
 import { usePagination } from '@/hooks/usePagination';
@@ -85,6 +85,7 @@ export default function ResumoDiario() {
   const isMobile = useIsMobile();
   const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter();
   const [groups, setGroups] = useState<GroupData[]>([]);
+  const [mesVigentePendencias, setMesVigentePendencias] = useState<number>(0);
 
   // Centro de custo filter (null = todos selecionados)
   const [ccFilter, setCcFilter] = useState<Set<string> | null>(null);
@@ -131,6 +132,10 @@ export default function ResumoDiario() {
   useEffect(() => {
     if (selectedPostoId) loadResumo();
   }, [selectedPostoId, dfRange.start, dfRange.end]);
+
+  useEffect(() => {
+    if (selectedPostoId) loadMesVigentePendencias();
+  }, [selectedPostoId]);
 
   // ─── load ──────────────────────────────────────────────────────────────────
 
@@ -254,6 +259,53 @@ export default function ResumoDiario() {
       .sort((a, b) => b.data.localeCompare(a.data) || a.centroCusto.localeCompare(b.centroCusto));
 
     setGroups(result);
+  };
+
+  const loadMesVigentePendencias = async () => {
+    if (!selectedPostoId) return;
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const start = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+    const end = `${y}-${String(m + 1).padStart(2, '0')}-${String(new Date(y, m + 1, 0).getDate()).padStart(2, '0')}`;
+
+    const [{ data: brinks }, { data: manuais }, { data: conferencias }] = await Promise.all([
+      supabase.from('depositos_brinks').select('data_caixa, centro_custo, turno')
+        .eq('posto_id', selectedPostoId).not('data_caixa', 'is', null)
+        .not('turno', 'is', null).not('centro_custo', 'is', null)
+        .gte('data_caixa', start).lte('data_caixa', end),
+      supabase.from('depositos_manuais').select('data, centro_custo, turno')
+        .eq('posto_id', selectedPostoId).not('turno', 'is', null)
+        .not('centro_custo', 'is', null).gte('data', start).lte('data', end),
+      supabase.from('resumo_conferencia').select('data, centro_custo, turnos_conferidos')
+        .eq('posto_id', selectedPostoId).gte('data', start).lte('data', end),
+    ]);
+
+    const turnosMap = new Map<string, Set<string>>();
+    (brinks ?? []).forEach((b: any) => {
+      const key = `${b.data_caixa}|${b.centro_custo}`;
+      const s = turnosMap.get(key) ?? new Set<string>();
+      s.add(b.turno);
+      turnosMap.set(key, s);
+    });
+    (manuais ?? []).forEach((mn: any) => {
+      const key = `${mn.data}|${mn.centro_custo}`;
+      const s = turnosMap.get(key) ?? new Set<string>();
+      s.add(mn.turno);
+      turnosMap.set(key, s);
+    });
+
+    const confMap = new Map<string, string[]>();
+    (conferencias ?? []).forEach((c: any) => {
+      confMap.set(`${c.data}|${c.centro_custo ?? 'SEM CENTRO'}`, c.turnos_conferidos ?? []);
+    });
+
+    let count = 0;
+    turnosMap.forEach((turnos, key) => {
+      const conferidos = confMap.get(key) ?? [];
+      if (Array.from(turnos).some((t) => !conferidos.includes(t))) count++;
+    });
+    setMesVigentePendencias(count);
   };
 
   // ─── helpers ───────────────────────────────────────────────────────────────
@@ -468,6 +520,16 @@ export default function ResumoDiario() {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-bold">Resumo Diário / CAIXAS</h1>
+
+      {mesVigentePendencias > 0 && (
+        <div className="flex items-center gap-2 rounded-md border border-yellow-300 bg-yellow-50 px-4 py-2.5 text-sm text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950/20 dark:text-yellow-300">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-600 dark:text-yellow-400" />
+          <span>
+            <strong>{mesVigentePendencias}</strong>{' '}
+            {mesVigentePendencias === 1 ? 'caixa com pendência' : 'caixas com pendência'} neste mês
+          </span>
+        </div>
+      )}
 
       <DateFilter preset={dfPreset} range={dfRange} onChange={setDfPreset} />
 

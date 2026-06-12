@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Plus, Trash2, AlertTriangle, Clock, FileWarning, GraduationCap, X, CalendarX2, CalendarClock, Inbox, Settings, Gauge } from 'lucide-react';
+import { Plus, Trash2, AlertTriangle, Clock, FileWarning, GraduationCap, X, CalendarX2, CalendarClock, Inbox, Settings, Gauge, ListChecks } from 'lucide-react';
 import { computeFeriasAlert, type FeriasRecord } from '@/lib/feriasPeriodos';
 import frases from '@/data/frasesSantos.json';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -44,6 +44,11 @@ interface AfericaoInfo {
   postoId: string;
   postoNome: string;
   datas: string[];
+}
+
+interface CaixaMesPendencia {
+  label: string;
+  count: number;
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -125,6 +130,7 @@ const ALERT_PREFS_DEFS = [
   { key: 'curriculos',   label: 'Currículos novos (Caixa de Entrada)' },
   { key: 'feedbacks',    label: 'Feedbacks novos (Caixa de Entrada)' },
   { key: 'afericoes',    label: 'Aferições por posto' },
+  { key: 'caixas',       label: 'Caixas com pendência (turnos não conferidos)' },
 ];
 
 const TIPO_TO_PREF: Record<AlertaItem['tipo'], string> = {
@@ -172,6 +178,9 @@ export default function Dashboard() {
   // ── aferições state ────────────────────────────────────────────────────────
   const [afericoesPorPosto, setAfericoesPorPosto] = useState<AfericaoInfo[]>([]);
 
+  // ── caixas pendências state ────────────────────────────────────────────────
+  const [caixasPendencias, setCaixasPendencias] = useState<CaixaMesPendencia[]>([]);
+
   // ── caixa de entrada state ─────────────────────────────────────────────────
   const [novos, setNovos] = useState({ curriculos: 0, feedbacks: 0 });
 
@@ -184,6 +193,10 @@ export default function Dashboard() {
       loadAfericoes();
     }
   }, [postoIds]);
+
+  useEffect(() => {
+    if (targetPostoId) loadCaixasPendencias();
+  }, [targetPostoId]);
 
   useEffect(() => {
     if (hasPermission('caixa-entrada')) loadNovos();
@@ -225,6 +238,73 @@ export default function Dashboard() {
         datas: grouped.get(pid) ?? [],
       }))
     );
+  }
+
+  async function loadCaixasPendencias() {
+    if (!targetPostoId) return;
+
+    const months = [2, 1, 0].map((ago) => {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() - ago);
+      const y = d.getFullYear();
+      const mo = d.getMonth();
+      const start = `${y}-${String(mo + 1).padStart(2, '0')}-01`;
+      const end = `${y}-${String(mo + 1).padStart(2, '0')}-${String(new Date(y, mo + 1, 0).getDate()).padStart(2, '0')}`;
+      const raw = d.toLocaleDateString('pt-BR', { month: 'long' });
+      const label = raw.charAt(0).toUpperCase() + raw.slice(1);
+      return { start, end, label };
+    });
+
+    const rangeStart = months[0].start;
+    const rangeEnd = months[2].end;
+
+    const [{ data: brinks }, { data: manuais }, { data: conferencias }] = await Promise.all([
+      supabase.from('depositos_brinks').select('data_caixa, centro_custo, turno')
+        .eq('posto_id', targetPostoId).not('data_caixa', 'is', null)
+        .not('turno', 'is', null).not('centro_custo', 'is', null)
+        .gte('data_caixa', rangeStart).lte('data_caixa', rangeEnd),
+      supabase.from('depositos_manuais').select('data, centro_custo, turno')
+        .eq('posto_id', targetPostoId).not('turno', 'is', null)
+        .not('centro_custo', 'is', null).gte('data', rangeStart).lte('data', rangeEnd),
+      supabase.from('resumo_conferencia').select('data, centro_custo, turnos_conferidos')
+        .eq('posto_id', targetPostoId).gte('data', rangeStart).lte('data', rangeEnd),
+    ]);
+
+    const result = months.map(({ start, end, label }) => {
+      const mBrinks = (brinks ?? []).filter((b: any) => b.data_caixa >= start && b.data_caixa <= end);
+      const mManuais = (manuais ?? []).filter((m: any) => m.data >= start && m.data <= end);
+      const mConfs = (conferencias ?? []).filter((c: any) => c.data >= start && c.data <= end);
+
+      const turnosMap = new Map<string, Set<string>>();
+      mBrinks.forEach((b: any) => {
+        const key = `${b.data_caixa}|${b.centro_custo}`;
+        const s = turnosMap.get(key) ?? new Set<string>();
+        s.add(b.turno);
+        turnosMap.set(key, s);
+      });
+      mManuais.forEach((mn: any) => {
+        const key = `${mn.data}|${mn.centro_custo}`;
+        const s = turnosMap.get(key) ?? new Set<string>();
+        s.add(mn.turno);
+        turnosMap.set(key, s);
+      });
+
+      const confMap = new Map<string, string[]>();
+      mConfs.forEach((c: any) => {
+        confMap.set(`${c.data}|${c.centro_custo ?? 'SEM CENTRO'}`, c.turnos_conferidos ?? []);
+      });
+
+      let count = 0;
+      turnosMap.forEach((turnos, key) => {
+        const conferidos = confMap.get(key) ?? [];
+        if (Array.from(turnos).some((t) => !conferidos.includes(t))) count++;
+      });
+
+      return { label, count };
+    });
+
+    setCaixasPendencias(result);
   }
 
   async function saveAlertPrefs(prefs: Record<string, boolean>) {
@@ -795,6 +875,42 @@ export default function Dashboard() {
           </Card>
         </div>
       )}
+
+      {/* ── SEÇÃO 5: CAIXAS COM PENDÊNCIA ────────────────────────────────── */}
+      {isPrefOn('caixas') && caixasPendencias.length > 0 && (() => {
+        const allOk = caixasPendencias.every((m) => m.count === 0);
+        return (
+          <div className="space-y-3">
+            <h2 className="text-base font-semibold flex items-center gap-2">
+              <ListChecks className="w-4 h-4" />
+              Caixas com Pendência
+            </h2>
+            <Link to="/resumo" className="block">
+              <Card className={`cursor-pointer transition-colors hover:bg-muted/50 ${
+                allOk
+                  ? 'border-green-300 bg-green-50/40 dark:border-green-700 dark:bg-green-950/10'
+                  : 'border-yellow-300 bg-yellow-50/40 dark:border-yellow-700 dark:bg-yellow-950/10'
+              }`}>
+                <CardContent className="py-3 px-4">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
+                    {caixasPendencias.map(({ label, count }) => (
+                      <span key={label} className="flex items-center gap-1.5">
+                        <span className="text-muted-foreground">{label}:</span>
+                        <Badge className={`text-xs ${count > 0 ? 'bg-yellow-500 hover:bg-yellow-500' : 'bg-green-600 hover:bg-green-600'} text-white`}>
+                          {count}
+                        </Badge>
+                      </span>
+                    ))}
+                    {allOk && (
+                      <span className="ml-auto text-xs text-green-600 dark:text-green-400">Tudo conferido ✓</span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          </div>
+        );
+      })()}
 
       {/* ── MODAL: Configuração de alertas ───────────────────────────────── */}
       <Dialog open={showAlertConfig} onOpenChange={setShowAlertConfig}>
