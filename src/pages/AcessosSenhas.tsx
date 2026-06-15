@@ -110,6 +110,9 @@ export default function AcessosSenhas() {
 
   useEffect(() => { load(selectedPostoId, isMaster); }, [selectedPostoId, isMaster]);
 
+  // Sync local posto filter with global header selector
+  useEffect(() => { setFilterPosto(selectedPostoId ?? '__all__'); }, [selectedPostoId]);
+
   async function load(postoId: string | null, masterUser: boolean) {
     setLoading(true);
     try {
