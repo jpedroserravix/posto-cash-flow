@@ -22,6 +22,7 @@ export const ALL_PERMISSIONS = [
   { key: 'identidade-visual',     label: 'Identidade Visual e Modelos' },
   { key: 'historico-rede',        label: 'Histórico da Rede (todos os postos)' },
   { key: 'caixa-entrada',         label: 'Caixa de Entrada (Currículos e Feedback)' },
+  { key: 'almoxarifado',          label: 'Almoxarifado (Patrimônio)' },
 ] as const;
 
 export type PermissionKey = (typeof ALL_PERMISSIONS)[number]['key'];
@@ -29,7 +30,7 @@ export type PermissionKey = (typeof ALL_PERMISSIONS)[number]['key'];
 export const PROFILE_PRESETS: Record<string, string[]> = {
   master:    ALL_PERMISSIONS.map((p) => p.key),
   admin:     ALL_PERMISSIONS.map((p) => p.key),
-  gerente:   ['envio-rapido', 'brinks', 'manuais', 'resumo', 'pessoal', 'alvaras', 'garantias', 'docs-empresa', 'pedidos-compra'],
+  gerente:   ['envio-rapido', 'brinks', 'manuais', 'resumo', 'pessoal', 'alvaras', 'garantias', 'docs-empresa', 'pedidos-compra', 'almoxarifado'],
   frentista: ['envio-rapido'],
 };
 
@@ -60,6 +61,7 @@ export const ROUTE_PERMISSION_MAP: { path: string; permission: string }[] = [
   { path: '/contabilidade',      permission: 'contabilidade' },
   { path: '/identidade-visual',  permission: 'identidade-visual' },
   { path: '/caixa-entrada',    permission: 'caixa-entrada' },
+  { path: '/almoxarifado',     permission: 'almoxarifado' },
 ];
 
 export function firstAllowedPath(hasPermission: (k: string) => boolean): string {

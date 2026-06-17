@@ -29,6 +29,7 @@ const LISTAS: { key: string; label: string; hint?: string }[] = [
   { key: 'tipos_doc_empresa',    label: 'Tipos de Documento da Empresa',    hint: 'Usado em Documentos da Empresa (a entrada "Outros" é reservada)' },
   { key: 'tipos_uniforme_epi',   label: 'Tipos de Uniforme/EPI',            hint: 'Usado nas entregas de uniforme e EPI pelo Envio Rápido' },
   { key: 'combustiveis',         label: 'Combustíveis',                     hint: 'Usado na tabela de aferição de bicos' },
+  { key: 'tipos_patrimonio',     label: 'Tipos de Item (Almoxarifado)',      hint: 'Usado no cadastro de itens do patrimônio da rede' },
 ];
 
 // ─── component ──────────────────────────────────────────────────────────────

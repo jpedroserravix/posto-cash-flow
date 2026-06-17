@@ -30,6 +30,7 @@ import AcessosSenhas from "./pages/AcessosSenhas";
 import Contabilidade from "./pages/contabilidade/Contabilidade";
 import IdentidadeVisual from "./pages/identidade/IdentidadeVisual";
 import CaixaEntrada from "./pages/CaixaEntrada";
+import Almoxarifado from "./pages/manutencao/Almoxarifado";
 import Publico from "./pages/Publico";
 import NotFound from "./pages/NotFound";
 
@@ -108,6 +109,7 @@ function AppRoutes() {
       <Route path="/contabilidade"     element={<ProtectedRoute permission="contabilidade"><Contabilidade /></ProtectedRoute>} />
       <Route path="/identidade-visual" element={<ProtectedRoute permission="identidade-visual"><IdentidadeVisual /></ProtectedRoute>} />
       <Route path="/caixa-entrada"    element={<ProtectedRoute permission="caixa-entrada"><CaixaEntrada /></ProtectedRoute>} />
+      <Route path="/almoxarifado"     element={<ProtectedRoute permission="almoxarifado"><Almoxarifado /></ProtectedRoute>} />
       <Route path="/publico"          element={<Publico />} />
       {/* backward-compat redirect */}
       <Route path="/notas"           element={<Navigate to="/compras/notas" replace />} />
