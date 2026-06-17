@@ -27,7 +27,10 @@ import {
   HoverCard, HoverCardContent, HoverCardTrigger,
 } from '@/components/ui/hover-card';
 import { toast } from 'sonner';
-import { Plus, Search, Archive, Pencil, Trash2, Paperclip, X, ImagePlus } from 'lucide-react';
+import {
+  Plus, Search, Archive, Pencil, Trash2, Paperclip, X, ImagePlus,
+  ArrowLeftRight, History,
+} from 'lucide-react';
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
@@ -49,12 +52,24 @@ interface ItemPatrimonio {
   created_at: string;
 }
 
+interface Movimentacao {
+  id: string;
+  item_id: string;
+  posto_origem_id: string | null;
+  posto_destino_id: string;
+  movido_por_nome: string | null;
+  observacao: string | null;
+  created_at: string;
+  origem_posto: { nome: string } | null;
+  destino_posto: { nome: string } | null;
+}
+
 // ─── constants ────────────────────────────────────────────────────────────────
 
 const EMPTY_FORM = {
   nome:           '',
-  categoria:      '__none__',   // __none__ → null in DB
-  tipo_item:      '__none__',   // __none__ → null in DB
+  categoria:      '__none__',
+  tipo_item:      '__none__',
   codigo:         '',
   descricao:      '',
   posto_atual_id: '',
@@ -93,11 +108,18 @@ function formatValor(v: string | number | null): string {
   return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+function formatDatetime(iso: string): string {
+  return new Date(iso).toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
 function getPhotoUrl(path: string) {
   return supabase.storage.from('manutencao').getPublicUrl(path).data.publicUrl;
 }
 
-// ─── PhotoPreview (hover card) ────────────────────────────────────────────────
+// ─── PhotoPreview ─────────────────────────────────────────────────────────────
 
 function PhotoPreview({ item }: { item: ItemPatrimonio }) {
   const isMobile = useIsMobile();
@@ -129,6 +151,24 @@ function PhotoPreview({ item }: { item: ItemPatrimonio }) {
   );
 }
 
+// ─── ActionBtn helper ─────────────────────────────────────────────────────────
+
+function ActionBtn({
+  onClick, title, children, danger,
+}: {
+  onClick: () => void; title: string; children: React.ReactNode; danger?: boolean;
+}) {
+  return (
+    <button
+      className={`inline-flex items-center justify-center w-7 h-7 rounded hover:bg-muted ${danger ? 'text-red-500' : 'text-muted-foreground'}`}
+      onClick={onClick}
+      title={title}
+    >
+      {children}
+    </button>
+  );
+}
+
 // ─── component ───────────────────────────────────────────────────────────────
 
 export default function Almoxarifado() {
@@ -151,19 +191,30 @@ export default function Almoxarifado() {
   const [filterStatus,    setFilterStatus]    = useState('__all__');
   const [filterCategoria, setFilterCategoria] = useState('__all__');
 
-  // dialog
+  // create/edit dialog
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId,     setEditId]     = useState<string | null>(null);
   const [form,       setForm]       = useState({ ...EMPTY_FORM });
   const [saving,     setSaving]     = useState(false);
 
   // photo
-  const [photoFile,   setPhotoFile]   = useState<File | null>(null);
-  const [removePhoto, setRemovePhoto] = useState(false);
+  const [photoFile,         setPhotoFile]         = useState<File | null>(null);
+  const [removePhoto,       setRemovePhoto]       = useState(false);
   const [existingPhotoPath, setExistingPhotoPath] = useState<string | null>(null);
 
   // delete
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // move dialog
+  const [moveItem,    setMoveItem]    = useState<ItemPatrimonio | null>(null);
+  const [moveDestino, setMoveDestino] = useState('__none__');
+  const [moveObs,     setMoveObs]     = useState('');
+  const [moveSaving,  setMoveSaving]  = useState(false);
+
+  // history dialog
+  const [histItem,    setHistItem]    = useState<ItemPatrimonio | null>(null);
+  const [histData,    setHistData]    = useState<Movimentacao[]>([]);
+  const [histLoading, setHistLoading] = useState(false);
 
   // postos available to this user (multi or single)
   const postoOptions = useMemo(() => {
@@ -171,6 +222,12 @@ export default function Almoxarifado() {
     if (singlePostoId) return [{ id: singlePostoId, nome: singlePostoNome ?? singlePostoId, cnpj: '' }];
     return [];
   }, [allPostos, singlePostoId, singlePostoNome]);
+
+  // destino options: all user postos EXCEPT the item's current posto
+  const moveDestinoOptions = useMemo(
+    () => postoOptions.filter((p) => p.id !== moveItem?.posto_atual_id),
+    [postoOptions, moveItem],
+  );
 
   // ── data ──────────────────────────────────────────────────────────────────
 
@@ -210,14 +267,11 @@ export default function Almoxarifado() {
     return list;
   }, [items, filterStatus, filterCategoria, search]);
 
-  // ── dialog helpers ────────────────────────────────────────────────────────
+  // ── create/edit dialog ────────────────────────────────────────────────────
 
   function openNew() {
     setEditId(null);
-    setForm({
-      ...EMPTY_FORM,
-      posto_atual_id: selectedPostoId ?? postoOptions[0]?.id ?? '',
-    });
+    setForm({ ...EMPTY_FORM, posto_atual_id: selectedPostoId ?? postoOptions[0]?.id ?? '' });
     setPhotoFile(null);
     setRemovePhoto(false);
     setExistingPhotoPath(null);
@@ -258,11 +312,9 @@ export default function Almoxarifado() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
-  // ── save ──────────────────────────────────────────────────────────────────
-
   async function handleSave() {
-    if (!form.nome.trim())        { toast.error('Informe o nome do item'); return; }
-    if (!form.posto_atual_id)     { toast.error('Selecione o posto'); return; }
+    if (!form.nome.trim())    { toast.error('Informe o nome do item'); return; }
+    if (!form.posto_atual_id) { toast.error('Selecione o posto'); return; }
     if (photoFile && photoFile.size > 10 * 1024 * 1024) {
       toast.error('Foto muito grande. Máximo 10 MB');
       return;
@@ -274,25 +326,19 @@ export default function Almoxarifado() {
     let foto_name: string | null = editId ? (items.find((i) => i.id === editId)?.foto_name ?? null) : null;
     let foto_type: string | null = editId ? (items.find((i) => i.id === editId)?.foto_type ?? null) : null;
 
-    // Remove old photo from storage if replacing or explicitly removed
     if ((photoFile || removePhoto) && existingPhotoPath) {
       await supabase.storage.from('manutencao').remove([existingPhotoPath]);
-      foto_path = null;
-      foto_name = null;
-      foto_type = null;
+      foto_path = null; foto_name = null; foto_type = null;
     }
 
-    // Upload new photo
     if (photoFile) {
-      const safeName  = photoFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const path      = `patrimonio/${form.posto_atual_id}/${Date.now()}-${safeName}`;
+      const safeName = photoFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `patrimonio/${form.posto_atual_id}/${Date.now()}-${safeName}`;
       const { error: upErr } = await supabase.storage
         .from('manutencao')
         .upload(path, photoFile, { contentType: photoFile.type });
       if (upErr) { toast.error('Erro ao enviar foto'); setSaving(false); return; }
-      foto_path = path;
-      foto_name = photoFile.name;
-      foto_type = photoFile.type;
+      foto_path = path; foto_name = photoFile.name; foto_type = photoFile.type;
     }
 
     const valorNum = form.valor.trim() ? parseFloat(form.valor.replace(',', '.')) : null;
@@ -301,14 +347,12 @@ export default function Almoxarifado() {
       nome:           form.nome.trim(),
       categoria:      form.categoria === '__none__' ? null : form.categoria,
       tipo_item:      form.tipo_item  === '__none__' ? null : form.tipo_item,
-      codigo:         form.codigo.trim()   || null,
+      codigo:         form.codigo.trim()    || null,
       descricao:      form.descricao.trim() || null,
       posto_atual_id: form.posto_atual_id,
       status:         form.status,
       valor:          isNaN(valorNum as number) ? null : valorNum,
-      foto_path,
-      foto_name,
-      foto_type,
+      foto_path, foto_name, foto_type,
     };
 
     let error;
@@ -347,12 +391,55 @@ export default function Almoxarifado() {
     setDeleteId(null);
   }
 
-  // ── photo state for dialog ────────────────────────────────────────────────
+  // ── move dialog ───────────────────────────────────────────────────────────
 
-  // What the dialog currently "has" as photo:
-  // - new file selected → show file name
-  // - removePhoto → nothing
-  // - existingPhotoPath and no changes → show existing
+  function openMove(item: ItemPatrimonio) {
+    setMoveItem(item);
+    setMoveDestino('__none__');
+    setMoveObs('');
+  }
+
+  async function handleMove() {
+    if (!moveItem || moveDestino === '__none__') {
+      toast.error('Selecione o posto de destino');
+      return;
+    }
+    setMoveSaving(true);
+    const { error } = await (supabase as any).from('itens_movimentacoes').insert({
+      item_id:          moveItem.id,
+      posto_origem_id:  moveItem.posto_atual_id,
+      posto_destino_id: moveDestino,
+      movido_por_nome:  authNome ?? null,
+      observacao:       moveObs.trim() || null,
+    });
+    if (error) {
+      toast.error(`Erro ao mover item: ${error.message}`);
+    } else {
+      toast.success('Item movido com sucesso');
+      setMoveItem(null);
+      load(); // trigger already updated posto_atual_id — just reload
+    }
+    setMoveSaving(false);
+  }
+
+  // ── history dialog ────────────────────────────────────────────────────────
+
+  async function openHistory(item: ItemPatrimonio) {
+    setHistItem(item);
+    setHistData([]);
+    setHistLoading(true);
+    const { data, error } = await (supabase as any)
+      .from('itens_movimentacoes')
+      .select('id, item_id, posto_origem_id, posto_destino_id, movido_por_nome, observacao, created_at, origem_posto:postos!posto_origem_id(nome), destino_posto:postos!posto_destino_id(nome)')
+      .eq('item_id', item.id)
+      .order('created_at', { ascending: false });
+    if (error) toast.error(`Erro ao carregar histórico: ${error.message}`);
+    else setHistData((data as Movimentacao[]) || []);
+    setHistLoading(false);
+  }
+
+  // ── photo label for edit dialog ───────────────────────────────────────────
+
   const dialogPhotoLabel = photoFile
     ? photoFile.name
     : removePhoto || !existingPhotoPath
@@ -442,7 +529,7 @@ export default function Almoxarifado() {
                     <TableHead className="text-xs">Valor</TableHead>
                     <TableHead className="text-xs">Posto</TableHead>
                     <TableHead className="text-xs">Status</TableHead>
-                    <TableHead className="text-xs w-[80px]" />
+                    <TableHead className="text-xs w-[110px]" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -464,20 +551,21 @@ export default function Almoxarifado() {
                       <TableCell>
                         <div className="flex items-center gap-0.5">
                           <PhotoPreview item={item} />
-                          <button
-                            className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-muted"
-                            onClick={() => openEdit(item)}
-                            title="Editar"
+                          <ActionBtn onClick={() => openHistory(item)} title="Histórico de movimentações">
+                            <History className="w-3.5 h-3.5" />
+                          </ActionBtn>
+                          <ActionBtn
+                            onClick={() => openMove(item)}
+                            title="Mover para outro posto"
                           >
-                            <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                          </button>
-                          <button
-                            className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-muted"
-                            onClick={() => setDeleteId(item.id)}
-                            title="Excluir"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                          </button>
+                            <ArrowLeftRight className="w-3.5 h-3.5" />
+                          </ActionBtn>
+                          <ActionBtn onClick={() => openEdit(item)} title="Editar">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </ActionBtn>
+                          <ActionBtn onClick={() => setDeleteId(item.id)} title="Excluir" danger>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </ActionBtn>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -497,7 +585,6 @@ export default function Almoxarifado() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            {/* Nome */}
             <div className="space-y-1">
               <Label className="text-xs">Nome <span className="text-red-500">*</span></Label>
               <Input
@@ -508,15 +595,10 @@ export default function Almoxarifado() {
               />
             </div>
 
-            {/* Categoria + Tipo */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Categoria</Label>
-                <Select
-                  value={form.categoria}
-                  onValueChange={(v) => setForm((f) => ({ ...f, categoria: v }))}
-                  disabled={saving}
-                >
+                <Select value={form.categoria} onValueChange={(v) => setForm((f) => ({ ...f, categoria: v }))} disabled={saving}>
                   <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">Sem categoria</SelectItem>
@@ -528,11 +610,7 @@ export default function Almoxarifado() {
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Tipo de Item</Label>
-                <Select
-                  value={form.tipo_item}
-                  onValueChange={(v) => setForm((f) => ({ ...f, tipo_item: v }))}
-                  disabled={saving}
-                >
+                <Select value={form.tipo_item} onValueChange={(v) => setForm((f) => ({ ...f, tipo_item: v }))} disabled={saving}>
                   <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">Sem tipo</SelectItem>
@@ -544,7 +622,6 @@ export default function Almoxarifado() {
               </div>
             </div>
 
-            {/* Código + Valor */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Código</Label>
@@ -569,7 +646,6 @@ export default function Almoxarifado() {
               </div>
             </div>
 
-            {/* Descrição */}
             <div className="space-y-1">
               <Label className="text-xs">Descrição</Label>
               <Textarea
@@ -581,22 +657,13 @@ export default function Almoxarifado() {
               />
             </div>
 
-            {/* Posto + Status */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Posto <span className="text-red-500">*</span></Label>
                 {postoOptions.length <= 1 ? (
-                  <Input
-                    value={postoOptions[0]?.nome ?? '—'}
-                    readOnly
-                    className="h-9 text-sm bg-muted"
-                  />
+                  <Input value={postoOptions[0]?.nome ?? '—'} readOnly className="h-9 text-sm bg-muted" />
                 ) : (
-                  <Select
-                    value={form.posto_atual_id}
-                    onValueChange={(v) => setForm((f) => ({ ...f, posto_atual_id: v }))}
-                    disabled={saving}
-                  >
+                  <Select value={form.posto_atual_id} onValueChange={(v) => setForm((f) => ({ ...f, posto_atual_id: v }))} disabled={saving}>
                     <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {postoOptions.map((p) => (
@@ -608,11 +675,7 @@ export default function Almoxarifado() {
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Status</Label>
-                <Select
-                  value={form.status}
-                  onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}
-                  disabled={saving}
-                >
+                <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))} disabled={saving}>
                   <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="disponivel">Disponível</SelectItem>
@@ -624,7 +687,6 @@ export default function Almoxarifado() {
               </div>
             </div>
 
-            {/* Foto */}
             <div className="space-y-1">
               <Label className="text-xs">Foto</Label>
               {dialogPhotoLabel ? (
@@ -659,17 +721,130 @@ export default function Almoxarifado() {
           </div>
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setDialogOpen(false)}
-              disabled={saving}
-            >
+            <Button type="button" variant="ghost" size="sm" onClick={() => setDialogOpen(false)} disabled={saving}>
               Cancelar
             </Button>
             <Button size="sm" onClick={handleSave} disabled={saving}>
               {saving ? 'Salvando...' : editId ? 'Salvar alterações' : 'Cadastrar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Move Dialog ───────────────────────────────────────────────────────── */}
+      <Dialog open={!!moveItem} onOpenChange={(v) => { if (!moveSaving && !v) setMoveItem(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowLeftRight className="w-4 h-4" />
+              Mover Item
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Item info (readonly) */}
+            <div className="rounded-md bg-muted px-3 py-2 space-y-0.5">
+              <p className="text-xs text-muted-foreground">Item</p>
+              <p className="text-sm font-medium">{moveItem?.nome}</p>
+              <p className="text-xs text-muted-foreground mt-1">Posto atual</p>
+              <p className="text-sm">{moveItem?.postos?.nome ?? '—'}</p>
+            </div>
+
+            {/* Destino */}
+            <div className="space-y-1">
+              <Label className="text-xs">Posto de destino <span className="text-red-500">*</span></Label>
+              {moveDestinoOptions.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">
+                  Nenhum outro posto disponível para movimentação.
+                </p>
+              ) : (
+                <Select value={moveDestino} onValueChange={setMoveDestino} disabled={moveSaving}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione o destino" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Selecione o destino</SelectItem>
+                    {moveDestinoOptions.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
+            {/* Observação */}
+            <div className="space-y-1">
+              <Label className="text-xs">Observação</Label>
+              <Textarea
+                value={moveObs}
+                onChange={(e) => setMoveObs(e.target.value)}
+                placeholder="Opcional"
+                rows={2}
+                disabled={moveSaving}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setMoveItem(null)} disabled={moveSaving}>
+              Cancelar
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleMove}
+              disabled={moveSaving || moveDestino === '__none__' || moveDestinoOptions.length === 0}
+            >
+              {moveSaving ? 'Movendo...' : 'Confirmar movimentação'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── History Dialog ────────────────────────────────────────────────────── */}
+      <Dialog open={!!histItem} onOpenChange={(v) => { if (!v) setHistItem(null); }}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="w-4 h-4" />
+              Histórico — {histItem?.nome}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="py-2">
+            {histLoading ? (
+              <p className="text-sm text-muted-foreground text-center py-6">Carregando...</p>
+            ) : histData.length === 0 ? (
+              <div className="text-center py-8 space-y-1">
+                <History className="w-8 h-8 text-muted-foreground/40 mx-auto" />
+                <p className="text-sm text-muted-foreground">Sem movimentações registradas</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {histData.map((mov) => (
+                  <div key={mov.id} className="py-3 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 text-sm font-medium">
+                        <span className="text-muted-foreground">{mov.origem_posto?.nome ?? '—'}</span>
+                        <ArrowLeftRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        <span>{mov.destino_posto?.nome ?? '—'}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
+                        {formatDatetime(mov.created_at)}
+                      </span>
+                    </div>
+                    {mov.movido_por_nome && (
+                      <p className="text-xs text-muted-foreground">Por {mov.movido_por_nome}</p>
+                    )}
+                    {mov.observacao && (
+                      <p className="text-xs text-foreground/80 italic">"{mov.observacao}"</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setHistItem(null)}>
+              Fechar
             </Button>
           </DialogFooter>
         </DialogContent>
