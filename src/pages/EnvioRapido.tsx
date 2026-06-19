@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { supabase } from '@/integrations/supabase/client';
@@ -37,7 +37,9 @@ type Tipo =
   | 'Nota a Prazo'
   | 'Entrega de Uniforme/EPI'
   | 'Atestado'
-  | 'Advertência';
+  | 'Advertência'
+  | 'Movimentar Item'
+  | 'Abrir Chamado';
 
 // Ordem dos grupos e itens no seletor de tipo.
 // O primeiro item do primeiro grupo é o padrão ao abrir a tela.
@@ -64,6 +66,13 @@ const TIPO_GROUPS: { label: string; items: { value: Tipo; label: string }[] }[] 
       { value: 'Advertência',             label: 'Advertência' },
     ],
   },
+  {
+    label: 'Manutenção',
+    items: [
+      { value: 'Movimentar Item', label: 'Movimentar Item (Almoxarifado)' },
+      { value: 'Abrir Chamado',   label: 'Abrir Chamado' },
+    ],
+  },
 ];
 
 const TIPO_DEFAULT: Tipo = TIPO_GROUPS[0].items[0].value;
@@ -84,6 +93,13 @@ interface FormState {
   descricao_despesa:   string;
   funcionario_pessoal: string;
   data_ocorrencia:     string;
+  chamado_titulo:      string;
+  chamado_posto_id:    string;
+  chamado_categoria:   string;
+  chamado_prioridade:  string;
+  chamado_descricao:   string;
+  chamado_responsavel: string;
+  chamado_custo:       string;
 }
 
 const emptyForm: FormState = {
@@ -100,6 +116,13 @@ const emptyForm: FormState = {
   descricao_despesa:   '',
   funcionario_pessoal: '',
   data_ocorrencia:     '',
+  chamado_titulo:      '',
+  chamado_posto_id:    '',
+  chamado_categoria:   '__none__',
+  chamado_prioridade:  'media',
+  chamado_descricao:   '',
+  chamado_responsavel: '',
+  chamado_custo:       '',
 };
 
 // Linha da tabela de aferição
@@ -151,7 +174,7 @@ function formatMlPDF(v: number | null): string {
 // ─── component ────────────────────────────────────────────────────────────────
 
 export default function EnvioRapido() {
-  const { selectedPostoId, user, nome, username, postoNome, allPostos } = useAuth();
+  const { selectedPostoId, user, nome, username, postoNome, allPostos, postoId: singlePostoId } = useAuth();
 
   const [tipo, setTipo]                 = useState<Tipo>(TIPO_DEFAULT);
   const [form, setForm]                 = useState<FormState>(emptyForm);
@@ -159,6 +182,13 @@ export default function EnvioRapido() {
   const [selectedBoleto, setSelectedBoleto]         = useState<File | null>(null);
   const [selectedMercadoria, setSelectedMercadoria] = useState<File | null>(null);
   const [loading, setLoading]           = useState(false);
+
+  // ── postos disponíveis para este usuário ──────────────────────────────────
+  const postoOptions = useMemo(() => {
+    if (allPostos.length > 0) return allPostos;
+    if (singlePostoId) return [{ id: singlePostoId, nome: postoNome ?? singlePostoId, cnpj: '' }];
+    return [];
+  }, [allPostos, singlePostoId, postoNome]);
 
   // ── Aferição ───────────────────────────────────────────────────────────────
   const combustiveis = useListaConfig('combustiveis', COMBUSTIVEIS_FALLBACK);
@@ -187,7 +217,16 @@ export default function EnvioRapido() {
   };
 
   // ── EPI / Pessoal funcionários ─────────────────────────────────────────────
-  const tiposEPI = useListaConfig('tipos_uniforme_epi', EPI_FALLBACK);
+  const tiposEPI      = useListaConfig('tipos_uniforme_epi', EPI_FALLBACK);
+  const categoriasMt  = useListaConfig('categorias_manutencao', []);
+
+  // ── Manutenção — estado ────────────────────────────────────────────────────
+  interface ItemPatrimonioER { id: string; nome: string; posto_atual_id: string | null; postos: { nome: string } | null; }
+  const [patrimonioItems,  setPatrimonioItems]  = useState<ItemPatrimonioER[]>([]);
+  const [patrimonioSearch, setPatrimonioSearch] = useState('');
+  const [selectedItemId,   setSelectedItemId]   = useState('__none__');
+  const [moveDestinoId,    setMoveDestinoId]    = useState('__none__');
+  const [moveObservacao,   setMoveObservacao]   = useState('');
   const [epiItems, setEpiItems]         = useState<EPIItem[]>([emptyEPIItem()]);
   const [epiFuncionarios, setEpiFuncionarios] = useState<{ id: string; nome: string }[]>([]);
 
@@ -202,6 +241,17 @@ export default function EnvioRapido() {
       .order('nome')
       .then(({ data }: any) => setEpiFuncionarios(data ?? []));
   }, [tipo, selectedPostoId]);
+
+  // ── itens do patrimônio (para Movimentar Item) ────────────────────────────
+  useEffect(() => {
+    if (tipo !== 'Movimentar Item') { setPatrimonioItems([]); return; }
+    (supabase as any)
+      .from('itens_patrimonio')
+      .select('id, nome, posto_atual_id, postos(nome)')
+      .neq('status', 'baixado')
+      .order('nome')
+      .then(({ data }: any) => setPatrimonioItems(data ?? []));
+  }, [tipo]);
 
   // ── pedidos pendentes (para Nota Fiscal de Compra) ────────────────────────
   interface PedidoPendente {
@@ -230,6 +280,20 @@ export default function EnvioRapido() {
   const isAtestado          = tipo === 'Atestado';
   const isAdvertencia       = tipo === 'Advertência';
   const isPessoalOcorrencia = isAtestado || isAdvertencia;
+  const isMoverItem         = tipo === 'Movimentar Item';
+  const isAbrirChamado      = tipo === 'Abrir Chamado';
+
+  // ── derivados Manutenção ───────────────────────────────────────────────────
+  const selectedItem = selectedItemId !== '__none__'
+    ? patrimonioItems.find((i) => i.id === selectedItemId) ?? null
+    : null;
+  const moveDestinoOptions = postoOptions.filter((p) => !selectedItem || p.id !== selectedItem.posto_atual_id);
+  const filteredItems = patrimonioSearch.trim()
+    ? patrimonioItems.filter((i) =>
+        i.nome.toLowerCase().includes(patrimonioSearch.toLowerCase()) ||
+        (i.postos?.nome ?? '').toLowerCase().includes(patrimonioSearch.toLowerCase())
+      )
+    : patrimonioItems;
 
   useEffect(() => {
     if (tipo !== 'Nota Fiscal de Compra' || !selectedPostoId) {
@@ -300,6 +364,8 @@ export default function EnvioRapido() {
     if (isPessoalOcorrencia) {
       return !!selectedFile && !!form.funcionario_pessoal && !!form.data_ocorrencia;
     }
+    if (isMoverItem)    return selectedItemId !== '__none__' && moveDestinoId !== '__none__';
+    if (isAbrirChamado) return !!form.chamado_titulo.trim() && !!form.chamado_posto_id;
     return false;
   })();
 
@@ -509,9 +575,55 @@ export default function EnvioRapido() {
         toast.success(`${tipo} registrado! Aparecerá em Ponto e Ocorrências.`);
       }
 
+      // ── Movimentar Item ──────────────────────────────────────────────────
+      else if (isMoverItem) {
+        if (!selectedItem) throw new Error('Item não encontrado');
+        const { error } = await (supabase as any).from('itens_movimentacoes').insert({
+          item_id:          selectedItem.id,
+          posto_origem_id:  selectedItem.posto_atual_id,
+          posto_destino_id: moveDestinoId,
+          movido_por_nome:  nome ?? null,
+          observacao:       moveObservacao.trim() || null,
+        });
+        if (error) throw error;
+        toast.success('Item movimentado com sucesso! Aparecerá em Almoxarifado.');
+      }
+
+      // ── Abrir Chamado ────────────────────────────────────────────────────
+      else if (isAbrirChamado) {
+        let foto_path: string | null = null;
+        let foto_name: string | null = null;
+        let foto_type: string | null = null;
+        if (selectedFile) {
+          const up = await uploadFile('manutencao', `chamados/${form.chamado_posto_id}`);
+          if (up) { foto_path = up.path; foto_name = selectedFile.name; foto_type = selectedFile.type; }
+        }
+        const custoNum = form.chamado_custo.trim()
+          ? parseFloat(form.chamado_custo.replace(',', '.'))
+          : null;
+        const { error } = await (supabase as any).from('manutencao_chamados').insert({
+          posto_id:         form.chamado_posto_id,
+          titulo:           form.chamado_titulo.trim(),
+          descricao:        form.chamado_descricao.trim()   || null,
+          categoria:        form.chamado_categoria === '__none__' ? null : form.chamado_categoria,
+          prioridade:       form.chamado_prioridade,
+          status:           'aberto',
+          responsavel_nome: form.chamado_responsavel.trim() || null,
+          custo:            custoNum !== null && !isNaN(custoNum) ? custoNum : null,
+          foto_path, foto_name, foto_type,
+          criado_por_nome:  nome ?? null,
+        });
+        if (error) throw error;
+        toast.success('Chamado aberto! Aparecerá em Manutenção → Chamados.');
+      }
+
       // reset (exceto afericaoPdfUrl que fica para download)
       setSelectedFile(null);  setSelectedBoleto(null);  setSelectedMercadoria(null);
       setSelectedPedidoId('');
+      setSelectedItemId('__none__');
+      setMoveDestinoId('__none__');
+      setMoveObservacao('');
+      setPatrimonioSearch('');
       setForm(emptyForm);
       if (cameraInputRef.current)      cameraInputRef.current.value      = '';
       if (fileInputRef.current)        fileInputRef.current.value        = '';
@@ -637,9 +749,14 @@ export default function EnvioRapido() {
                   ...emptyForm,
                   data_entrega:    newTipo === 'Entrega de Uniforme/EPI' ? today : '',
                   data_ocorrencia: (newTipo === 'Atestado' || newTipo === 'Advertência') ? today : '',
+                  chamado_posto_id: newTipo === 'Abrir Chamado' ? (selectedPostoId ?? '') : '',
                 });
                 clearFile(); clearBoleto(); clearMercadoria();
                 setSelectedPedidoId('');
+                setSelectedItemId('__none__');
+                setMoveDestinoId('__none__');
+                setMoveObservacao('');
+                setPatrimonioSearch('');
                 setEpiItems([emptyEPIItem()]);
                 setAfericaoItems([emptyAfericaoItem()]);
                 setAfericaoPdfUrl(null);
@@ -684,7 +801,7 @@ export default function EnvioRapido() {
                 isImage={!!isMercadoriaImage} onClear={clearMercadoria}
                 onCamera={() => mercadoriaCameraRef.current?.click()} onFile={() => mercadoriaFileRef.current?.click()} />
             </>
-          ) : !isAfericao ? (
+          ) : !isAfericao && !isMoverItem && !isAbrirChamado ? (
             <div className="space-y-2">
               <Label>
                 Arquivo{' '}
@@ -1206,6 +1323,195 @@ export default function EnvioRapido() {
                 <Textarea value={form.observacoes} onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))}
                   placeholder="Informações adicionais..." className="text-sm resize-none" rows={3} />
               </div>
+            </>
+          )}
+
+          {/* ── Movimentar Item ── */}
+          {isMoverItem && (
+            <>
+              <div className="space-y-2">
+                <Label>Buscar item</Label>
+                <Input
+                  value={patrimonioSearch}
+                  onChange={(e) => { setPatrimonioSearch(e.target.value); setSelectedItemId('__none__'); }}
+                  placeholder="Filtrar por nome ou posto..."
+                  className="h-12 text-sm"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Item do patrimônio *</Label>
+                <Select value={selectedItemId} onValueChange={setSelectedItemId}>
+                  <SelectTrigger className="h-12 text-sm"><SelectValue placeholder="Selecione o item" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Selecione o item</SelectItem>
+                    {filteredItems.map((i) => (
+                      <SelectItem key={i.id} value={i.id}>
+                        {i.nome}{i.postos?.nome ? ` — ${i.postos.nome}` : ''}
+                      </SelectItem>
+                    ))}
+                    {filteredItems.length === 0 && patrimonioItems.length > 0 && (
+                      <SelectItem value="__empty__" disabled>Nenhum item encontrado</SelectItem>
+                    )}
+                    {patrimonioItems.length === 0 && (
+                      <SelectItem value="__empty__" disabled>Carregando...</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {selectedItem && (
+                <div className="space-y-2">
+                  <Label>Posto de origem</Label>
+                  <Input
+                    value={selectedItem.postos?.nome ?? '—'}
+                    readOnly
+                    className="h-12 text-sm bg-muted"
+                  />
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label>Posto de destino *</Label>
+                {moveDestinoOptions.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">
+                    Nenhum outro posto disponível para movimentação.
+                  </p>
+                ) : (
+                  <Select value={moveDestinoId} onValueChange={setMoveDestinoId}>
+                    <SelectTrigger className="h-12 text-sm"><SelectValue placeholder="Selecione o destino" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Selecione o destino</SelectItem>
+                      {moveDestinoOptions.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>Observação <span className="text-muted-foreground font-normal text-xs">(opcional)</span></Label>
+                <Textarea
+                  value={moveObservacao}
+                  onChange={(e) => setMoveObservacao(e.target.value)}
+                  placeholder="Informações adicionais..."
+                  className="text-sm resize-none"
+                  rows={3}
+                />
+              </div>
+            </>
+          )}
+
+          {/* ── Abrir Chamado ── */}
+          {isAbrirChamado && (
+            <>
+              <div className="space-y-2">
+                <Label>Título *</Label>
+                <Input
+                  value={form.chamado_titulo}
+                  onChange={(e) => setForm((f) => ({ ...f, chamado_titulo: e.target.value }))}
+                  placeholder="Descreva o problema"
+                  className="h-12 text-sm"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Posto *</Label>
+                {postoOptions.length <= 1 ? (
+                  <Input value={postoOptions[0]?.nome ?? '—'} readOnly className="h-12 text-sm bg-muted" />
+                ) : (
+                  <Select
+                    value={form.chamado_posto_id || '__none__'}
+                    onValueChange={(v) => setForm((f) => ({ ...f, chamado_posto_id: v === '__none__' ? '' : v }))}
+                  >
+                    <SelectTrigger className="h-12 text-sm"><SelectValue placeholder="Selecione o posto" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Selecione o posto</SelectItem>
+                      {postoOptions.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>Prioridade</Label>
+                <Select
+                  value={form.chamado_prioridade}
+                  onValueChange={(v) => setForm((f) => ({ ...f, chamado_prioridade: v }))}
+                >
+                  <SelectTrigger className="h-12 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="baixa">Baixa</SelectItem>
+                    <SelectItem value="media">Média</SelectItem>
+                    <SelectItem value="alta">Alta</SelectItem>
+                    <SelectItem value="urgente">Urgente</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Categoria <span className="text-muted-foreground font-normal text-xs">(opcional)</span></Label>
+                <Select
+                  value={form.chamado_categoria}
+                  onValueChange={(v) => setForm((f) => ({ ...f, chamado_categoria: v }))}
+                >
+                  <SelectTrigger className="h-12 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Sem categoria</SelectItem>
+                    {categoriasMt.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Descrição <span className="text-muted-foreground font-normal text-xs">(opcional)</span></Label>
+                <Textarea
+                  value={form.chamado_descricao}
+                  onChange={(e) => setForm((f) => ({ ...f, chamado_descricao: e.target.value }))}
+                  placeholder="Detalhes adicionais..."
+                  className="text-sm resize-none"
+                  rows={3}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Responsável <span className="text-muted-foreground font-normal text-xs">(opcional)</span></Label>
+                <Input
+                  value={form.chamado_responsavel}
+                  onChange={(e) => setForm((f) => ({ ...f, chamado_responsavel: e.target.value }))}
+                  placeholder="Nome do responsável"
+                  className="h-12 text-sm"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Custo estimado (R$) <span className="text-muted-foreground font-normal text-xs">(opcional)</span></Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.chamado_custo}
+                  onChange={(e) => setForm((f) => ({ ...f, chamado_custo: e.target.value }))}
+                  placeholder="0,00"
+                  className="h-12 text-sm"
+                />
+              </div>
+
+              <FilePickerField
+                label="Foto"
+                optional
+                file={selectedFile}
+                previewUrl={selectedFile ? URL.createObjectURL(selectedFile) : null}
+                isImage={!!selectedFile?.type.startsWith('image/')}
+                onClear={clearFile}
+                onCamera={() => cameraInputRef.current?.click()}
+                onFile={() => fileInputRef.current?.click()}
+              />
             </>
           )}
 
