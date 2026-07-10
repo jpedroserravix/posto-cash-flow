@@ -278,6 +278,9 @@ export default function ConciliacaoPix() {
   const [fechamentoTurnos,  setFechamentoTurnos]  = useState<FechamentoTurno[]>([]);
   const [fechamentoStatus,  setFechamentoStatus]  = useState<FechamentoTurno['status'] | null>(null);
   const [loadingFechamento, setLoadingFechamento] = useState(false);
+  const [calculando,        setCalculando]        = useState(false);
+  const [salvando,          setSalvando]          = useState(false);
+  const [turnosDirty,       setTurnosDirty]       = useState(false);
 
   // ── centros de custo (lista configurável) ──────────────────────────────────
   const centrosCusto = useListaConfig('centros_custo', ['PISTA']);
@@ -410,6 +413,7 @@ export default function ConciliacaoPix() {
     if (!fech) {
       setFechamentoTurnos([]);
       setFechamentoStatus(null);
+      setTurnosDirty(false);
       setLoadingFechamento(false);
       return;
     }
@@ -432,10 +436,115 @@ export default function ConciliacaoPix() {
         observacao:      t.observacao ?? null,
       })),
     );
+    setTurnosDirty(false);
     setLoadingFechamento(false);
   }, [selectedPostoId, fechamentoData, fechamentoCc]);
 
   useEffect(() => { loadFechamento(); }, [loadFechamento]);
+
+  // ── calcular turnos ────────────────────────────────────────────────────────
+  // Agrupa pix_transacoes do dia pelo turno_override (padrão 1).
+  // hora_corte = última transação do turno; total_calculado = bruto – tarifa em centavos.
+  async function calcularTurnos() {
+    if (!selectedPostoId || !fechamentoData) return;
+    setCalculando(true);
+    try {
+      const { data: txns, error } = await (supabase as any)
+        .from('pix_transacoes')
+        .select('turno_override, valor_bruto, tarifa, data_hora')
+        .eq('posto_id', selectedPostoId)
+        .gte('data_hora', fechamentoData + 'T00:00:00')
+        .lte('data_hora', fechamentoData + 'T23:59:59');
+
+      if (error) throw new Error(error.message);
+
+      type TurnoAccum = { brutoCents: number; tarifaCents: number; maxTime: string };
+      const groups = new Map<number, TurnoAccum>();
+
+      for (const t of (txns as any[] || [])) {
+        const num: number = t.turno_override ?? 1;
+        const acc = groups.get(num) || { brutoCents: 0, tarifaCents: 0, maxTime: '' };
+        acc.brutoCents  += Math.round(safeNum(t.valor_bruto) * 100);
+        acc.tarifaCents += Math.round(safeNum(t.tarifa)      * 100);
+        const timeStr = t.data_hora ? (t.data_hora as string).split('T')[1]?.substring(0, 8) ?? '' : '';
+        if (timeStr > acc.maxTime) acc.maxTime = timeStr;
+        groups.set(num, acc);
+      }
+
+      const calculados: FechamentoTurno[] = Array.from(groups.entries())
+        .sort(([a], [b]) => a - b)
+        .map(([num, g]) => ({
+          id:              '',
+          numero_turno:    num,
+          hora_corte:      g.maxTime || '00:00:00',
+          total_calculado: (g.brutoCents - g.tarifaCents) / 100,
+          status:          'pendente' as const,
+          observacao:      null,
+        }));
+
+      setFechamentoTurnos(calculados);
+      setTurnosDirty(true);
+
+      if (calculados.length === 0) {
+        toast.info('Nenhuma transação encontrada para essa data.');
+      } else {
+        toast.success(`${calculados.length} turno${calculados.length === 1 ? '' : 's'} calculado${calculados.length === 1 ? '' : 's'}.`);
+      }
+    } catch (err: unknown) {
+      toast.error('Erro ao calcular turnos: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setCalculando(false);
+    }
+  }
+
+  // ── salvar fechamento ──────────────────────────────────────────────────────
+  async function salvarFechamento() {
+    if (!selectedPostoId || fechamentoTurnos.length === 0) return;
+    setSalvando(true);
+    try {
+      // 1. Upsert fechamento (cria ou atualiza); status sempre 'pendente' ao salvar novos turnos
+      const { data: fech, error: fechError } = await (supabase as any)
+        .from('pix_fechamentos')
+        .upsert(
+          { posto_id: selectedPostoId, data: fechamentoData, centro_custo: fechamentoCc, status: 'pendente' },
+          { onConflict: 'posto_id,data,centro_custo' },
+        )
+        .select('id')
+        .single();
+      if (fechError) throw new Error(fechError.message);
+      const fechamentoId: string = fech.id;
+
+      // 2. Deletar turnos antigos
+      const { error: delError } = await (supabase as any)
+        .from('pix_fechamentos_turnos')
+        .delete()
+        .eq('fechamento_id', fechamentoId);
+      if (delError) throw new Error(delError.message);
+
+      // 3. Inserir novos turnos
+      const { error: insError } = await (supabase as any)
+        .from('pix_fechamentos_turnos')
+        .insert(
+          fechamentoTurnos.map((t) => ({
+            fechamento_id:   fechamentoId,
+            numero_turno:    t.numero_turno,
+            hora_corte:      t.hora_corte,
+            total_calculado: t.total_calculado,
+            status:          t.status,
+            observacao:      t.observacao,
+          })),
+        );
+      if (insError) throw new Error(insError.message);
+
+      toast.success('Fechamento salvo!');
+      setTurnosDirty(false);
+      loadFechamento();
+    } catch (err: unknown) {
+      toast.error('Erro ao salvar fechamento: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setSalvando(false);
+    }
+  }
 
   // ── recalcular button handler ──────────────────────────────────────────────
   async function handleRecalcular() {
@@ -903,7 +1012,7 @@ export default function ConciliacaoPix() {
         </button>
         {showFechamento && (
           <div className="border-t p-4 space-y-3">
-            {/* Seletores */}
+            {/* Seletores + ações */}
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="date"
@@ -921,9 +1030,27 @@ export default function ConciliacaoPix() {
                   ))}
                 </SelectContent>
               </Select>
-              {fechamentoStatus && (
+              {fechamentoStatus && !turnosDirty && (
                 <RepasseStatusBadge status={fechamentoStatus} />
               )}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 gap-1.5 text-xs"
+                disabled={calculando || salvando || importing}
+                onClick={calcularTurnos}
+              >
+                <RefreshCw className={`w-3 h-3 ${calculando ? 'animate-spin' : ''}`} />
+                {calculando ? 'Calculando...' : 'Calcular Turnos'}
+              </Button>
+              <Button
+                size="sm"
+                className="h-9 gap-1.5 text-xs"
+                disabled={!turnosDirty || salvando || fechamentoTurnos.length === 0}
+                onClick={salvarFechamento}
+              >
+                {salvando ? 'Salvando...' : 'Salvar Fechamento'}
+              </Button>
             </div>
 
             {/* Tabela de turnos */}

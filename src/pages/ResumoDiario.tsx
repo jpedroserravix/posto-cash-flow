@@ -29,6 +29,7 @@ interface TurnoRow {
   turno: string;
   cofreBrinks: number;
   manual: number;
+  pix?: number;
   total: number;
 }
 
@@ -83,6 +84,7 @@ interface GroupData {
   turnos: TurnoRow[];
   totalBrinks: number;
   totalManual: number;
+  totalPix: number;
   totalGeral: number;
   conferido: string;
   observacao: string;
@@ -180,6 +182,7 @@ export default function ResumoDiario() {
       { data: qualityData },
       { data: comprovantesData },
       { data: afericoesData },
+      { data: pixFechData },
     ] = await Promise.all([
       supabase.from('depositos_brinks').select('data_caixa, turno, valor, centro_custo')
         .eq('posto_id', selectedPostoId).not('data_caixa', 'is', null).not('turno', 'is', null)
@@ -196,7 +199,31 @@ export default function ResumoDiario() {
       (supabase as any).from('afericoes')
         .select('id, data, pdf_path, criado_por_nome, item_conferido, cancelado, cancelado_por_nome, cancelado_em')
         .eq('posto_id', selectedPostoId).gte('data', dfRange.start).lte('data', dfRange.end),
+      (supabase as any).from('pix_fechamentos')
+        .select('id, data, centro_custo')
+        .eq('posto_id', selectedPostoId)
+        .gte('data', dfRange.start)
+        .lte('data', dfRange.end),
     ]);
+
+    // Segunda query: turnos dos fechamentos Pix (por lista de ids, não por card)
+    // pixMap: "data|cc|numero_turno" → total_calculado
+    const pixMap = new Map<string, number>();
+    const pixFechIds = (pixFechData as any[] ?? []).map((f: any) => f.id as string);
+    if (pixFechIds.length > 0) {
+      const { data: pixTurnosData } = await (supabase as any)
+        .from('pix_fechamentos_turnos')
+        .select('fechamento_id, numero_turno, total_calculado')
+        .in('fechamento_id', pixFechIds);
+
+      const fechIdToKey = new Map<string, string>();
+      (pixFechData as any[]).forEach((f: any) => fechIdToKey.set(f.id, `${f.data}|${f.centro_custo}`));
+
+      (pixTurnosData as any[] ?? []).forEach((t: any) => {
+        const key = fechIdToKey.get(t.fechamento_id);
+        if (key) pixMap.set(`${key}|${t.numero_turno}`, Number(t.total_calculado) || 0);
+      });
+    }
 
     // Build turno aggregations
     const turnoMap = new Map<string, { brinks: number; manual: number }>();
@@ -217,12 +244,20 @@ export default function ResumoDiario() {
     });
 
     // Group by data|cc
+    // parseTurnoNum: extrai o número de turno da string (ex: "1" → 1, "T1" → 1)
+    const parseTurnoNum = (t: string): number | null => {
+      const n = parseInt(t.replace(/\D/g, ''), 10);
+      return isNaN(n) ? null : n;
+    };
+
     const groupMap = new Map<string, TurnoRow[]>();
     turnoMap.forEach((val, key) => {
       const [data, cc, turno] = key.split('|');
       const gKey = `${data}|${cc}`;
       const arr = groupMap.get(gKey) || [];
-      arr.push({ turno, cofreBrinks: val.brinks, manual: val.manual, total: val.brinks + val.manual });
+      const turnoNum = parseTurnoNum(turno);
+      const pix = turnoNum !== null ? pixMap.get(`${gKey}|${turnoNum}`) : undefined;
+      arr.push({ turno, cofreBrinks: val.brinks, manual: val.manual, pix, total: val.brinks + val.manual });
       groupMap.set(gKey, arr);
     });
 
@@ -270,6 +305,7 @@ export default function ResumoDiario() {
         const sorted = turnos.sort((a, b) => a.turno.localeCompare(b.turno));
         const totalBrinks = sorted.reduce((s, t) => s + t.cofreBrinks, 0);
         const totalManual = sorted.reduce((s, t) => s + t.manual, 0);
+        const totalPix    = sorted.reduce((s, t) => s + (t.pix ?? 0), 0);
         const conf = confMap.get(key);
         return {
           data,
@@ -277,6 +313,7 @@ export default function ResumoDiario() {
           turnos: sorted,
           totalBrinks,
           totalManual,
+          totalPix,
           totalGeral: totalBrinks + totalManual,
           conferido: conf?.conferido || 'PENDENTE',
           observacao: conf?.observacao || '',
@@ -742,12 +779,14 @@ export default function ResumoDiario() {
 
                     {/* ─ Left: caixa summary ─ */}
                     <div className="space-y-3">
+                      <div className="overflow-x-auto">
                       <Table>
                         <TableHeader>
                           <TableRow>
                             <TableHead className="text-xs">Turno</TableHead>
                             <TableHead className="text-right text-xs">Brinks</TableHead>
                             <TableHead className="text-right text-xs">Manual</TableHead>
+                            <TableHead className="text-right text-xs text-primary">Pix</TableHead>
                             <TableHead className="text-right text-xs">Total</TableHead>
                             <TableHead className="text-center text-xs w-8" title="Conferido">✓</TableHead>
                           </TableRow>
@@ -758,6 +797,9 @@ export default function ResumoDiario() {
                               <TableCell className="py-1 text-xs">{turno.turno}</TableCell>
                               <TableCell className="py-1 text-right text-xs">{fmt(turno.cofreBrinks)}</TableCell>
                               <TableCell className="py-1 text-right text-xs">{fmt(turno.manual)}</TableCell>
+                              <TableCell className="py-1 text-right text-xs text-primary whitespace-nowrap">
+                                {turno.pix !== undefined ? fmt(turno.pix) : '—'}
+                              </TableCell>
                               <TableCell className="py-1 text-right text-xs font-medium">{fmt(turno.total)}</TableCell>
                               <TableCell className="py-1 text-center">
                                 <Checkbox
@@ -772,11 +814,15 @@ export default function ResumoDiario() {
                             <TableCell className="py-1 text-xs font-bold">Soma</TableCell>
                             <TableCell className="py-1 text-right text-xs font-bold">{fmt(group.totalBrinks)}</TableCell>
                             <TableCell className="py-1 text-right text-xs font-bold">{fmt(group.totalManual)}</TableCell>
+                            <TableCell className="py-1 text-right text-xs font-bold text-primary whitespace-nowrap">
+                              {group.totalPix > 0 ? fmt(group.totalPix) : '—'}
+                            </TableCell>
                             <TableCell className="py-1 text-right text-xs font-bold">{fmt(group.totalGeral)}</TableCell>
                             <TableCell />
                           </TableRow>
                         </TableBody>
                       </Table>
+                      </div>
 
                       {/* Quality PDF */}
                       <div className="flex flex-wrap items-center gap-2">
