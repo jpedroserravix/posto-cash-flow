@@ -14,6 +14,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { openInNewTab } from '@/lib/utils';
 import { useListaConfig } from '@/hooks/useListaConfig';
@@ -22,7 +26,7 @@ import {
 } from '@/components/ui/select';
 import {
   QrCode, Upload, Download, ChevronDown, ChevronRight,
-  TrendingUp, Hash, Receipt, RefreshCw, Plus, AlertTriangle,
+  TrendingUp, Hash, Receipt, RefreshCw, Plus, AlertTriangle, Trash2,
 } from 'lucide-react';
 
 // ─── types ───────────────────────────────────────────────────────────────────
@@ -67,6 +71,7 @@ interface PixConfig {
 interface ParseResult {
   vendas: PixVenda[];
   repasses: PixRepasse[];
+  cnpj?: string;   // normalized (digits only), extracted from CNPJ column
   error?: string;
 }
 
@@ -218,6 +223,7 @@ function parsePixXLSX(buffer: ArrayBuffer): ParseResult {
   const pagIdx   = idx((h) => h.includes('PAGADOR'));
   const funcIdx  = idx((h) => h.includes('FUNCION'));
   const pdvIdx   = idx((h) => h === 'PDV');
+  const cnpjIdx  = idx((h) => h === 'CNPJ' || h.includes('CNPJ'));
 
   if (descIdx === -1 || dtIdx === -1 || valorIdx === -1 || txIdx === -1) {
     return {
@@ -230,6 +236,7 @@ function parsePixXLSX(buffer: ArrayBuffer): ParseResult {
   const tarifaMap = new Map<string, number>();
   const vendaRows: Omit<PixVenda, 'tarifa_esperada'>[] = [];
   const repasses: PixRepasse[] = [];
+  let cnpjFromFile: string | undefined;
 
   for (const row of jsonData.slice(1)) {
     if (!Array.isArray(row) || row.length === 0) continue;
@@ -244,6 +251,12 @@ function parsePixXLSX(buffer: ArrayBuffer): ParseResult {
     const dataHora = excelDateToISO(cols[dtIdx]);
 
     if (!dataHora) continue;
+
+    // Extrair CNPJ da primeira linha que tiver
+    if (cnpjFromFile === undefined && cnpjIdx >= 0 && cols[cnpjIdx] != null) {
+      const raw = String(cols[cnpjIdx]).trim();
+      if (raw) cnpjFromFile = raw.replace(/\D/g, '');
+    }
 
     if (desc === 'CREDITO DE PAGAMENTO VIA PIX') {
       if (!transacaoId) continue;
@@ -273,7 +286,7 @@ function parsePixXLSX(buffer: ArrayBuffer): ParseResult {
     tarifa_esperada: 0,
   }));
 
-  return { vendas, repasses };
+  return { vendas, repasses, cnpj: cnpjFromFile };
 }
 
 // ─── sub-component: status badge ─────────────────────────────────────────────
@@ -318,6 +331,16 @@ export default function ConciliacaoPix() {
   const [turnosDirty,       setTurnosDirty]       = useState(false);
   const [cortes,            setCortes]            = useState<string[]>(['', '', '']);
   const [semTurno,          setSemTurno]          = useState<{ count: number; valor: number } | null>(null);
+
+  // ── dialogs de CNPJ e exclusão ─────────────────────────────────────────────
+  type CnpjMismatch = { fileCnpj: string; postoNome: string; postoCnpj: string };
+  type CnpjMissing  = { postoNome: string; pendingFile: File; pendingParsed: { vendas: ParseResult['vendas']; repasses: ParseResult['repasses'] } };
+  type DeleteConfirm = { id: string; fileName: string; totalTransacoes: number; filePath: string };
+
+  const [cnpjMismatch,   setCnpjMismatch]   = useState<CnpjMismatch | null>(null);
+  const [cnpjMissing,    setCnpjMissing]    = useState<CnpjMissing  | null>(null);
+  const [deleteConfirm,  setDeleteConfirm]  = useState<DeleteConfirm | null>(null);
+  const [deletingImpId,  setDeletingImpId]  = useState<string | null>(null);
 
   // ── centros de custo (lista configurável) ──────────────────────────────────
   const centrosCusto = useListaConfig('centros_custo', ['PISTA']);
@@ -769,11 +792,13 @@ export default function ConciliacaoPix() {
   }
 
   // ── import ─────────────────────────────────────────────────────────────────
+
+  // Fase 1: parse + validação de CNPJ. Só chama doImportCore se tudo ok.
   async function doImport(file: File) {
     setImporting(true);
     try {
       const buffer = await file.arrayBuffer();
-      const { vendas, repasses: repassesFromFile, error: parseError } = parsePixXLSX(buffer);
+      const { vendas, repasses: repassesFromFile, cnpj: fileCnpj, error: parseError } = parsePixXLSX(buffer);
 
       if (parseError) { toast.error(parseError); return; }
       if (vendas.length === 0 && repassesFromFile.length === 0) {
@@ -781,7 +806,44 @@ export default function ConciliacaoPix() {
         return;
       }
 
-      const { data: cfgRaw } = await (supabase as any)
+      // Validar CNPJ do posto vs. arquivo
+      const { data: postoRow } = await supabase
+        .from('postos')
+        .select('nome, cnpj')
+        .eq('id', selectedPostoId!)
+        .maybeSingle();
+
+      const postoCnpjNorm = postoRow?.cnpj ? (postoRow.cnpj as string).replace(/\D/g, '') : '';
+      const postoNome     = postoRow?.nome ?? 'posto selecionado';
+
+      if (fileCnpj && postoCnpjNorm && fileCnpj !== postoCnpjNorm) {
+        // CNPJ diverge → bloquear e mostrar erro
+        setCnpjMismatch({ fileCnpj, postoNome, postoCnpj: postoCnpjNorm });
+        return;
+      }
+
+      if (fileCnpj && !postoCnpjNorm) {
+        // Posto sem CNPJ cadastrado → pedir confirmação
+        setCnpjMissing({ postoNome, pendingFile: file, pendingParsed: { vendas, repasses: repassesFromFile } });
+        return;
+      }
+
+      // CNPJ ok ou coluna ausente no arquivo → prosseguir
+      await doImportCore(file, vendas, repassesFromFile);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Erro inesperado na importação');
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  // Fase 2: gravar no banco (chamada depois que CNPJ foi validado/confirmado)
+  async function doImportCore(
+    file: File,
+    vendas: ParseResult['vendas'],
+    repassesFromFile: ParseResult['repasses'],
+  ) {
+    const { data: cfgRaw } = await (supabase as any)
         .from('pix_config')
         .select('tarifa_percentual, tarifa_minima')
         .eq('posto_id', selectedPostoId)
@@ -870,6 +932,7 @@ export default function ConciliacaoPix() {
           .upsert(
             repassesFromFile.map((r) => ({
               posto_id:       selectedPostoId,
+              importacao_id:  importacaoId,
               data_hora:      r.data_hora,
               valor:          r.valor,
               dia_referencia: r.dia_referencia,
@@ -894,10 +957,48 @@ export default function ConciliacaoPix() {
       // Conferência automática após importação
       try { await calcularRepasses(); } catch { /* silently ignore */ }
       loadData();
+  }
+
+  // ── confirmar import quando posto sem CNPJ ────────────────────────────────
+  async function handleCnpjMissingConfirm() {
+    if (!cnpjMissing) return;
+    const { pendingFile, pendingParsed } = cnpjMissing;
+    setCnpjMissing(null);
+    setImporting(true);
+    try {
+      await doImportCore(pendingFile, pendingParsed.vendas, pendingParsed.repasses);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Erro inesperado na importação');
     } finally {
       setImporting(false);
+    }
+  }
+
+  // ── excluir importação ────────────────────────────────────────────────────
+  async function handleDeleteImport() {
+    if (!deleteConfirm) return;
+    const { id, filePath } = deleteConfirm;
+    setDeleteConfirm(null);
+    setDeletingImpId(id);
+    try {
+      // Deletar registro (cascata para pix_transacoes e pix_repasses via FK)
+      const { error: delErr } = await (supabase as any)
+        .from('pix_importacoes')
+        .delete()
+        .eq('id', id);
+      if (delErr) throw new Error('Erro ao excluir importação: ' + delErr.message);
+
+      // Remover arquivo do bucket
+      await supabase.storage.from('pix-extratos').remove([filePath]);
+
+      toast.success('Importação excluída.');
+      // Recalcular repasses e recarregar
+      try { await calcularRepasses(); } catch { /* silently ignore */ }
+      loadData();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao excluir');
+    } finally {
+      setDeletingImpId(null);
     }
   }
 
@@ -1372,22 +1473,95 @@ export default function ConciliacaoPix() {
                       Importado em {fmtDatetime(imp.criado_em)}
                     </p>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 gap-1.5 text-xs shrink-0"
-                    onClick={() => handleDownload(imp.file_path)}
-                    title="Baixar arquivo original"
-                  >
-                    <Download className="w-3 h-3" />
-                    Baixar
-                  </Button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 gap-1.5 text-xs"
+                      onClick={() => handleDownload(imp.file_path)}
+                      title="Baixar arquivo original"
+                    >
+                      <Download className="w-3 h-3" />
+                      Baixar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                      disabled={deletingImpId === imp.id}
+                      onClick={() => setDeleteConfirm({
+                        id: imp.id,
+                        fileName: imp.file_name,
+                        totalTransacoes: imp.total_transacoes,
+                        filePath: imp.file_path,
+                      })}
+                      title="Excluir importação"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
                 </div>
               ))
             )}
           </div>
         )}
       </div>
+
+      {/* AlertDialog: CNPJ diverge */}
+      <AlertDialog open={!!cnpjMismatch} onOpenChange={() => setCnpjMismatch(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>CNPJ incompatível</AlertDialogTitle>
+            <AlertDialogDescription>
+              Este extrato pertence ao CNPJ <strong>{cnpjMismatch?.fileCnpj}</strong>, mas o posto selecionado é{' '}
+              <strong>{cnpjMismatch?.postoNome}</strong> (CNPJ {cnpjMismatch?.postoCnpj}). Importação cancelada.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setCnpjMismatch(null)}>Entendi</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* AlertDialog: posto sem CNPJ — pedir confirmação */}
+      <AlertDialog open={!!cnpjMissing} onOpenChange={() => setCnpjMissing(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Posto sem CNPJ cadastrado</AlertDialogTitle>
+            <AlertDialogDescription>
+              O posto <strong>{cnpjMissing?.postoNome}</strong> não possui CNPJ cadastrado. Não é possível validar se
+              este extrato pertence ao posto correto. Deseja importar mesmo assim?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setCnpjMissing(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleCnpjMissingConfirm}>Importar mesmo assim</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* AlertDialog: confirmar exclusão de importação */}
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir importação?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O arquivo <strong>{deleteConfirm?.fileName}</strong> e suas{' '}
+              <strong>{deleteConfirm?.totalTransacoes}</strong> transaç{deleteConfirm?.totalTransacoes === 1 ? 'ão' : 'ões'}{' '}
+              e repasses associados serão removidos permanentemente. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteImport}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </div>
   );

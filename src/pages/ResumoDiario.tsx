@@ -97,6 +97,9 @@ interface GroupData {
   afericoes: AfericaoInfo[];
   comprovantes: Comprovante[];
   turnosConferidos: string[];
+  pixFechamentoId?: string;
+  pixBrutoConferido: boolean;
+  pixRecebidoBanco: boolean;
 }
 
 interface PreviewFile {
@@ -204,7 +207,7 @@ export default function ResumoDiario() {
         .select('id, data, pdf_path, criado_por_nome, item_conferido, cancelado, cancelado_por_nome, cancelado_em')
         .eq('posto_id', selectedPostoId).gte('data', dfRange.start).lte('data', dfRange.end),
       (supabase as any).from('pix_fechamentos')
-        .select('id, data, centro_custo')
+        .select('id, data, centro_custo, bruto_conferido, recebido_banco')
         .eq('posto_id', selectedPostoId)
         .gte('data', dfRange.start)
         .lte('data', dfRange.end),
@@ -233,6 +236,16 @@ export default function ResumoDiario() {
         });
       });
     }
+
+    // pixFechMap: "data|cc" → { id, bruto_conferido, recebido_banco }
+    const pixFechMap = new Map<string, { id: string; bruto_conferido: boolean; recebido_banco: boolean }>();
+    (pixFechData as any[] ?? []).forEach((f: any) => {
+      pixFechMap.set(`${f.data}|${f.centro_custo}`, {
+        id: f.id as string,
+        bruto_conferido: f.bruto_conferido ?? false,
+        recebido_banco:  f.recebido_banco  ?? false,
+      });
+    });
 
     // Build turno aggregations
     const turnoMap = new Map<string, { brinks: number; manual: number }>();
@@ -325,7 +338,8 @@ export default function ResumoDiario() {
         const totalManual    = sorted.reduce((s, t) => s + t.manual, 0);
         const totalPix       = sorted.reduce((s, t) => s + (t.pix ?? 0), 0);
         const totalPixTarifa = sorted.reduce((s, t) => s + (t.pixTarifa ?? 0), 0);
-        const conf = confMap.get(key);
+        const conf    = confMap.get(key);
+        const pixFech = pixFechMap.get(key);
         return {
           data,
           centroCusto,
@@ -342,6 +356,9 @@ export default function ResumoDiario() {
           afericoes: afericaoMap.get(data) || [],
           comprovantes: comprovantesMap.get(data) || [],
           turnosConferidos: conf?.turnos_conferidos || [],
+          pixFechamentoId:  pixFech?.id,
+          pixBrutoConferido: pixFech?.bruto_conferido ?? false,
+          pixRecebidoBanco:  pixFech?.recebido_banco  ?? false,
         };
       })
       .sort((a, b) => b.data.localeCompare(a.data) || a.centroCusto.localeCompare(b.centroCusto));
@@ -565,6 +582,44 @@ export default function ResumoDiario() {
         g.data === group.data && g.centroCusto === group.centroCusto
           ? { ...g, turnos: g.turnos.map((t) => t.turno === turno.turno ? { ...t, pixStatus: turno.pixStatus } : t) }
           : g,
+      ));
+    }
+  };
+
+  // ─── pix fechamento checkboxes ──────────────────────────────────────────────
+
+  const handleTogglePixBruto = async (group: GroupData) => {
+    if (!group.pixFechamentoId) return;
+    const newVal = !group.pixBrutoConferido;
+    setGroups((prev) => prev.map((g) =>
+      g.data === group.data && g.centroCusto === group.centroCusto
+        ? { ...g, pixBrutoConferido: newVal } : g,
+    ));
+    const { error } = await (supabase as any)
+      .from('pix_fechamentos').update({ bruto_conferido: newVal }).eq('id', group.pixFechamentoId);
+    if (error) {
+      toast.error('Erro ao salvar');
+      setGroups((prev) => prev.map((g) =>
+        g.data === group.data && g.centroCusto === group.centroCusto
+          ? { ...g, pixBrutoConferido: group.pixBrutoConferido } : g,
+      ));
+    }
+  };
+
+  const handleTogglePixRecebido = async (group: GroupData) => {
+    if (!group.pixFechamentoId) return;
+    const newVal = !group.pixRecebidoBanco;
+    setGroups((prev) => prev.map((g) =>
+      g.data === group.data && g.centroCusto === group.centroCusto
+        ? { ...g, pixRecebidoBanco: newVal } : g,
+    ));
+    const { error } = await (supabase as any)
+      .from('pix_fechamentos').update({ recebido_banco: newVal }).eq('id', group.pixFechamentoId);
+    if (error) {
+      toast.error('Erro ao salvar');
+      setGroups((prev) => prev.map((g) =>
+        g.data === group.data && g.centroCusto === group.centroCusto
+          ? { ...g, pixRecebidoBanco: group.pixRecebidoBanco } : g,
       ));
     }
   };
@@ -889,15 +944,35 @@ export default function ResumoDiario() {
                                 </span>
                               ) : '—'}
                             </TableCell>
-                            <TableCell />
+                            <TableCell className="py-1 text-center">
+                              <Checkbox
+                                checked={group.pixBrutoConferido}
+                                onCheckedChange={() => handleTogglePixBruto(group)}
+                                disabled={!group.pixFechamentoId || group.totalPix === 0}
+                                className="h-4 w-4"
+                                title="Bruto conferido"
+                              />
+                            </TableCell>
                           </TableRow>
                           {group.totalPix > 0 && (
                             <TableRow>
-                              <TableCell colSpan={7} className="py-1 text-right text-xs text-primary">
+                              <TableCell colSpan={5} className="py-1 text-right text-xs text-primary">
                                 Líquido Pix a receber:{' '}
                                 <span className="font-semibold">
                                   {fmt(group.totalPix - group.totalPixTarifa)}
                                 </span>
+                              </TableCell>
+                              <TableCell className="py-1 text-right text-xs text-muted-foreground whitespace-nowrap">
+                                Recebido no banco
+                              </TableCell>
+                              <TableCell className="py-1 text-center">
+                                <Checkbox
+                                  checked={group.pixRecebidoBanco}
+                                  onCheckedChange={() => handleTogglePixRecebido(group)}
+                                  disabled={!group.pixFechamentoId}
+                                  className="h-4 w-4"
+                                  title="Recebido no banco"
+                                />
                               </TableCell>
                             </TableRow>
                           )}
