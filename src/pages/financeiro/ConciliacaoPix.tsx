@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/select';
 import {
   QrCode, Upload, Download, ChevronDown, ChevronRight,
-  TrendingUp, Hash, Receipt, RefreshCw, Plus,
+  TrendingUp, Hash, Receipt, RefreshCw, Plus, AlertTriangle,
 } from 'lucide-react';
 
 // ─── types ───────────────────────────────────────────────────────────────────
@@ -149,6 +149,40 @@ function previousDay(isoDatetime: string): string {
     String(date.getMonth() + 1).padStart(2, '0'),
     String(date.getDate()).padStart(2, '0'),
   ].join('-');
+}
+
+function nextDay(isoDate: string): string {
+  const [y, m, d] = isoDate.split('T')[0].split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() + 1);
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+// Builds absolute ISO datetimes for each corte in user-defined order.
+// When a corte's HH:MM ≤ previous corte's HH:MM, it has crossed midnight — advance the date.
+function buildAbsoluteCortes(baseDate: string, corteStrings: string[]): string[] {
+  const result: string[] = [];
+  let currentDate = baseDate;
+  let prevMinutes = -1;
+  for (const corte of corteStrings) {
+    const parts = corte.split(':').map(Number);
+    const hh = parts[0] ?? 0;
+    const mm = parts[1] ?? 0;
+    const ss = parts[2] ?? 0;
+    const totalMinutes = hh * 60 + mm;
+    if (prevMinutes >= 0 && totalMinutes <= prevMinutes) {
+      currentDate = nextDay(currentDate);
+    }
+    prevMinutes = totalMinutes;
+    result.push(
+      `${currentDate}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`,
+    );
+  }
+  return result;
 }
 
 function calcTarifaEsperada(valorBruto: number, cfg: PixConfig): number {
@@ -450,19 +484,18 @@ export default function ConciliacaoPix() {
   useEffect(() => { loadFechamento(); }, [loadFechamento]);
 
   // ── calcular turnos ────────────────────────────────────────────────────────
-  // Distribui transações do dia por horário de corte definido pelo usuário.
-  // turno_override, quando presente, tem prioridade sobre o corte por horário.
-  // total_calculado = SUM(valor_bruto) — valor bruto das vendas (sem subtrair tarifa).
-  // Tarifa é exibida como informação secundária mas não afeta o total.
+  // Distribui transações por horário de corte em ordem definida pelo usuário.
+  // Cortes são convertidos em datetimes absolutos para lidar com virada de meia-noite.
+  // turno_override tem prioridade quando definido.
+  // total_calculado = SUM(valor_bruto); total_tarifa separado.
   async function calcularTurnos() {
     if (!selectedPostoId || !fechamentoData) return;
 
-    // Normalizar cortes: remover vazios, garantir HH:MM:SS, ordenar
+    // 1. Normalizar cortes na ordem do usuário — SEM sort (ordem é significativa para meia-noite)
     const validCortes = cortes
       .map((c) => c.trim())
       .filter((c) => /^\d{2}:\d{2}(:\d{2})?$/.test(c))
-      .map((c) => (c.length === 5 ? c + ':00' : c))
-      .sort();
+      .map((c) => (c.length === 5 ? c + ':00' : c));
 
     if (validCortes.length === 0) {
       toast.error('Informe ao menos um horário de corte antes de calcular.');
@@ -471,49 +504,83 @@ export default function ConciliacaoPix() {
 
     setCalculando(true);
     try {
+      // 2. Converter cortes em datetimes absolutos (detecta cruzamento de meia-noite)
+      const absoluteCortes = buildAbsoluteCortes(fechamentoData, validCortes);
+      const lastAbsoluteCorte = absoluteCortes[absoluteCortes.length - 1];
+
+      // 3. Verificar se o fechamento do dia anterior termina depois da meia-noite de fechamentoData.
+      //    Se sim, as transações antes desse corte já pertencem ao turno anterior — excluir daqui.
+      const prevDate = previousDay(fechamentoData + 'T12:00:00');
+      let queryStart = fechamentoData + 'T00:00:00';
+
+      const { data: prevFech } = await (supabase as any)
+        .from('pix_fechamentos')
+        .select('id')
+        .eq('posto_id', selectedPostoId)
+        .eq('data', prevDate)
+        .eq('centro_custo', fechamentoCc)
+        .maybeSingle();
+
+      if (prevFech) {
+        const { data: prevTurnos } = await (supabase as any)
+          .from('pix_fechamentos_turnos')
+          .select('hora_corte, numero_turno')
+          .eq('fechamento_id', prevFech.id)
+          .order('numero_turno', { ascending: true });
+
+        if (Array.isArray(prevTurnos) && prevTurnos.length > 0) {
+          const prevCorteStrings = (prevTurnos as any[]).map((t: any) => t.hora_corte as string);
+          const prevAbsoluteCortes = buildAbsoluteCortes(prevDate, prevCorteStrings);
+          const prevLastCorte = prevAbsoluteCortes[prevAbsoluteCortes.length - 1];
+          // Se o último corte do dia anterior avançou para dentro de fechamentoData
+          if (prevLastCorte > fechamentoData + 'T00:00:00') {
+            queryStart = prevLastCorte;
+          }
+        }
+      }
+
+      // 4. Buscar transações no intervalo corrigido
       const { data: txns, error } = await (supabase as any)
         .from('pix_transacoes')
         .select('turno_override, valor_bruto, tarifa, data_hora')
         .eq('posto_id', selectedPostoId)
-        .gte('data_hora', fechamentoData + 'T00:00:00')
-        .lte('data_hora', fechamentoData + 'T23:59:59');
+        .gte('data_hora', queryStart)
+        .lte('data_hora', lastAbsoluteCorte);
 
       if (error) throw new Error(error.message);
 
+      // 5. Distribuir por turno usando comparação de datetime completo
       type TurnoKey = number | 'sem_turno';
-      type TurnoAccum = { brutoCents: number; tarifaCents: number; maxTime: string };
+      type TurnoAccum = { brutoCents: number; tarifaCents: number; count: number };
       const groups = new Map<TurnoKey, TurnoAccum>();
 
       for (const t of (txns as any[] || [])) {
-        const timeStr: string = t.data_hora
-          ? (t.data_hora as string).split('T')[1]?.substring(0, 8) ?? '00:00:00'
-          : '00:00:00';
+        const txDatetime = (t.data_hora as string).replace(' ', 'T');
 
         let key: TurnoKey;
         if (t.turno_override != null) {
-          // turno_override tem prioridade
           key = t.turno_override as number;
         } else {
-          const idx = validCortes.findIndex((c) => timeStr <= c);
+          const idx = absoluteCortes.findIndex((c) => txDatetime <= c);
           key = idx === -1 ? 'sem_turno' : idx + 1;
         }
 
-        const acc = groups.get(key) || { brutoCents: 0, tarifaCents: 0, maxTime: '' };
+        const acc = groups.get(key) || { brutoCents: 0, tarifaCents: 0, count: 0 };
         acc.brutoCents  += Math.round(safeNum(t.valor_bruto) * 100);
         acc.tarifaCents += Math.round(safeNum(t.tarifa)      * 100);
-        if (timeStr > acc.maxTime) acc.maxTime = timeStr;
+        acc.count++;
         groups.set(key, acc);
       }
 
-      // Turnos definidos pelos cortes
+      // 6. Montar resultado — um FechamentoTurno por corte definido
       const definedNums = new Set(validCortes.map((_, i) => i + 1));
       const result: FechamentoTurno[] = validCortes.map((corte, idx) => {
         const num = idx + 1;
-        const g = groups.get(num) || { brutoCents: 0, tarifaCents: 0, maxTime: '' };
+        const g = groups.get(num) || { brutoCents: 0, tarifaCents: 0, count: 0 };
         return {
           id:              '',
           numero_turno:    num,
-          hora_corte:      corte,
+          hora_corte:      corte, // mantém formato HH:MM:SS para salvar no DB
           total_calculado: g.brutoCents  / 100,
           total_tarifa:    g.tarifaCents / 100,
           status:          'pendente' as const,
@@ -521,13 +588,13 @@ export default function ConciliacaoPix() {
         };
       });
 
-      // Turnos extras via turno_override além do range dos cortes definidos
+      // Turnos extras via turno_override fora do range de cortes definidos
       for (const [key, g] of Array.from(groups.entries())) {
         if (typeof key === 'number' && !definedNums.has(key)) {
           result.push({
             id:              '',
             numero_turno:    key,
-            hora_corte:      g.maxTime || '00:00:00',
+            hora_corte:      '00:00:00',
             total_calculado: g.brutoCents  / 100,
             total_tarifa:    g.tarifaCents / 100,
             status:          'pendente' as const,
@@ -540,26 +607,12 @@ export default function ConciliacaoPix() {
       setFechamentoTurnos(result);
       setTurnosDirty(true);
 
+      // Transações sem turno (após último corte)
       const stAcc = groups.get('sem_turno');
-      setSemTurno(stAcc && stAcc.brutoCents > 0
-        ? { count: 0, valor: stAcc.brutoCents / 100 } // count não disponível aqui; usar valor
+      setSemTurno(stAcc && stAcc.count > 0
+        ? { count: stAcc.count, valor: stAcc.brutoCents / 100 }
         : null,
       );
-
-      // Contar transações sem turno corretamente
-      let semTurnoCount = 0;
-      let semTurnoValor = 0;
-      for (const t of (txns as any[] || [])) {
-        if (t.turno_override != null) continue;
-        const timeStr: string = t.data_hora
-          ? (t.data_hora as string).split('T')[1]?.substring(0, 8) ?? '00:00:00'
-          : '00:00:00';
-        if (validCortes.every((c) => timeStr > c)) {
-          semTurnoCount++;
-          semTurnoValor += safeNum(t.valor_bruto);
-        }
-      }
-      setSemTurno(semTurnoCount > 0 ? { count: semTurnoCount, valor: semTurnoValor } : null);
 
       if (result.length === 0) {
         toast.info('Nenhuma transação encontrada para essa data.');
@@ -665,6 +718,24 @@ export default function ConciliacaoPix() {
   }, [transacoes, excludedFunc, excludedPag, sortField, sortDir]);
 
   const pag = usePagination(filteredData, [excludedFunc, excludedPag, sortField, sortDir, dfRange.start, dfRange.end]);
+
+  // Mapa de turno por transação — baseado no fechamento selecionado (fechamentoData + turnos)
+  // Só colore as transações que caem dentro do intervalo do fechamento atual.
+  const txTurnoMap = useMemo(() => {
+    const map = new Map<string, number | 'sem_turno'>();
+    if (fechamentoTurnos.length === 0 || !fechamentoData) return map;
+    const corteStrings = fechamentoTurnos.map((t) => t.hora_corte);
+    const absoluteCortes = buildAbsoluteCortes(fechamentoData, corteStrings);
+    const dayStart = fechamentoData + 'T00:00:00';
+    const lastCorte = absoluteCortes[absoluteCortes.length - 1];
+    for (const txn of transacoes) {
+      const txDatetime = txn.data_hora.replace(' ', 'T');
+      if (txDatetime < dayStart || txDatetime > lastCorte) continue;
+      const idx = absoluteCortes.findIndex((c) => txDatetime <= c);
+      map.set(txn.id, idx === -1 ? 'sem_turno' : idx + 1);
+    }
+    return map;
+  }, [transacoes, fechamentoTurnos, fechamentoData]);
 
   const totalVendas   = useMemo(() => transacoes.reduce((s, t) => s + t.valor_bruto, 0), [transacoes]);
   const totalTarifas  = useMemo(() => transacoes.reduce((s, t) => s + t.tarifa,      0), [transacoes]);
@@ -830,6 +901,16 @@ export default function ConciliacaoPix() {
     }
   }
 
+  // ── turno row color ────────────────────────────────────────────────────────
+  function txTurnoBg(turno: number | 'sem_turno' | undefined): string {
+    if (turno === undefined) return '';
+    if (turno === 'sem_turno') return 'bg-orange-100';
+    if (turno === 1) return 'bg-yellow-50';
+    if (turno === 2) return 'bg-green-50';
+    if (turno === 3) return 'bg-blue-50';
+    return 'bg-purple-50';
+  }
+
   // ── empty state ────────────────────────────────────────────────────────────
   if (!selectedPostoId) {
     return (
@@ -910,173 +991,6 @@ export default function ConciliacaoPix() {
             </div>
           </CardContent>
         </Card>
-      </div>
-
-      {/* Transactions table */}
-      <HorizontalScrollSync>
-        <div className="rounded-md border">
-          <div className="overflow-x-auto" data-table-scroll-viewport>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="whitespace-nowrap text-xs">Data/Hora</TableHead>
-                  <TableHead className="whitespace-nowrap text-xs text-right">Valor (R$)</TableHead>
-                  <TableHead className="whitespace-nowrap text-xs text-right">Tarifa (R$)</TableHead>
-                  <FilterableHead
-                    label={<span className="text-xs">Pagador</span>}
-                    sortActive={sortField === 'nome_pagador'}
-                    sortDir={sortField === 'nome_pagador' ? sortDir : null}
-                    onSort={() => toggleSort('nome_pagador')}
-                    uniqueValues={uniquePags}
-                    selectedValues={excludedPag}
-                    onFilterChange={setExcludedPag}
-                    className="whitespace-nowrap"
-                  />
-                  <FilterableHead
-                    label={<span className="text-xs">Funcionário</span>}
-                    sortActive={sortField === 'nome_funcionario'}
-                    sortDir={sortField === 'nome_funcionario' ? sortDir : null}
-                    onSort={() => toggleSort('nome_funcionario')}
-                    uniqueValues={uniqueFuncs}
-                    selectedValues={excludedFunc}
-                    onFilterChange={setExcludedFunc}
-                    className="whitespace-nowrap"
-                  />
-                  <TableHead className="whitespace-nowrap text-xs">PDV</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loadingData ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground text-xs py-8">
-                      Carregando...
-                    </TableCell>
-                  </TableRow>
-                ) : pag.paginatedData.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground text-xs py-8">
-                      {transacoes.length === 0
-                        ? 'Nenhuma transação no período. Importe um extrato para começar.'
-                        : 'Nenhuma transação com os filtros selecionados.'}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  pag.paginatedData.map((t) => (
-                    <TableRow key={t.id}>
-                      <TableCell className="text-xs whitespace-nowrap">{fmtDatetime(t.data_hora)}</TableCell>
-                      <TableCell className="text-xs text-right whitespace-nowrap font-medium">
-                        {fmtBRL(t.valor_bruto)}
-                      </TableCell>
-                      <TableCell className="text-xs text-right whitespace-nowrap">
-                        {fmtBRL(t.tarifa)}
-                      </TableCell>
-                      <TableCell className="text-xs max-w-[160px] truncate">{t.nome_pagador || '—'}</TableCell>
-                      <TableCell className="text-xs max-w-[140px] truncate">{t.nome_funcionario || '—'}</TableCell>
-                      <TableCell className="text-xs whitespace-nowrap">{t.pdv || '—'}</TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-          <PaginationControls
-            page={pag.page}
-            totalPages={pag.totalPages}
-            pageSize={pag.pageSize}
-            totalItems={pag.totalItems}
-            startIndex={pag.startIndex}
-            endIndex={pag.endIndex}
-            onPageChange={pag.setPage}
-            onPageSizeChange={pag.handlePageSizeChange}
-            itemLabel="transações"
-            sessionKey="pix_pageSize"
-          />
-        </div>
-      </HorizontalScrollSync>
-
-      {/* Repasses section */}
-      <div className="rounded-md border">
-        <div className="flex items-center justify-between px-4 py-3">
-          <button
-            className="flex items-center gap-1.5 text-sm font-medium hover:text-foreground transition-colors"
-            onClick={() => setShowRepasses((v) => !v)}
-          >
-            {showRepasses
-              ? <ChevronDown className="w-4 h-4 text-muted-foreground" />
-              : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
-            <span>Repasses ({repasses.length})</span>
-          </button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 gap-1.5 text-xs"
-            disabled={recalculating || importing}
-            onClick={handleRecalcular}
-          >
-            <RefreshCw className={`w-3 h-3 ${recalculating ? 'animate-spin' : ''}`} />
-            {recalculating ? 'Calculando...' : 'Recalcular'}
-          </Button>
-        </div>
-
-        {showRepasses && (
-          <div className="border-t overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="whitespace-nowrap text-xs">Dia de Referência</TableHead>
-                  <TableHead className="whitespace-nowrap text-xs">Data/Hora Repasse</TableHead>
-                  <TableHead className="whitespace-nowrap text-xs text-right">Esperado (R$)</TableHead>
-                  <TableHead className="whitespace-nowrap text-xs text-right">Recebido (R$)</TableHead>
-                  <TableHead className="whitespace-nowrap text-xs text-right">Diferença (R$)</TableHead>
-                  <TableHead className="whitespace-nowrap text-xs">Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loadingData ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground text-xs py-6">
-                      Carregando...
-                    </TableCell>
-                  </TableRow>
-                ) : repasses.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground text-xs py-6">
-                      Nenhum repasse registrado. Importe um extrato para começar.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  repasses.map((r) => {
-                    const diff = r.valor - r.valor_esperado;
-                    const diffNonZero = Math.abs(diff) >= 0.01;
-                    const diffSign = diff > 0 ? '+' : '';
-                    return (
-                      <TableRow key={r.id}>
-                        <TableCell className="text-xs whitespace-nowrap font-medium">
-                          {fmtDate(r.dia_referencia)}
-                        </TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">
-                          {fmtDatetime(r.data_hora)}
-                        </TableCell>
-                        <TableCell className="text-xs text-right whitespace-nowrap">
-                          {fmtBRL(r.valor_esperado)}
-                        </TableCell>
-                        <TableCell className="text-xs text-right whitespace-nowrap font-medium">
-                          {fmtBRL(r.valor)}
-                        </TableCell>
-                        <TableCell className={`text-xs text-right whitespace-nowrap font-medium ${diffNonZero ? 'text-red-500' : 'text-muted-foreground'}`}>
-                          {diffNonZero ? `${diffSign}${fmtBRL(diff)}` : '—'}
-                        </TableCell>
-                        <TableCell>
-                          <RepasseStatusBadge status={r.status} />
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        )}
       </div>
 
       {/* Fechamento por Turno section */}
@@ -1248,6 +1162,184 @@ export default function ConciliacaoPix() {
           </div>
         )}
       </div>
+
+      {/* Repasses section */}
+      <div className="rounded-md border">
+        <div className="flex items-center justify-between px-4 py-3">
+          <button
+            className="flex items-center gap-1.5 text-sm font-medium hover:text-foreground transition-colors"
+            onClick={() => setShowRepasses((v) => !v)}
+          >
+            {showRepasses
+              ? <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+            <span>Repasses ({repasses.length})</span>
+          </button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1.5 text-xs"
+            disabled={recalculating || importing}
+            onClick={handleRecalcular}
+          >
+            <RefreshCw className={`w-3 h-3 ${recalculating ? 'animate-spin' : ''}`} />
+            {recalculating ? 'Calculando...' : 'Recalcular'}
+          </Button>
+        </div>
+
+        {showRepasses && (
+          <div className="border-t overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="whitespace-nowrap text-xs">Dia de Referência</TableHead>
+                  <TableHead className="whitespace-nowrap text-xs">Data/Hora Repasse</TableHead>
+                  <TableHead className="whitespace-nowrap text-xs text-right">Esperado (R$)</TableHead>
+                  <TableHead className="whitespace-nowrap text-xs text-right">Recebido (R$)</TableHead>
+                  <TableHead className="whitespace-nowrap text-xs text-right">Diferença (R$)</TableHead>
+                  <TableHead className="whitespace-nowrap text-xs">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loadingData ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground text-xs py-6">
+                      Carregando...
+                    </TableCell>
+                  </TableRow>
+                ) : repasses.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground text-xs py-6">
+                      Nenhum repasse registrado. Importe um extrato para começar.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  repasses.map((r) => {
+                    const diff = r.valor - r.valor_esperado;
+                    const diffNonZero = Math.abs(diff) >= 0.01;
+                    const diffSign = diff > 0 ? '+' : '';
+                    return (
+                      <TableRow key={r.id}>
+                        <TableCell className="text-xs whitespace-nowrap font-medium">
+                          {fmtDate(r.dia_referencia)}
+                        </TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          {fmtDatetime(r.data_hora)}
+                        </TableCell>
+                        <TableCell className="text-xs text-right whitespace-nowrap">
+                          {fmtBRL(r.valor_esperado)}
+                        </TableCell>
+                        <TableCell className="text-xs text-right whitespace-nowrap font-medium">
+                          {fmtBRL(r.valor)}
+                        </TableCell>
+                        <TableCell className={`text-xs text-right whitespace-nowrap font-medium ${diffNonZero ? 'text-red-500' : 'text-muted-foreground'}`}>
+                          {diffNonZero ? `${diffSign}${fmtBRL(diff)}` : '—'}
+                        </TableCell>
+                        <TableCell>
+                          <RepasseStatusBadge status={r.status} />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
+
+      {/* Extrato de Transações */}
+      <HorizontalScrollSync>
+        <div className="rounded-md border">
+          <div className="overflow-x-auto" data-table-scroll-viewport>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="whitespace-nowrap text-xs">Data/Hora</TableHead>
+                  <TableHead className="whitespace-nowrap text-xs text-right">Valor (R$)</TableHead>
+                  <TableHead className="whitespace-nowrap text-xs text-right">Tarifa (R$)</TableHead>
+                  <FilterableHead
+                    label={<span className="text-xs">Pagador</span>}
+                    sortActive={sortField === 'nome_pagador'}
+                    sortDir={sortField === 'nome_pagador' ? sortDir : null}
+                    onSort={() => toggleSort('nome_pagador')}
+                    uniqueValues={uniquePags}
+                    selectedValues={excludedPag}
+                    onFilterChange={setExcludedPag}
+                    className="whitespace-nowrap"
+                  />
+                  <FilterableHead
+                    label={<span className="text-xs">Funcionário</span>}
+                    sortActive={sortField === 'nome_funcionario'}
+                    sortDir={sortField === 'nome_funcionario' ? sortDir : null}
+                    onSort={() => toggleSort('nome_funcionario')}
+                    uniqueValues={uniqueFuncs}
+                    selectedValues={excludedFunc}
+                    onFilterChange={setExcludedFunc}
+                    className="whitespace-nowrap"
+                  />
+                  <TableHead className="whitespace-nowrap text-xs">PDV</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loadingData ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground text-xs py-8">
+                      Carregando...
+                    </TableCell>
+                  </TableRow>
+                ) : pag.paginatedData.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground text-xs py-8">
+                      {transacoes.length === 0
+                        ? 'Nenhuma transação no período. Importe um extrato para começar.'
+                        : 'Nenhuma transação com os filtros selecionados.'}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  pag.paginatedData.map((t) => {
+                    const turno = txTurnoMap.get(t.id);
+                    const rowBg = txTurnoBg(turno);
+                    return (
+                      <TableRow key={t.id} className={rowBg}>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          {fmtDatetime(t.data_hora)}
+                          {turno !== undefined && (
+                            turno === 'sem_turno'
+                              ? <span className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-orange-200 px-1 py-0.5 text-[10px] font-medium text-orange-800"><AlertTriangle className="h-2.5 w-2.5" />S/T</span>
+                              : <span className="ml-1.5 inline-block rounded bg-black/10 px-1 py-0.5 text-[10px] font-medium">T{turno}</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs text-right whitespace-nowrap font-medium">
+                          {fmtBRL(t.valor_bruto)}
+                        </TableCell>
+                        <TableCell className="text-xs text-right whitespace-nowrap">
+                          {fmtBRL(t.tarifa)}
+                        </TableCell>
+                        <TableCell className="text-xs max-w-[160px] truncate">{t.nome_pagador || '—'}</TableCell>
+                        <TableCell className="text-xs max-w-[140px] truncate">{t.nome_funcionario || '—'}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">{t.pdv || '—'}</TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+          <PaginationControls
+            page={pag.page}
+            totalPages={pag.totalPages}
+            pageSize={pag.pageSize}
+            totalItems={pag.totalItems}
+            startIndex={pag.startIndex}
+            endIndex={pag.endIndex}
+            onPageChange={pag.setPage}
+            onPageSizeChange={pag.handlePageSizeChange}
+            itemLabel="transações"
+            sessionKey="pix_pageSize"
+          />
+        </div>
+      </HorizontalScrollSync>
 
       {/* Importações section */}
       <div className="rounded-md border">
