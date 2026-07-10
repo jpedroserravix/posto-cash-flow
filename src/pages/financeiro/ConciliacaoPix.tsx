@@ -1,12 +1,57 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useDateFilter } from '@/hooks/useDateFilter';
+import { usePagination } from '@/hooks/usePagination';
+import { DateFilter } from '@/components/DateFilter';
+import { FilterableHead } from '@/components/FilterableHead';
+import { PaginationControls } from '@/components/PaginationControls';
+import { HorizontalScrollSync } from '@/components/HorizontalScrollSync';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
 import { toast } from 'sonner';
-import { QrCode, Upload } from 'lucide-react';
+import { openInNewTab } from '@/lib/utils';
+import { QrCode, Upload, Download, ChevronDown, ChevronRight, TrendingUp, Hash, Receipt } from 'lucide-react';
 
 // ─── types ───────────────────────────────────────────────────────────────────
+
+interface PixTransacao {
+  id: string;
+  transacao_id: string;
+  data_hora: string;
+  valor_bruto: number;
+  tarifa: number;
+  tarifa_esperada: number;
+  nome_pagador: string;
+  nome_funcionario: string;
+  pdv: string;
+}
+
+interface PixImportacao {
+  id: string;
+  file_path: string;
+  file_name: string;
+  periodo_inicio: string;
+  periodo_fim: string;
+  total_transacoes: number;
+  criado_em: string;
+  criado_por_nome: string | null;
+}
+
+interface PixConfig {
+  tarifa_percentual: number;
+  tarifa_minima: number;
+}
+
+interface ParseResult {
+  vendas: PixVenda[];
+  repasses: PixRepasse[];
+  error?: string;
+}
 
 interface PixVenda {
   transacao_id: string;
@@ -25,18 +70,34 @@ interface PixRepasse {
   dia_referencia: string;
 }
 
-interface PixConfig {
-  tarifa_percentual: number;
-  tarifa_minima: number;
-}
-
-interface ParseResult {
-  vendas: PixVenda[];
-  repasses: PixRepasse[];
-  error?: string;
-}
+type SortDir = 'asc' | 'desc' | null;
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
+
+function safeNum(v: unknown): number {
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string') return parseFloat(v) || 0;
+  return 0;
+}
+
+function fmtBRL(v: number): string {
+  return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtDatetime(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
+function fmtDate(iso: string): string {
+  if (!iso) return '—';
+  const [y, m, d] = iso.split('T')[0].split('-');
+  return `${d}/${m}/${y}`;
+}
 
 function excelDateToISO(val: unknown): string | null {
   if (val instanceof Date && !isNaN(val.getTime())) {
@@ -48,13 +109,10 @@ function excelDateToISO(val: unknown): string | null {
     const s = String(val.getSeconds()).padStart(2, '0');
     return `${Y}-${M}-${D}T${h}:${m}:${s}`;
   }
-  if (typeof val === 'string' && val.trim()) {
-    return val.trim().replace(' ', 'T');
-  }
+  if (typeof val === 'string' && val.trim()) return val.trim().replace(' ', 'T');
   return null;
 }
 
-// Returns YYYY-MM-DD of the day before the given ISO datetime string.
 function previousDay(isoDatetime: string): string {
   const [y, m, d] = isoDatetime.split('T')[0].split('-').map(Number);
   const date = new Date(y, m - 1, d);
@@ -70,7 +128,7 @@ function calcTarifaEsperada(valorBruto: number, cfg: PixConfig): number {
   return Math.max(cfg.tarifa_minima, valorBruto * cfg.tarifa_percentual / 100);
 }
 
-// ─── parser ──────────────────────────────────────────────────────────────────
+// ─── xlsx parser ─────────────────────────────────────────────────────────────
 
 function parsePixXLSX(buffer: ArrayBuffer): ParseResult {
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
@@ -103,7 +161,7 @@ function parsePixXLSX(buffer: ArrayBuffer): ParseResult {
     };
   }
 
-  const tarifaMap = new Map<string, number>(); // transacao_id → valor absoluto da tarifa
+  const tarifaMap = new Map<string, number>();
   const vendaRows: Omit<PixVenda, 'tarifa_esperada'>[] = [];
   const repasses: PixRepasse[] = [];
 
@@ -157,16 +215,118 @@ function parsePixXLSX(buffer: ArrayBuffer): ParseResult {
 export default function ConciliacaoPix() {
   const { selectedPostoId, nome } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── import state ───────────────────────────────────────────────────────────
   const [importing, setImporting] = useState(false);
 
-  if (!selectedPostoId) {
-    return (
-      <p className="text-muted-foreground text-center py-8">
-        Selecione um posto para continuar.
-      </p>
+  // ── data state ─────────────────────────────────────────────────────────────
+  const [transacoes,  setTransacoes]  = useState<PixTransacao[]>([]);
+  const [importacoes, setImportacoes] = useState<PixImportacao[]>([]);
+  const [loadingData, setLoadingData] = useState(false);
+  const [showImportacoes, setShowImportacoes] = useState(false);
+
+  // ── date filter ────────────────────────────────────────────────────────────
+  const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter('thisMonth');
+
+  // ── sort/filter state ──────────────────────────────────────────────────────
+  const [sortField, setSortField] = useState<'nome_funcionario' | 'nome_pagador' | null>(null);
+  const [sortDir,   setSortDir]   = useState<SortDir>(null);
+  const [excludedFunc, setExcludedFunc] = useState<Set<string>>(new Set());
+  const [excludedPag,  setExcludedPag]  = useState<Set<string>>(new Set());
+
+  // ── data loading ───────────────────────────────────────────────────────────
+  const loadData = useCallback(async () => {
+    if (!selectedPostoId) return;
+    setLoadingData(true);
+    const [txRes, impRes] = await Promise.all([
+      (supabase as any)
+        .from('pix_transacoes')
+        .select('id, transacao_id, data_hora, valor_bruto, tarifa, tarifa_esperada, nome_pagador, nome_funcionario, pdv')
+        .eq('posto_id', selectedPostoId)
+        .gte('data_hora', dfRange.start + 'T00:00:00')
+        .lte('data_hora', dfRange.end + 'T23:59:59')
+        .order('data_hora', { ascending: false }),
+      (supabase as any)
+        .from('pix_importacoes')
+        .select('id, file_path, file_name, periodo_inicio, periodo_fim, total_transacoes, criado_em, criado_por_nome')
+        .eq('posto_id', selectedPostoId)
+        .order('criado_em', { ascending: false }),
+    ]);
+
+    if (txRes.error) toast.error('Erro ao carregar transações: ' + txRes.error.message);
+    setTransacoes(
+      (txRes.data || []).map((t: any) => ({
+        id:               t.id,
+        transacao_id:     t.transacao_id,
+        data_hora:        t.data_hora,
+        valor_bruto:      safeNum(t.valor_bruto),
+        tarifa:           safeNum(t.tarifa),
+        tarifa_esperada:  safeNum(t.tarifa_esperada),
+        nome_pagador:     t.nome_pagador     || '',
+        nome_funcionario: t.nome_funcionario || '',
+        pdv:              t.pdv              || '',
+      })),
     );
+
+    if (impRes.error) toast.error('Erro ao carregar importações: ' + impRes.error.message);
+    setImportacoes(impRes.data || []);
+
+    setLoadingData(false);
+  }, [selectedPostoId, dfRange.start, dfRange.end]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // ── derived data ───────────────────────────────────────────────────────────
+  const uniqueFuncs = useMemo(
+    () => [...new Set(transacoes.map((t) => t.nome_funcionario))].sort(),
+    [transacoes],
+  );
+  const uniquePags = useMemo(
+    () => [...new Set(transacoes.map((t) => t.nome_pagador))].sort(),
+    [transacoes],
+  );
+
+  const filteredData = useMemo(() => {
+    let data = transacoes;
+    if (excludedFunc.size > 0) data = data.filter((t) => !excludedFunc.has(t.nome_funcionario));
+    if (excludedPag.size  > 0) data = data.filter((t) => !excludedPag.has(t.nome_pagador));
+    if (sortField && sortDir) {
+      data = [...data].sort((a, b) => {
+        const va = String(a[sortField] || '').toLowerCase();
+        const vb = String(b[sortField] || '').toLowerCase();
+        return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+      });
+    }
+    return data;
+  }, [transacoes, excludedFunc, excludedPag, sortField, sortDir]);
+
+  const pag = usePagination(filteredData, [excludedFunc, excludedPag, sortField, sortDir, dfRange]);
+
+  // Summary cards computed from ALL date-filtered rows (before FilterableHead filters)
+  const totalVendas   = useMemo(() => transacoes.reduce((s, t) => s + t.valor_bruto, 0), [transacoes]);
+  const totalTarifas  = useMemo(() => transacoes.reduce((s, t) => s + t.tarifa,      0), [transacoes]);
+  const qtdTransacoes = transacoes.length;
+
+  // ── sort toggle ────────────────────────────────────────────────────────────
+  function toggleSort(field: 'nome_funcionario' | 'nome_pagador') {
+    if (sortField !== field) { setSortField(field); setSortDir('asc'); }
+    else if (sortDir === 'asc') setSortDir('desc');
+    else { setSortField(null); setSortDir(null); }
   }
 
+  // ── download importação ────────────────────────────────────────────────────
+  async function handleDownload(filePath: string) {
+    const { data, error } = await supabase.storage
+      .from('pix-extratos')
+      .createSignedUrl(filePath, 60);
+    if (error || !data?.signedUrl) {
+      toast.error('Erro ao gerar link de download');
+      return;
+    }
+    openInNewTab(data.signedUrl);
+  }
+
+  // ── file change ────────────────────────────────────────────────────────────
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -174,10 +334,10 @@ export default function ConciliacaoPix() {
     doImport(file);
   }
 
+  // ── import ─────────────────────────────────────────────────────────────────
   async function doImport(file: File) {
     setImporting(true);
     try {
-      // 1. Parse XLSX
       const buffer = await file.arrayBuffer();
       const { vendas, repasses, error: parseError } = parsePixXLSX(buffer);
 
@@ -187,7 +347,6 @@ export default function ConciliacaoPix() {
         return;
       }
 
-      // 2. Load pix_config (fallback to defaults if posto não tem configuração)
       const { data: cfgRaw } = await (supabase as any)
         .from('pix_config')
         .select('tarifa_percentual, tarifa_minima')
@@ -198,21 +357,18 @@ export default function ConciliacaoPix() {
         tarifa_minima:     cfgRaw?.tarifa_minima     ?? 0.15,
       };
 
-      // 3. Compute tarifa_esperada
       const vendasFinal = vendas.map((v) => ({
         ...v,
         tarifa_esperada: calcTarifaEsperada(v.valor_bruto, cfg),
       }));
 
-      // 4. Upload arquivo para o Storage
-      const safeName  = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const filePath  = `${selectedPostoId}/${Date.now()}_${safeName}`;
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const filePath = `${selectedPostoId}/${Date.now()}_${safeName}`;
       const { error: uploadError } = await supabase.storage
         .from('pix-extratos')
         .upload(filePath, file, { contentType: file.type });
       if (uploadError) throw new Error('Erro ao enviar arquivo: ' + uploadError.message);
 
-      // 5. Inserir pix_importacoes e obter ID
       const allDates = [
         ...vendasFinal.map((v) => v.data_hora.split('T')[0]),
         ...repasses.map((r) => r.data_hora.split('T')[0]),
@@ -233,7 +389,6 @@ export default function ConciliacaoPix() {
       if (importError) throw new Error('Erro ao registrar importação: ' + importError.message);
       const importacaoId: string = importRow.id;
 
-      // 6. Contar transações já existentes (para o toast)
       const allTxIds = vendasFinal.map((v) => v.transacao_id);
       let existingCount = 0;
       if (allTxIds.length > 0) {
@@ -244,7 +399,6 @@ export default function ConciliacaoPix() {
         existingCount = (existing || []).length;
       }
 
-      // 7. Upsert pix_transacoes (ignoreDuplicates mantém o importacao_id original)
       if (vendasFinal.length > 0) {
         const { error: txError } = await (supabase as any)
           .from('pix_transacoes')
@@ -266,7 +420,6 @@ export default function ConciliacaoPix() {
         if (txError) throw new Error('Erro ao salvar transações: ' + txError.message);
       }
 
-      // 8. Contar repasses já existentes (para o toast)
       let existingRepassesCount = 0;
       if (repasses.length > 0) {
         const { data: existingRep } = await (supabase as any)
@@ -277,7 +430,6 @@ export default function ConciliacaoPix() {
         existingRepassesCount = (existingRep || []).length;
       }
 
-      // 9. Upsert pix_repasses
       if (repasses.length > 0) {
         const { error: repError } = await (supabase as any)
           .from('pix_repasses')
@@ -295,16 +447,17 @@ export default function ConciliacaoPix() {
         if (repError) throw new Error('Erro ao salvar repasses: ' + repError.message);
       }
 
-      // 10. Toast resultado
-      const novas       = vendasFinal.length - existingCount;
-      const jaExistiam  = existingCount;
-      const novosRep    = repasses.length - existingRepassesCount;
+      const novas      = vendasFinal.length - existingCount;
+      const jaExistiam = existingCount;
+      const novosRep   = repasses.length - existingRepassesCount;
 
       toast.success(
         `${novas} transaç${novas === 1 ? 'ão nova' : 'ões novas'}` +
         (jaExistiam > 0 ? `, ${jaExistiam} já existiam` : '') +
         `, ${novosRep} repasse${novosRep === 1 ? '' : 's'}`,
       );
+
+      loadData();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Erro inesperado na importação');
     } finally {
@@ -312,8 +465,20 @@ export default function ConciliacaoPix() {
     }
   }
 
+  // ── empty state ────────────────────────────────────────────────────────────
+  if (!selectedPostoId) {
+    return (
+      <p className="text-muted-foreground text-center py-8">
+        Selecione um posto para continuar.
+      </p>
+    );
+  }
+
+  // ── render ─────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-4">
+
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <QrCode className="w-5 h-5 text-muted-foreground" />
@@ -335,6 +500,187 @@ export default function ConciliacaoPix() {
         className="hidden"
         onChange={handleFileChange}
       />
+
+      {/* Date filter */}
+      <DateFilter
+        preset={dfPreset}
+        range={dfRange}
+        onChange={setDfPreset}
+      />
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Card>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 shrink-0">
+                <TrendingUp className="h-4 w-4 text-primary" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">Total de Vendas Pix</p>
+                <p className="text-lg font-bold leading-tight">R$ {fmtBRL(totalVendas)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/10 shrink-0">
+                <Hash className="h-4 w-4 text-blue-500" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">Transações</p>
+                <p className="text-lg font-bold leading-tight">{qtdTransacoes}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-500/10 shrink-0">
+                <Receipt className="h-4 w-4 text-orange-500" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">Total de Tarifas</p>
+                <p className="text-lg font-bold leading-tight">R$ {fmtBRL(totalTarifas)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Transactions table */}
+      <HorizontalScrollSync>
+        <div className="rounded-md border">
+          <div className="overflow-x-auto" data-table-scroll-viewport>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="whitespace-nowrap text-xs">Data/Hora</TableHead>
+                  <TableHead className="whitespace-nowrap text-xs text-right">Valor (R$)</TableHead>
+                  <TableHead className="whitespace-nowrap text-xs text-right">Tarifa (R$)</TableHead>
+                  <FilterableHead
+                    label={<span className="text-xs">Pagador</span>}
+                    sortActive={sortField === 'nome_pagador'}
+                    sortDir={sortField === 'nome_pagador' ? sortDir : null}
+                    onSort={() => toggleSort('nome_pagador')}
+                    uniqueValues={uniquePags}
+                    selectedValues={excludedPag}
+                    onFilterChange={setExcludedPag}
+                    className="whitespace-nowrap"
+                  />
+                  <FilterableHead
+                    label={<span className="text-xs">Funcionário</span>}
+                    sortActive={sortField === 'nome_funcionario'}
+                    sortDir={sortField === 'nome_funcionario' ? sortDir : null}
+                    onSort={() => toggleSort('nome_funcionario')}
+                    uniqueValues={uniqueFuncs}
+                    selectedValues={excludedFunc}
+                    onFilterChange={setExcludedFunc}
+                    className="whitespace-nowrap"
+                  />
+                  <TableHead className="whitespace-nowrap text-xs">PDV</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loadingData ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground text-xs py-8">
+                      Carregando...
+                    </TableCell>
+                  </TableRow>
+                ) : pag.paginatedData.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground text-xs py-8">
+                      {transacoes.length === 0
+                        ? 'Nenhuma transação no período. Importe um extrato para começar.'
+                        : 'Nenhuma transação com os filtros selecionados.'}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  pag.paginatedData.map((t) => (
+                    <TableRow key={t.id}>
+                      <TableCell className="text-xs whitespace-nowrap">{fmtDatetime(t.data_hora)}</TableCell>
+                      <TableCell className="text-xs text-right whitespace-nowrap font-medium">
+                        {fmtBRL(t.valor_bruto)}
+                      </TableCell>
+                      <TableCell className="text-xs text-right whitespace-nowrap">
+                        {fmtBRL(t.tarifa)}
+                      </TableCell>
+                      <TableCell className="text-xs max-w-[160px] truncate">{t.nome_pagador || '—'}</TableCell>
+                      <TableCell className="text-xs max-w-[140px] truncate">{t.nome_funcionario || '—'}</TableCell>
+                      <TableCell className="text-xs whitespace-nowrap">{t.pdv || '—'}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+          <PaginationControls
+            page={pag.page}
+            totalPages={pag.totalPages}
+            pageSize={pag.pageSize}
+            totalItems={pag.totalItems}
+            startIndex={pag.startIndex}
+            endIndex={pag.endIndex}
+            onPageChange={pag.setPage}
+            onPageSizeChange={pag.handlePageSizeChange}
+            itemLabel="transações"
+            sessionKey="pix_pageSize"
+          />
+        </div>
+      </HorizontalScrollSync>
+
+      {/* Importações section */}
+      <div className="rounded-md border">
+        <button
+          className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/50 transition-colors"
+          onClick={() => setShowImportacoes((v) => !v)}
+        >
+          <span>Importações ({importacoes.length})</span>
+          {showImportacoes
+            ? <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+        </button>
+        {showImportacoes && (
+          <div className="border-t divide-y">
+            {importacoes.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-6">
+                Nenhuma importação registrada.
+              </p>
+            ) : (
+              importacoes.map((imp) => (
+                <div key={imp.id} className="flex items-start justify-between gap-4 px-4 py-3">
+                  <div className="flex-1 min-w-0 space-y-0.5">
+                    <p className="text-xs font-medium">{imp.file_name}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Período: {fmtDate(imp.periodo_inicio)} – {fmtDate(imp.periodo_fim)}
+                      {' · '}{imp.total_transacoes} transaç{imp.total_transacoes === 1 ? 'ão' : 'ões'}
+                      {imp.criado_por_nome ? ` · ${imp.criado_por_nome}` : ''}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Importado em {fmtDatetime(imp.criado_em)}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1.5 text-xs shrink-0"
+                    onClick={() => handleDownload(imp.file_path)}
+                    title="Baixar arquivo original"
+                  >
+                    <Download className="w-3 h-3" />
+                    Baixar
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+
     </div>
   );
 }
