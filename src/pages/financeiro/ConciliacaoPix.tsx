@@ -609,6 +609,7 @@ export default function ConciliacaoPix() {
             numero_turno:    t.numero_turno,
             hora_corte:      t.hora_corte,
             total_calculado: t.total_calculado,
+            total_tarifa:    t.total_tarifa ?? 0,
             status:          t.status,
             observacao:      t.observacao,
           })),

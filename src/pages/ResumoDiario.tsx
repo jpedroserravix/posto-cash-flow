@@ -30,6 +30,9 @@ interface TurnoRow {
   cofreBrinks: number;
   manual: number;
   pix?: number;
+  pixTarifa?: number;
+  pixTurnoId?: string;
+  pixStatus?: string;
   total: number;
 }
 
@@ -85,6 +88,7 @@ interface GroupData {
   totalBrinks: number;
   totalManual: number;
   totalPix: number;
+  totalPixTarifa: number;
   totalGeral: number;
   conferido: string;
   observacao: string;
@@ -207,13 +211,13 @@ export default function ResumoDiario() {
     ]);
 
     // Segunda query: turnos dos fechamentos Pix (por lista de ids, não por card)
-    // pixMap: "data|cc|numero_turno" → total_calculado
-    const pixMap = new Map<string, number>();
+    // pixMap: "data|cc|numero_turno" → { total_calculado, total_tarifa, id, status }
+    const pixMap = new Map<string, { total_calculado: number; total_tarifa: number; id: string; status: string }>();
     const pixFechIds = (pixFechData as any[] ?? []).map((f: any) => f.id as string);
     if (pixFechIds.length > 0) {
       const { data: pixTurnosData } = await (supabase as any)
         .from('pix_fechamentos_turnos')
-        .select('fechamento_id, numero_turno, total_calculado')
+        .select('id, fechamento_id, numero_turno, total_calculado, total_tarifa, status')
         .in('fechamento_id', pixFechIds);
 
       const fechIdToKey = new Map<string, string>();
@@ -221,7 +225,12 @@ export default function ResumoDiario() {
 
       (pixTurnosData as any[] ?? []).forEach((t: any) => {
         const key = fechIdToKey.get(t.fechamento_id);
-        if (key) pixMap.set(`${key}|${t.numero_turno}`, Number(t.total_calculado) || 0);
+        if (key) pixMap.set(`${key}|${t.numero_turno}`, {
+          total_calculado: Number(t.total_calculado) || 0,
+          total_tarifa: Number(t.total_tarifa) || 0,
+          id: t.id as string,
+          status: t.status as string,
+        });
       });
     }
 
@@ -256,8 +265,17 @@ export default function ResumoDiario() {
       const gKey = `${data}|${cc}`;
       const arr = groupMap.get(gKey) || [];
       const turnoNum = parseTurnoNum(turno);
-      const pix = turnoNum !== null ? pixMap.get(`${gKey}|${turnoNum}`) : undefined;
-      arr.push({ turno, cofreBrinks: val.brinks, manual: val.manual, pix, total: val.brinks + val.manual });
+      const pixEntry = turnoNum !== null ? pixMap.get(`${gKey}|${turnoNum}`) : undefined;
+      arr.push({
+        turno,
+        cofreBrinks: val.brinks,
+        manual: val.manual,
+        pix: pixEntry?.total_calculado,
+        pixTarifa: pixEntry?.total_tarifa,
+        pixTurnoId: pixEntry?.id,
+        pixStatus: pixEntry?.status,
+        total: val.brinks + val.manual,
+      });
       groupMap.set(gKey, arr);
     });
 
@@ -303,9 +321,10 @@ export default function ResumoDiario() {
       .map(([key, turnos]) => {
         const [data, centroCusto] = key.split('|');
         const sorted = turnos.sort((a, b) => a.turno.localeCompare(b.turno));
-        const totalBrinks = sorted.reduce((s, t) => s + t.cofreBrinks, 0);
-        const totalManual = sorted.reduce((s, t) => s + t.manual, 0);
-        const totalPix    = sorted.reduce((s, t) => s + (t.pix ?? 0), 0);
+        const totalBrinks    = sorted.reduce((s, t) => s + t.cofreBrinks, 0);
+        const totalManual    = sorted.reduce((s, t) => s + t.manual, 0);
+        const totalPix       = sorted.reduce((s, t) => s + (t.pix ?? 0), 0);
+        const totalPixTarifa = sorted.reduce((s, t) => s + (t.pixTarifa ?? 0), 0);
         const conf = confMap.get(key);
         return {
           data,
@@ -314,6 +333,7 @@ export default function ResumoDiario() {
           totalBrinks,
           totalManual,
           totalPix,
+          totalPixTarifa,
           totalGeral: totalBrinks + totalManual,
           conferido: conf?.conferido || 'PENDENTE',
           observacao: conf?.observacao || '',
@@ -519,6 +539,33 @@ export default function ResumoDiario() {
             : g,
         ));
       }
+    }
+  };
+
+  // ─── pix turno checkbox toggle ─────────────────────────────────────────────
+
+  const handleTogglePixTurno = async (group: GroupData, turno: TurnoRow) => {
+    if (!turno.pixTurnoId) return;
+    const newStatus = turno.pixStatus === 'conferido' ? 'pendente' : 'conferido';
+
+    setGroups((prev) => prev.map((g) =>
+      g.data === group.data && g.centroCusto === group.centroCusto
+        ? { ...g, turnos: g.turnos.map((t) => t.turno === turno.turno ? { ...t, pixStatus: newStatus } : t) }
+        : g,
+    ));
+
+    const { error } = await (supabase as any)
+      .from('pix_fechamentos_turnos')
+      .update({ status: newStatus })
+      .eq('id', turno.pixTurnoId);
+
+    if (error) {
+      toast.error('Erro ao salvar status Pix');
+      setGroups((prev) => prev.map((g) =>
+        g.data === group.data && g.centroCusto === group.centroCusto
+          ? { ...g, turnos: g.turnos.map((t) => t.turno === turno.turno ? { ...t, pixStatus: turno.pixStatus } : t) }
+          : g,
+      ));
     }
   };
 
@@ -786,9 +833,10 @@ export default function ResumoDiario() {
                             <TableHead className="text-xs">Turno</TableHead>
                             <TableHead className="text-right text-xs">Brinks</TableHead>
                             <TableHead className="text-right text-xs">Manual</TableHead>
-                            <TableHead className="text-right text-xs text-primary">Pix</TableHead>
-                            <TableHead className="text-right text-xs">Total</TableHead>
+                            <TableHead className="text-right text-xs">Total Dinheiro</TableHead>
                             <TableHead className="text-center text-xs w-8" title="Conferido">✓</TableHead>
+                            <TableHead className="text-right text-xs text-primary">Pix</TableHead>
+                            <TableHead className="text-center text-xs w-8" title="Pix Conferido">✓</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -797,14 +845,29 @@ export default function ResumoDiario() {
                               <TableCell className="py-1 text-xs">{turno.turno}</TableCell>
                               <TableCell className="py-1 text-right text-xs">{fmt(turno.cofreBrinks)}</TableCell>
                               <TableCell className="py-1 text-right text-xs">{fmt(turno.manual)}</TableCell>
-                              <TableCell className="py-1 text-right text-xs text-primary whitespace-nowrap">
-                                {turno.pix !== undefined ? fmt(turno.pix) : '—'}
-                              </TableCell>
                               <TableCell className="py-1 text-right text-xs font-medium">{fmt(turno.total)}</TableCell>
                               <TableCell className="py-1 text-center">
                                 <Checkbox
                                   checked={group.turnosConferidos.includes(turno.turno)}
                                   onCheckedChange={() => handleToggleTurno(group, turno.turno)}
+                                  className="h-4 w-4"
+                                />
+                              </TableCell>
+                              <TableCell className="py-1 text-right text-xs text-primary whitespace-nowrap">
+                                {turno.pix !== undefined ? (
+                                  <span>
+                                    {fmt(turno.pix)}
+                                    {turno.pixTarifa !== undefined && turno.pixTarifa > 0 && (
+                                      <span className="block text-[10px] text-muted-foreground">-{fmt(turno.pixTarifa)}</span>
+                                    )}
+                                  </span>
+                                ) : '—'}
+                              </TableCell>
+                              <TableCell className="py-1 text-center">
+                                <Checkbox
+                                  checked={turno.pixStatus === 'conferido'}
+                                  onCheckedChange={() => handleTogglePixTurno(group, turno)}
+                                  disabled={!turno.pixTurnoId}
                                   className="h-4 w-4"
                                 />
                               </TableCell>
@@ -814,12 +877,30 @@ export default function ResumoDiario() {
                             <TableCell className="py-1 text-xs font-bold">Soma</TableCell>
                             <TableCell className="py-1 text-right text-xs font-bold">{fmt(group.totalBrinks)}</TableCell>
                             <TableCell className="py-1 text-right text-xs font-bold">{fmt(group.totalManual)}</TableCell>
-                            <TableCell className="py-1 text-right text-xs font-bold text-primary whitespace-nowrap">
-                              {group.totalPix > 0 ? fmt(group.totalPix) : '—'}
-                            </TableCell>
                             <TableCell className="py-1 text-right text-xs font-bold">{fmt(group.totalGeral)}</TableCell>
                             <TableCell />
+                            <TableCell className="py-1 text-right text-xs font-bold text-primary whitespace-nowrap">
+                              {group.totalPix > 0 ? (
+                                <span>
+                                  {fmt(group.totalPix)}
+                                  {group.totalPixTarifa > 0 && (
+                                    <span className="block text-[10px] text-muted-foreground">-{fmt(group.totalPixTarifa)}</span>
+                                  )}
+                                </span>
+                              ) : '—'}
+                            </TableCell>
+                            <TableCell />
                           </TableRow>
+                          {group.totalPix > 0 && (
+                            <TableRow>
+                              <TableCell colSpan={7} className="py-1 text-right text-xs text-primary">
+                                Líquido Pix a receber:{' '}
+                                <span className="font-semibold">
+                                  {fmt(group.totalPix - group.totalPixTarifa)}
+                                </span>
+                              </TableCell>
+                            </TableRow>
+                          )}
                         </TableBody>
                       </Table>
                       </div>
