@@ -27,7 +27,11 @@ import {
 import {
   QrCode, Upload, Download, ChevronDown, ChevronRight,
   TrendingUp, Hash, Receipt, RefreshCw, Plus, AlertTriangle, Trash2,
+  Copy, Check, FileCheck2,
 } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from '@/components/ui/dialog';
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
@@ -103,6 +107,33 @@ interface FechamentoTurno {
 }
 
 type SortDir = 'asc' | 'desc' | null;
+
+// ─── quality types ────────────────────────────────────────────────────────────
+
+interface QualityRow {
+  docRef: string;
+  valor: number;
+  taxa: number;
+  cliente: string;
+  nomePagador: string;
+}
+
+interface SobrandoItem {
+  quality: QualityRow;
+  dbTx?: {
+    data_hora: string;
+    nome_funcionario: string;
+    turno: number | 'sem_turno' | 'outro_dia' | null;
+  };
+  notFound: boolean;
+}
+
+interface QualityCompareResult {
+  faltamNoCaixa: PixTransacao[];
+  sobrando: SobrandoItem[];
+  matchCount: number;
+  totalValorMatch: number;
+}
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -289,6 +320,59 @@ function parsePixXLSX(buffer: ArrayBuffer): ParseResult {
   return { vendas, repasses, cnpj: cnpjFromFile };
 }
 
+// ─── quality xlsx parser ──────────────────────────────────────────────────────
+// Formato: Conta Origem | Documento de Referência (UUID) | Cliente | Conferido |
+//          Conta | Plano de Conta | Valor ("R$ 1.234,56") | Taxa | Tipo | …
+
+function parseQualityXLS(buffer: ArrayBuffer): { rows: QualityRow[]; error?: string } {
+  const wb = XLSX.read(buffer, { type: 'array', raw: false });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const data = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: false });
+
+  if (data.length < 2) return { rows: [], error: 'Planilha vazia.' };
+
+  const headers = (data[0] as unknown[]).map((h) => String(h ?? '').trim().toUpperCase());
+  const col = (keyword: string) => headers.findIndex((h) => h.includes(keyword));
+
+  const docRefIdx  = col('DOCUMENTO');
+  const valorIdx   = col('VALOR');
+  const taxaIdx    = col('TAXA');
+  const tipoIdx    = col('TIPO');
+  const clienteIdx = col('CLIENTE');
+  const nomePagIdx = col('NOME PAGADOR');
+
+  if (docRefIdx === -1 || valorIdx === -1 || tipoIdx === -1) {
+    return {
+      rows: [],
+      error: 'Colunas não encontradas. Verifique se é o relatório Quality correto (deve conter Documento de Referência, Valor e Tipo).',
+    };
+  }
+
+  const parseBRL = (v: unknown): number => {
+    if (typeof v === 'number') return v;
+    const s = String(v ?? '').replace(/R\$\s*/g, '').replace(/\./g, '').replace(',', '.').trim();
+    return parseFloat(s) || 0;
+  };
+
+  const rows: QualityRow[] = [];
+  for (const row of (data as unknown[][]).slice(1)) {
+    if (!Array.isArray(row) || row.length === 0) continue;
+    const tipo = String(row[tipoIdx] ?? '').trim().toLowerCase();
+    if (tipo !== 'crédito' && tipo !== 'credito') continue;
+    const docRef = String(row[docRefIdx] ?? '').trim();
+    if (!docRef) continue;
+    rows.push({
+      docRef,
+      valor:      parseBRL(row[valorIdx]),
+      taxa:       taxaIdx    >= 0 ? parseBRL(row[taxaIdx])                       : 0,
+      cliente:    clienteIdx >= 0 ? String(row[clienteIdx] ?? '').trim()         : '',
+      nomePagador: nomePagIdx >= 0 ? String(row[nomePagIdx] ?? '').trim()        : '',
+    });
+  }
+
+  return { rows };
+}
+
 // ─── sub-component: status badge ─────────────────────────────────────────────
 
 function RepasseStatusBadge({ status }: { status: PixRepasseRow['status'] }) {
@@ -301,11 +385,34 @@ function RepasseStatusBadge({ status }: { status: PixRepasseRow['status'] }) {
   return <Badge className={`${cls} text-[10px] whitespace-nowrap`}>{label}</Badge>;
 }
 
+// ─── sub-component: copy button ──────────────────────────────────────────────
+
+function CopyBtn({ value }: { value: string | null | undefined }) {
+  const [copied, setCopied] = useState(false);
+  if (!value) return null;
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(value);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+      title="Copiar"
+      className="ml-1 text-muted-foreground hover:text-foreground transition-colors shrink-0"
+    >
+      {copied
+        ? <Check className="w-3.5 h-3.5 text-green-500" />
+        : <Copy className="w-3.5 h-3.5" />}
+    </button>
+  );
+}
+
 // ─── component ───────────────────────────────────────────────────────────────
 
 export default function ConciliacaoPix() {
   const { selectedPostoId, nome } = useAuth();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef   = useRef<HTMLInputElement>(null);
+  const qualityFileRef = useRef<HTMLInputElement>(null);
 
   // ── import / recalc state ──────────────────────────────────────────────────
   const [importing,     setImporting]     = useState(false);
@@ -331,6 +438,11 @@ export default function ConciliacaoPix() {
   const [turnosDirty,       setTurnosDirty]       = useState(false);
   const [cortes,            setCortes]            = useState<string[]>(['', '', '']);
   const [semTurno,          setSemTurno]          = useState<{ count: number; valor: number } | null>(null);
+
+  // ── quality dialog state ───────────────────────────────────────────────────
+  const [qualityDialogTurno, setQualityDialogTurno] = useState<FechamentoTurno | null>(null);
+  const [qualityResult,      setQualityResult]      = useState<QualityCompareResult | null>(null);
+  const [qualityLoading,     setQualityLoading]     = useState(false);
 
   // ── dialogs de CNPJ e exclusão ─────────────────────────────────────────────
   type CnpjMismatch = { fileCnpj: string; postoNome: string; postoCnpj: string };
@@ -1002,14 +1114,99 @@ export default function ConciliacaoPix() {
     }
   }
 
+  // ── conferência quality ────────────────────────────────────────────────────
+
+  async function compareQuality(turno: FechamentoTurno, qualityRows: QualityRow[]) {
+    // Set A: transacao_id → PixTransacao para o turno selecionado (estado atual)
+    const setA = new Map<string, PixTransacao>();
+    for (const tx of transacoes) {
+      if (txTurnoMap.get(tx.id) === turno.numero_turno) {
+        setA.set(tx.transacao_id, tx);
+      }
+    }
+
+    // Set B: docRef → QualityRow (apenas Crédito, já filtrado no parse)
+    const setB = new Map<string, QualityRow>();
+    for (const row of qualityRows) setB.set(row.docRef, row);
+
+    // A − B: no extrato mas ausente no Quality
+    const faltamNoCaixa: PixTransacao[] = [];
+    for (const [id, tx] of setA) {
+      if (!setB.has(id)) faltamNoCaixa.push(tx);
+    }
+
+    // B − A: no Quality mas fora deste turno → buscar no banco
+    const sobrandoPairs = [...setB.entries()].filter(([id]) => !setA.has(id));
+    const sobrando: SobrandoItem[] = [];
+
+    if (sobrandoPairs.length > 0 && selectedPostoId) {
+      const uuids = sobrandoPairs.map(([id]) => id);
+      const { data: dbRows } = await (supabase as any)
+        .from('pix_transacoes')
+        .select('transacao_id, data_hora, nome_funcionario')
+        .eq('posto_id', selectedPostoId)
+        .in('transacao_id', uuids);
+
+      const dbMap = new Map<string, { data_hora: string; nome_funcionario: string }>();
+      for (const r of (dbRows || [])) dbMap.set(r.transacao_id, r);
+
+      const corteStrings   = fechamentoTurnos.map((t) => t.hora_corte);
+      const absoluteCortes = buildAbsoluteCortes(fechamentoData, corteStrings);
+      const dayStart       = fechamentoData + 'T00:00:00';
+      const lastCorte      = absoluteCortes[absoluteCortes.length - 1] ?? '';
+
+      for (const [id, qRow] of sobrandoPairs) {
+        const dbRow = dbMap.get(id);
+        if (!dbRow) {
+          sobrando.push({ quality: qRow, notFound: true });
+          continue;
+        }
+        const txDatetime = dbRow.data_hora.replace(' ', 'T');
+        let turnoInfo: number | 'sem_turno' | 'outro_dia' | null = 'outro_dia';
+        if (txDatetime >= dayStart && txDatetime <= lastCorte) {
+          const idx = absoluteCortes.findIndex((c) => txDatetime <= c);
+          turnoInfo = idx === -1 ? 'sem_turno' : idx + 1;
+        }
+        sobrando.push({
+          quality: qRow,
+          dbTx: { data_hora: dbRow.data_hora, nome_funcionario: dbRow.nome_funcionario || '', turno: turnoInfo },
+          notFound: false,
+        });
+      }
+    }
+
+    const matchCount     = [...setA.keys()].filter((id) => setB.has(id)).length;
+    const totalValorMatch = [...setA.entries()]
+      .filter(([id]) => setB.has(id))
+      .reduce((s, [, tx]) => s + tx.valor_bruto, 0);
+
+    setQualityResult({ faltamNoCaixa, sobrando, matchCount, totalValorMatch });
+  }
+
+  async function handleQualityFile(turno: FechamentoTurno, file: File) {
+    setQualityLoading(true);
+    setQualityResult(null);
+    try {
+      const buffer = await file.arrayBuffer();
+      const { rows, error } = parseQualityXLS(buffer);
+      if (error) { toast.error(error); return; }
+      if (rows.length === 0) { toast.error('Nenhuma linha de Crédito encontrada no relatório.'); return; }
+      await compareQuality(turno, rows);
+    } catch (err: unknown) {
+      toast.error('Erro ao processar arquivo Quality: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setQualityLoading(false);
+    }
+  }
+
   // ── turno row color ────────────────────────────────────────────────────────
   function txTurnoBg(turno: number | 'sem_turno' | undefined): string {
     if (turno === undefined) return '';
-    if (turno === 'sem_turno') return 'bg-orange-100';
-    if (turno === 1) return 'bg-yellow-50';
-    if (turno === 2) return 'bg-green-50';
-    if (turno === 3) return 'bg-blue-50';
-    return 'bg-purple-50';
+    if (turno === 'sem_turno') return 'bg-orange-200';
+    if (turno === 1) return 'bg-yellow-100';
+    if (turno === 2) return 'bg-green-100';
+    if (turno === 3) return 'bg-blue-100';
+    return 'bg-purple-100';
   }
 
   // ── empty state ────────────────────────────────────────────────────────────
@@ -1214,18 +1411,19 @@ export default function ConciliacaoPix() {
                     <TableHead className="whitespace-nowrap text-xs text-right">Total Bruto (R$)</TableHead>
                     <TableHead className="whitespace-nowrap text-xs">Status</TableHead>
                     <TableHead className="whitespace-nowrap text-xs">Observação</TableHead>
+                    <TableHead className="whitespace-nowrap text-xs"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {loadingFechamento ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground text-xs py-6">
+                      <TableCell colSpan={6} className="text-center text-muted-foreground text-xs py-6">
                         Carregando...
                       </TableCell>
                     </TableRow>
                   ) : fechamentoTurnos.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground text-xs py-6">
+                      <TableCell colSpan={6} className="text-center text-muted-foreground text-xs py-6">
                         {turnosDirty
                           ? 'Nenhuma transação encontrada para essa data.'
                           : `Nenhum fechamento salvo para ${fmtDate(fechamentoData)} — ${fechamentoCc}. Informe os horários e clique em Calcular Turnos.`}
@@ -1253,6 +1451,17 @@ export default function ConciliacaoPix() {
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground max-w-[220px] truncate">
                           {t.observacao || '—'}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 gap-1.5 text-xs whitespace-nowrap"
+                            onClick={() => { setQualityDialogTurno(t); setQualityResult(null); }}
+                          >
+                            <FileCheck2 className="w-3 h-3" />
+                            Quality
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))
@@ -1506,6 +1715,213 @@ export default function ConciliacaoPix() {
           </div>
         )}
       </div>
+
+      {/* Dialog: conferência Quality por turno */}
+      <Dialog
+        open={!!qualityDialogTurno}
+        onOpenChange={(open) => {
+          if (!open) { setQualityDialogTurno(null); setQualityResult(null); }
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Conferir Turno {qualityDialogTurno?.numero_turno} com Quality
+            </DialogTitle>
+            <DialogDescription>
+              {fechamentoData && `${fmtDate(fechamentoData)} · ${fechamentoCc}`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <input
+            ref={qualityFileRef}
+            type="file"
+            accept=".xls,.xlsx"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file || !qualityDialogTurno) return;
+              e.target.value = '';
+              handleQualityFile(qualityDialogTurno, file);
+            }}
+          />
+
+          <div className="space-y-4">
+            {/* Upload */}
+            <div className="flex items-center gap-3">
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2 text-xs"
+                disabled={qualityLoading}
+                onClick={() => qualityFileRef.current?.click()}
+              >
+                <Upload className="w-3.5 h-3.5" />
+                {qualityResult ? 'Trocar arquivo' : 'Selecionar relatório Quality (.xls/.xlsx)'}
+              </Button>
+              {qualityLoading && (
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  Processando...
+                </span>
+              )}
+            </div>
+
+            {/* Resultado */}
+            {qualityResult && (
+              <div className="space-y-4">
+                {qualityResult.faltamNoCaixa.length === 0 && qualityResult.sobrando.length === 0 ? (
+                  <div className="flex items-center gap-2 rounded-md border border-green-300 bg-green-50 px-3 py-3 text-sm text-green-800 dark:border-green-700 dark:bg-green-950/20 dark:text-green-300">
+                    <Check className="w-4 h-4 shrink-0" />
+                    <span>
+                      Turno confere com o Quality ({qualityResult.matchCount} venda{qualityResult.matchCount !== 1 ? 's' : ''}, R$ {fmtBRL(qualityResult.totalValorMatch)})
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      {qualityResult.matchCount} venda{qualityResult.matchCount !== 1 ? 's' : ''} conferem (R$ {fmtBRL(qualityResult.totalValorMatch)})
+                      {qualityResult.faltamNoCaixa.length > 0 && ` · ${qualityResult.faltamNoCaixa.length} faltando no caixa`}
+                      {qualityResult.sobrando.length > 0 && ` · ${qualityResult.sobrando.length} sobrando no caixa`}
+                    </p>
+
+                    {/* Faltam no caixa (A − B) */}
+                    {qualityResult.faltamNoCaixa.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-red-600">
+                          Faltam no caixa — {qualityResult.faltamNoCaixa.length} venda{qualityResult.faltamNoCaixa.length !== 1 ? 's' : ''}
+                        </p>
+                        <p className="text-xs text-muted-foreground -mt-1">
+                          Presentes no extrato Mais Pagamentos mas ausentes no Quality → incluir no caixa
+                        </p>
+                        <div className="space-y-1.5">
+                          {qualityResult.faltamNoCaixa.map((tx) => (
+                            <div key={tx.id} className="rounded-md border bg-red-50/40 dark:bg-red-950/10 px-3 py-2 text-xs space-y-1">
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                                <span className="flex items-center gap-1">
+                                  <span className="text-muted-foreground">Valor:</span>
+                                  <span className="font-medium">R$ {fmtBRL(tx.valor_bruto)}</span>
+                                  <CopyBtn value={String(tx.valor_bruto)} />
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <span className="text-muted-foreground">Taxa:</span>
+                                  <span>R$ {fmtBRL(tx.tarifa)}</span>
+                                  <CopyBtn value={String(tx.tarifa)} />
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                                <span className="flex items-center gap-1">
+                                  <span className="text-muted-foreground">Pagador:</span>
+                                  <span>{tx.nome_pagador || '—'}</span>
+                                  {tx.nome_pagador && <CopyBtn value={tx.nome_pagador} />}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <span className="text-muted-foreground">Funcionário:</span>
+                                  <span>{tx.nome_funcionario || '—'}</span>
+                                  {tx.nome_funcionario && <CopyBtn value={tx.nome_funcionario} />}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1 flex-wrap">
+                                <span className="text-muted-foreground">Doc. Ref.:</span>
+                                <span className="font-mono text-[10px] break-all">{tx.transacao_id}</span>
+                                <CopyBtn value={tx.transacao_id} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sobrando no caixa (B − A) */}
+                    {qualityResult.sobrando.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-orange-600">
+                          Sobrando no caixa — {qualityResult.sobrando.length} venda{qualityResult.sobrando.length !== 1 ? 's' : ''}
+                        </p>
+                        <p className="text-xs text-muted-foreground -mt-1">
+                          No relatório Quality mas fora deste turno no extrato → excluir ou mover
+                        </p>
+                        <div className="space-y-1.5">
+                          {qualityResult.sobrando.map((item, i) => (
+                            <div key={i} className="rounded-md border bg-orange-50/40 dark:bg-orange-950/10 px-3 py-2 text-xs space-y-1">
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                                <span className="flex items-center gap-1">
+                                  <span className="text-muted-foreground">Valor:</span>
+                                  <span className="font-medium">R$ {fmtBRL(item.quality.valor)}</span>
+                                  <CopyBtn value={String(item.quality.valor)} />
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <span className="text-muted-foreground">Taxa:</span>
+                                  <span>R$ {fmtBRL(item.quality.taxa)}</span>
+                                  <CopyBtn value={String(item.quality.taxa)} />
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                                {item.quality.cliente && (
+                                  <span className="flex items-center gap-1">
+                                    <span className="text-muted-foreground">Cliente:</span>
+                                    <span>{item.quality.cliente}</span>
+                                    <CopyBtn value={item.quality.cliente} />
+                                  </span>
+                                )}
+                                {item.quality.nomePagador && (
+                                  <span className="flex items-center gap-1">
+                                    <span className="text-muted-foreground">Nome Pagador:</span>
+                                    <span>{item.quality.nomePagador}</span>
+                                    <CopyBtn value={item.quality.nomePagador} />
+                                  </span>
+                                )}
+                              </div>
+                              {item.dbTx && (
+                                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                                  <span className="flex items-center gap-1">
+                                    <span className="text-muted-foreground">Funcionário:</span>
+                                    <span>{item.dbTx.nome_funcionario || '—'}</span>
+                                    {item.dbTx.nome_funcionario && <CopyBtn value={item.dbTx.nome_funcionario} />}
+                                  </span>
+                                  <span className="text-muted-foreground">
+                                    {fmtDatetime(item.dbTx.data_hora)}
+                                    {' '}
+                                    {item.dbTx.turno !== null && item.dbTx.turno !== 'outro_dia' && (
+                                      <span className="ml-0.5 rounded bg-black/10 px-1 py-0.5 text-[10px] font-medium">
+                                        {item.dbTx.turno === 'sem_turno' ? 'S/T' : `T${item.dbTx.turno}`}
+                                      </span>
+                                    )}
+                                    {item.dbTx.turno === 'outro_dia' && (
+                                      <span className="ml-0.5 text-muted-foreground">(outro dia)</span>
+                                    )}
+                                  </span>
+                                </div>
+                              )}
+                              {item.notFound && (
+                                <p className="text-orange-600 font-medium flex items-center gap-1">
+                                  <AlertTriangle className="w-3 h-3 shrink-0" />
+                                  não encontrada no extrato Mais Pagamentos
+                                </p>
+                              )}
+                              <div className="flex items-center gap-1 flex-wrap">
+                                <span className="text-muted-foreground">Doc. Ref.:</span>
+                                <span className="font-mono text-[10px] break-all">{item.quality.docRef}</span>
+                                <CopyBtn value={item.quality.docRef} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <p className="text-xs text-muted-foreground flex-1">
+              Dica: Divergências geralmente são vendas na virada do turno — confira a hora da última venda.
+            </p>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* AlertDialog: CNPJ diverge */}
       <AlertDialog open={!!cnpjMismatch} onOpenChange={() => setCnpjMismatch(null)}>

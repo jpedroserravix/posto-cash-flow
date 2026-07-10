@@ -80,9 +80,9 @@ const primaryNavGroups: NavGroup[] = [
     items: [
       { to: '/brinks',  label: 'Depósitos Brinks',  icon: FileSpreadsheet, permission: 'brinks' },
       { to: '/manuais', label: 'Depósitos Manuais', icon: PenLine,         permission: 'manuais' },
+      { to: '/financeiro/conciliacao-pix', label: 'Conciliação Pix', icon: QrCode, permission: 'conciliacao-pix' },
       { to: '/resumo',  label: 'Resumo Diário / CAIXAS', icon: BarChart3, permission: 'resumo' },
       { to: '/extrato', label: 'Extrato Bancário',   icon: Receipt,         permission: 'extrato' },
-      { to: '/financeiro/conciliacao-pix', label: 'Conciliação Pix', icon: QrCode, permission: 'conciliacao-pix' },
     ],
   },
   {
