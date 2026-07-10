@@ -16,6 +16,10 @@ import {
 } from '@/components/ui/table';
 import { toast } from 'sonner';
 import { openInNewTab } from '@/lib/utils';
+import { useListaConfig } from '@/hooks/useListaConfig';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import {
   QrCode, Upload, Download, ChevronDown, ChevronRight,
   TrendingUp, Hash, Receipt, RefreshCw,
@@ -83,6 +87,15 @@ interface PixRepasse {
   dia_referencia: string;
 }
 
+interface FechamentoTurno {
+  id: string;
+  numero_turno: number;
+  hora_corte: string;
+  total_calculado: number;
+  status: 'pendente' | 'conferido' | 'divergente';
+  observacao: string | null;
+}
+
 type SortDir = 'asc' | 'desc' | null;
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -139,6 +152,11 @@ function previousDay(isoDatetime: string): string {
 
 function calcTarifaEsperada(valorBruto: number, cfg: PixConfig): number {
   return Math.max(cfg.tarifa_minima, valorBruto * cfg.tarifa_percentual / 100);
+}
+
+function fmtTime(t: string): string {
+  if (!t) return '—';
+  return t.substring(0, 5);
 }
 
 // ─── xlsx parser ─────────────────────────────────────────────────────────────
@@ -252,6 +270,17 @@ export default function ConciliacaoPix() {
   const [loadingData,     setLoadingData]     = useState(false);
   const [showImportacoes, setShowImportacoes] = useState(false);
   const [showRepasses,    setShowRepasses]    = useState(true);
+  const [showFechamento,  setShowFechamento]  = useState(true);
+
+  // ── fechamento por turno state ─────────────────────────────────────────────
+  const [fechamentoData,    setFechamentoData]    = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [fechamentoCc,      setFechamentoCc]      = useState<string>('PISTA');
+  const [fechamentoTurnos,  setFechamentoTurnos]  = useState<FechamentoTurno[]>([]);
+  const [fechamentoStatus,  setFechamentoStatus]  = useState<FechamentoTurno['status'] | null>(null);
+  const [loadingFechamento, setLoadingFechamento] = useState(false);
+
+  // ── centros de custo (lista configurável) ──────────────────────────────────
+  const centrosCusto = useListaConfig('centros_custo', ['PISTA']);
 
   // ── date filter ────────────────────────────────────────────────────────────
   const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter('thisMonth');
@@ -366,6 +395,48 @@ export default function ConciliacaoPix() {
     );
   }, [selectedPostoId]);
 
+  // ── carregar fechamento por turno ─────────────────────────────────────────
+  const loadFechamento = useCallback(async () => {
+    if (!selectedPostoId) return;
+    setLoadingFechamento(true);
+    const { data: fech } = await (supabase as any)
+      .from('pix_fechamentos')
+      .select('id, status')
+      .eq('posto_id', selectedPostoId)
+      .eq('data', fechamentoData)
+      .eq('centro_custo', fechamentoCc)
+      .maybeSingle();
+
+    if (!fech) {
+      setFechamentoTurnos([]);
+      setFechamentoStatus(null);
+      setLoadingFechamento(false);
+      return;
+    }
+
+    setFechamentoStatus(fech.status as FechamentoTurno['status']);
+
+    const { data: turnos } = await (supabase as any)
+      .from('pix_fechamentos_turnos')
+      .select('id, numero_turno, hora_corte, total_calculado, status, observacao')
+      .eq('fechamento_id', fech.id)
+      .order('numero_turno', { ascending: true });
+
+    setFechamentoTurnos(
+      (turnos || []).map((t: any) => ({
+        id:              t.id,
+        numero_turno:    t.numero_turno,
+        hora_corte:      t.hora_corte,
+        total_calculado: safeNum(t.total_calculado),
+        status:          (t.status || 'pendente') as FechamentoTurno['status'],
+        observacao:      t.observacao ?? null,
+      })),
+    );
+    setLoadingFechamento(false);
+  }, [selectedPostoId, fechamentoData, fechamentoCc]);
+
+  useEffect(() => { loadFechamento(); }, [loadFechamento]);
+
   // ── recalcular button handler ──────────────────────────────────────────────
   async function handleRecalcular() {
     if (!selectedPostoId) return;
@@ -404,7 +475,7 @@ export default function ConciliacaoPix() {
     return data;
   }, [transacoes, excludedFunc, excludedPag, sortField, sortDir]);
 
-  const pag = usePagination(filteredData, [excludedFunc, excludedPag, sortField, sortDir, dfRange]);
+  const pag = usePagination(filteredData, [excludedFunc, excludedPag, sortField, sortDir, dfRange.start, dfRange.end]);
 
   const totalVendas   = useMemo(() => transacoes.reduce((s, t) => s + t.valor_bruto, 0), [transacoes]);
   const totalTarifas  = useMemo(() => transacoes.reduce((s, t) => s + t.tarifa,      0), [transacoes]);
@@ -815,6 +886,95 @@ export default function ConciliacaoPix() {
                 )}
               </TableBody>
             </Table>
+          </div>
+        )}
+      </div>
+
+      {/* Fechamento por Turno section */}
+      <div className="rounded-md border">
+        <button
+          className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/50 transition-colors"
+          onClick={() => setShowFechamento((v) => !v)}
+        >
+          <span>Fechamento por Turno</span>
+          {showFechamento
+            ? <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+        </button>
+        {showFechamento && (
+          <div className="border-t p-4 space-y-3">
+            {/* Seletores */}
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="date"
+                value={fechamentoData}
+                onChange={(e) => setFechamentoData(e.target.value)}
+                className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+              <Select value={fechamentoCc} onValueChange={setFechamentoCc}>
+                <SelectTrigger className="h-9 w-[160px] text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {centrosCusto.map((cc) => (
+                    <SelectItem key={cc} value={cc}>{cc}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {fechamentoStatus && (
+                <RepasseStatusBadge status={fechamentoStatus} />
+              )}
+            </div>
+
+            {/* Tabela de turnos */}
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="whitespace-nowrap text-xs">Turno</TableHead>
+                    <TableHead className="whitespace-nowrap text-xs">Hora de Corte</TableHead>
+                    <TableHead className="whitespace-nowrap text-xs text-right">Total (R$)</TableHead>
+                    <TableHead className="whitespace-nowrap text-xs">Status</TableHead>
+                    <TableHead className="whitespace-nowrap text-xs">Observação</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loadingFechamento ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground text-xs py-6">
+                        Carregando...
+                      </TableCell>
+                    </TableRow>
+                  ) : fechamentoTurnos.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground text-xs py-6">
+                        Nenhum fechamento registrado para {fmtDate(fechamentoData)} — {fechamentoCc}.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    fechamentoTurnos.map((t) => (
+                      <TableRow key={t.id}>
+                        <TableCell className="text-xs font-medium whitespace-nowrap">
+                          Turno {t.numero_turno}
+                        </TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          {fmtTime(t.hora_corte)}
+                        </TableCell>
+                        <TableCell className="text-xs text-right whitespace-nowrap font-medium">
+                          {fmtBRL(t.total_calculado)}
+                        </TableCell>
+                        <TableCell>
+                          <RepasseStatusBadge status={t.status} />
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground max-w-[220px] truncate">
+                          {t.observacao || '—'}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         )}
       </div>
