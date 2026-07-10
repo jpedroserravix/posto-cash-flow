@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/select';
 import {
   QrCode, Upload, Download, ChevronDown, ChevronRight,
-  TrendingUp, Hash, Receipt, RefreshCw,
+  TrendingUp, Hash, Receipt, RefreshCw, Plus,
 } from 'lucide-react';
 
 // ─── types ───────────────────────────────────────────────────────────────────
@@ -92,6 +92,7 @@ interface FechamentoTurno {
   numero_turno: number;
   hora_corte: string;
   total_calculado: number;
+  total_tarifa?: number; // somente em memória após cálculo, não salvo no DB
   status: 'pendente' | 'conferido' | 'divergente';
   observacao: string | null;
 }
@@ -281,6 +282,8 @@ export default function ConciliacaoPix() {
   const [calculando,        setCalculando]        = useState(false);
   const [salvando,          setSalvando]          = useState(false);
   const [turnosDirty,       setTurnosDirty]       = useState(false);
+  const [cortes,            setCortes]            = useState<string[]>(['', '', '']);
+  const [semTurno,          setSemTurno]          = useState<{ count: number; valor: number } | null>(null);
 
   // ── centros de custo (lista configurável) ──────────────────────────────────
   const centrosCusto = useListaConfig('centros_custo', ['PISTA']);
@@ -413,6 +416,7 @@ export default function ConciliacaoPix() {
     if (!fech) {
       setFechamentoTurnos([]);
       setFechamentoStatus(null);
+      setSemTurno(null);
       setTurnosDirty(false);
       setLoadingFechamento(false);
       return;
@@ -426,16 +430,19 @@ export default function ConciliacaoPix() {
       .eq('fechamento_id', fech.id)
       .order('numero_turno', { ascending: true });
 
-    setFechamentoTurnos(
-      (turnos || []).map((t: any) => ({
-        id:              t.id,
-        numero_turno:    t.numero_turno,
-        hora_corte:      t.hora_corte,
-        total_calculado: safeNum(t.total_calculado),
-        status:          (t.status || 'pendente') as FechamentoTurno['status'],
-        observacao:      t.observacao ?? null,
-      })),
-    );
+    const loaded = (turnos || []).map((t: any) => ({
+      id:              t.id,
+      numero_turno:    t.numero_turno,
+      hora_corte:      t.hora_corte,
+      total_calculado: safeNum(t.total_calculado),
+      status:          (t.status || 'pendente') as FechamentoTurno['status'],
+      observacao:      t.observacao ?? null,
+    }));
+
+    setFechamentoTurnos(loaded);
+    // Preencher inputs de corte com as horas salvas
+    if (loaded.length > 0) setCortes(loaded.map((t) => t.hora_corte));
+    setSemTurno(null);
     setTurnosDirty(false);
     setLoadingFechamento(false);
   }, [selectedPostoId, fechamentoData, fechamentoCc]);
@@ -443,10 +450,25 @@ export default function ConciliacaoPix() {
   useEffect(() => { loadFechamento(); }, [loadFechamento]);
 
   // ── calcular turnos ────────────────────────────────────────────────────────
-  // Agrupa pix_transacoes do dia pelo turno_override (padrão 1).
-  // hora_corte = última transação do turno; total_calculado = bruto – tarifa em centavos.
+  // Distribui transações do dia por horário de corte definido pelo usuário.
+  // turno_override, quando presente, tem prioridade sobre o corte por horário.
+  // total_calculado = SUM(valor_bruto) — valor bruto das vendas (sem subtrair tarifa).
+  // Tarifa é exibida como informação secundária mas não afeta o total.
   async function calcularTurnos() {
     if (!selectedPostoId || !fechamentoData) return;
+
+    // Normalizar cortes: remover vazios, garantir HH:MM:SS, ordenar
+    const validCortes = cortes
+      .map((c) => c.trim())
+      .filter((c) => /^\d{2}:\d{2}(:\d{2})?$/.test(c))
+      .map((c) => (c.length === 5 ? c + ':00' : c))
+      .sort();
+
+    if (validCortes.length === 0) {
+      toast.error('Informe ao menos um horário de corte antes de calcular.');
+      return;
+    }
+
     setCalculando(true);
     try {
       const { data: txns, error } = await (supabase as any)
@@ -458,37 +480,94 @@ export default function ConciliacaoPix() {
 
       if (error) throw new Error(error.message);
 
+      type TurnoKey = number | 'sem_turno';
       type TurnoAccum = { brutoCents: number; tarifaCents: number; maxTime: string };
-      const groups = new Map<number, TurnoAccum>();
+      const groups = new Map<TurnoKey, TurnoAccum>();
 
       for (const t of (txns as any[] || [])) {
-        const num: number = t.turno_override ?? 1;
-        const acc = groups.get(num) || { brutoCents: 0, tarifaCents: 0, maxTime: '' };
+        const timeStr: string = t.data_hora
+          ? (t.data_hora as string).split('T')[1]?.substring(0, 8) ?? '00:00:00'
+          : '00:00:00';
+
+        let key: TurnoKey;
+        if (t.turno_override != null) {
+          // turno_override tem prioridade
+          key = t.turno_override as number;
+        } else {
+          const idx = validCortes.findIndex((c) => timeStr <= c);
+          key = idx === -1 ? 'sem_turno' : idx + 1;
+        }
+
+        const acc = groups.get(key) || { brutoCents: 0, tarifaCents: 0, maxTime: '' };
         acc.brutoCents  += Math.round(safeNum(t.valor_bruto) * 100);
         acc.tarifaCents += Math.round(safeNum(t.tarifa)      * 100);
-        const timeStr = t.data_hora ? (t.data_hora as string).split('T')[1]?.substring(0, 8) ?? '' : '';
         if (timeStr > acc.maxTime) acc.maxTime = timeStr;
-        groups.set(num, acc);
+        groups.set(key, acc);
       }
 
-      const calculados: FechamentoTurno[] = Array.from(groups.entries())
-        .sort(([a], [b]) => a - b)
-        .map(([num, g]) => ({
+      // Turnos definidos pelos cortes
+      const definedNums = new Set(validCortes.map((_, i) => i + 1));
+      const result: FechamentoTurno[] = validCortes.map((corte, idx) => {
+        const num = idx + 1;
+        const g = groups.get(num) || { brutoCents: 0, tarifaCents: 0, maxTime: '' };
+        return {
           id:              '',
           numero_turno:    num,
-          hora_corte:      g.maxTime || '00:00:00',
-          total_calculado: (g.brutoCents - g.tarifaCents) / 100,
+          hora_corte:      corte,
+          total_calculado: g.brutoCents  / 100,
+          total_tarifa:    g.tarifaCents / 100,
           status:          'pendente' as const,
           observacao:      null,
-        }));
+        };
+      });
 
-      setFechamentoTurnos(calculados);
+      // Turnos extras via turno_override além do range dos cortes definidos
+      for (const [key, g] of Array.from(groups.entries())) {
+        if (typeof key === 'number' && !definedNums.has(key)) {
+          result.push({
+            id:              '',
+            numero_turno:    key,
+            hora_corte:      g.maxTime || '00:00:00',
+            total_calculado: g.brutoCents  / 100,
+            total_tarifa:    g.tarifaCents / 100,
+            status:          'pendente' as const,
+            observacao:      null,
+          });
+        }
+      }
+      result.sort((a, b) => a.numero_turno - b.numero_turno);
+
+      setFechamentoTurnos(result);
       setTurnosDirty(true);
 
-      if (calculados.length === 0) {
+      const stAcc = groups.get('sem_turno');
+      setSemTurno(stAcc && stAcc.brutoCents > 0
+        ? { count: 0, valor: stAcc.brutoCents / 100 } // count não disponível aqui; usar valor
+        : null,
+      );
+
+      // Contar transações sem turno corretamente
+      let semTurnoCount = 0;
+      let semTurnoValor = 0;
+      for (const t of (txns as any[] || [])) {
+        if (t.turno_override != null) continue;
+        const timeStr: string = t.data_hora
+          ? (t.data_hora as string).split('T')[1]?.substring(0, 8) ?? '00:00:00'
+          : '00:00:00';
+        if (validCortes.every((c) => timeStr > c)) {
+          semTurnoCount++;
+          semTurnoValor += safeNum(t.valor_bruto);
+        }
+      }
+      setSemTurno(semTurnoCount > 0 ? { count: semTurnoCount, valor: semTurnoValor } : null);
+
+      if (result.length === 0) {
         toast.info('Nenhuma transação encontrada para essa data.');
       } else {
-        toast.success(`${calculados.length} turno${calculados.length === 1 ? '' : 's'} calculado${calculados.length === 1 ? '' : 's'}.`);
+        const totalBruto = result.reduce((s, t) => s + t.total_calculado, 0);
+        toast.success(
+          `${result.length} turno${result.length !== 1 ? 's' : ''} calculado${result.length !== 1 ? 's' : ''} — R$ ${fmtBRL(totalBruto)} bruto.`,
+        );
       }
     } catch (err: unknown) {
       toast.error('Erro ao calcular turnos: ' + (err instanceof Error ? err.message : String(err)));
@@ -1011,8 +1090,9 @@ export default function ConciliacaoPix() {
             : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
         </button>
         {showFechamento && (
-          <div className="border-t p-4 space-y-3">
-            {/* Seletores + ações */}
+          <div className="border-t p-4 space-y-4">
+
+            {/* Seletores: data + CC + status */}
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="date"
@@ -1033,6 +1113,51 @@ export default function ConciliacaoPix() {
               {fechamentoStatus && !turnosDirty && (
                 <RepasseStatusBadge status={fechamentoStatus} />
               )}
+            </div>
+
+            {/* Horários de corte por turno */}
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                Horários de corte — hora da última venda de cada turno (do relatório de caixa)
+              </p>
+              {cortes.map((corte, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground w-14 shrink-0">Turno {idx + 1}</span>
+                  <input
+                    type="time"
+                    step="1"
+                    value={corte}
+                    onChange={(e) => {
+                      const next = [...cortes];
+                      next[idx] = e.target.value;
+                      setCortes(next);
+                    }}
+                    className="h-8 w-36 rounded-md border border-input bg-transparent px-2 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  />
+                  {cortes.length > 1 && (
+                    <button
+                      className="text-xs text-muted-foreground hover:text-destructive transition-colors px-1"
+                      onClick={() => setCortes(cortes.filter((_, i) => i !== idx))}
+                      title="Remover turno"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 gap-1 text-xs text-muted-foreground"
+                onClick={() => setCortes([...cortes, ''])}
+              >
+                <Plus className="w-3 h-3" />
+                Adicionar Turno
+              </Button>
+            </div>
+
+            {/* Ações */}
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 size="sm"
                 variant="outline"
@@ -1053,14 +1178,24 @@ export default function ConciliacaoPix() {
               </Button>
             </div>
 
-            {/* Tabela de turnos */}
+            {/* Aviso: transações sem turno (após último corte) */}
+            {semTurno && semTurno.count > 0 && (
+              <div className="flex items-start gap-2 rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950/20 dark:text-yellow-300">
+                <span className="shrink-0">⚠</span>
+                <span>
+                  {semTurno.count} transaç{semTurno.count === 1 ? 'ão' : 'ões'} (R$ {fmtBRL(semTurno.valor)}) ficaram após o último horário de corte e não foram atribuídas a nenhum turno.
+                </span>
+              </div>
+            )}
+
+            {/* Tabela de resultado */}
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="whitespace-nowrap text-xs">Turno</TableHead>
                     <TableHead className="whitespace-nowrap text-xs">Hora de Corte</TableHead>
-                    <TableHead className="whitespace-nowrap text-xs text-right">Total (R$)</TableHead>
+                    <TableHead className="whitespace-nowrap text-xs text-right">Total Bruto (R$)</TableHead>
                     <TableHead className="whitespace-nowrap text-xs">Status</TableHead>
                     <TableHead className="whitespace-nowrap text-xs">Observação</TableHead>
                   </TableRow>
@@ -1075,20 +1210,27 @@ export default function ConciliacaoPix() {
                   ) : fechamentoTurnos.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center text-muted-foreground text-xs py-6">
-                        Nenhum fechamento registrado para {fmtDate(fechamentoData)} — {fechamentoCc}.
+                        {turnosDirty
+                          ? 'Nenhuma transação encontrada para essa data.'
+                          : `Nenhum fechamento salvo para ${fmtDate(fechamentoData)} — ${fechamentoCc}. Informe os horários e clique em Calcular Turnos.`}
                       </TableCell>
                     </TableRow>
                   ) : (
                     fechamentoTurnos.map((t) => (
-                      <TableRow key={t.id}>
+                      <TableRow key={`${t.id || t.numero_turno}`}>
                         <TableCell className="text-xs font-medium whitespace-nowrap">
                           Turno {t.numero_turno}
                         </TableCell>
                         <TableCell className="text-xs whitespace-nowrap">
                           {fmtTime(t.hora_corte)}
                         </TableCell>
-                        <TableCell className="text-xs text-right whitespace-nowrap font-medium">
-                          {fmtBRL(t.total_calculado)}
+                        <TableCell className="text-xs text-right whitespace-nowrap">
+                          <div className="font-medium">{fmtBRL(t.total_calculado)}</div>
+                          {t.total_tarifa !== undefined && t.total_tarifa > 0 && (
+                            <div className="text-[10px] text-muted-foreground">
+                              tarifa: {fmtBRL(t.total_tarifa)}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell>
                           <RepasseStatusBadge status={t.status} />
