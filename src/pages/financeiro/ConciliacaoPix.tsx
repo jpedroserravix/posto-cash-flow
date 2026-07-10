@@ -9,13 +9,17 @@ import { FilterableHead } from '@/components/FilterableHead';
 import { PaginationControls } from '@/components/PaginationControls';
 import { HorizontalScrollSync } from '@/components/HorizontalScrollSync';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
 import { openInNewTab } from '@/lib/utils';
-import { QrCode, Upload, Download, ChevronDown, ChevronRight, TrendingUp, Hash, Receipt } from 'lucide-react';
+import {
+  QrCode, Upload, Download, ChevronDown, ChevronRight,
+  TrendingUp, Hash, Receipt, RefreshCw,
+} from 'lucide-react';
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
@@ -40,6 +44,15 @@ interface PixImportacao {
   total_transacoes: number;
   criado_em: string;
   criado_por_nome: string | null;
+}
+
+interface PixRepasseRow {
+  id: string;
+  dia_referencia: string;
+  data_hora: string;
+  valor: number;
+  valor_esperado: number;
+  status: 'pendente' | 'conferido' | 'divergente';
 }
 
 interface PixConfig {
@@ -210,20 +223,35 @@ function parsePixXLSX(buffer: ArrayBuffer): ParseResult {
   return { vendas, repasses };
 }
 
+// ─── sub-component: status badge ─────────────────────────────────────────────
+
+function RepasseStatusBadge({ status }: { status: PixRepasseRow['status'] }) {
+  const cls = {
+    conferido:  'bg-green-600 hover:bg-green-600 text-white',
+    pendente:   'bg-yellow-500 hover:bg-yellow-500 text-white',
+    divergente: 'bg-red-500 hover:bg-red-500 text-white',
+  }[status];
+  const label = { conferido: 'Conferido', pendente: 'Pendente', divergente: 'Divergente' }[status];
+  return <Badge className={`${cls} text-[10px] whitespace-nowrap`}>{label}</Badge>;
+}
+
 // ─── component ───────────────────────────────────────────────────────────────
 
 export default function ConciliacaoPix() {
   const { selectedPostoId, nome } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ── import state ───────────────────────────────────────────────────────────
-  const [importing, setImporting] = useState(false);
+  // ── import / recalc state ──────────────────────────────────────────────────
+  const [importing,     setImporting]     = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
 
   // ── data state ─────────────────────────────────────────────────────────────
-  const [transacoes,  setTransacoes]  = useState<PixTransacao[]>([]);
-  const [importacoes, setImportacoes] = useState<PixImportacao[]>([]);
-  const [loadingData, setLoadingData] = useState(false);
+  const [transacoes,      setTransacoes]      = useState<PixTransacao[]>([]);
+  const [importacoes,     setImportacoes]     = useState<PixImportacao[]>([]);
+  const [repasses,        setRepasses]        = useState<PixRepasseRow[]>([]);
+  const [loadingData,     setLoadingData]     = useState(false);
   const [showImportacoes, setShowImportacoes] = useState(false);
+  const [showRepasses,    setShowRepasses]    = useState(true);
 
   // ── date filter ────────────────────────────────────────────────────────────
   const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter('thisMonth');
@@ -238,7 +266,7 @@ export default function ConciliacaoPix() {
   const loadData = useCallback(async () => {
     if (!selectedPostoId) return;
     setLoadingData(true);
-    const [txRes, impRes] = await Promise.all([
+    const [txRes, impRes, repRes] = await Promise.all([
       (supabase as any)
         .from('pix_transacoes')
         .select('id, transacao_id, data_hora, valor_bruto, tarifa, tarifa_esperada, nome_pagador, nome_funcionario, pdv')
@@ -251,6 +279,11 @@ export default function ConciliacaoPix() {
         .select('id, file_path, file_name, periodo_inicio, periodo_fim, total_transacoes, criado_em, criado_por_nome')
         .eq('posto_id', selectedPostoId)
         .order('criado_em', { ascending: false }),
+      (supabase as any)
+        .from('pix_repasses')
+        .select('id, dia_referencia, data_hora, valor, valor_esperado, status')
+        .eq('posto_id', selectedPostoId)
+        .order('dia_referencia', { ascending: false }),
     ]);
 
     if (txRes.error) toast.error('Erro ao carregar transações: ' + txRes.error.message);
@@ -271,10 +304,81 @@ export default function ConciliacaoPix() {
     if (impRes.error) toast.error('Erro ao carregar importações: ' + impRes.error.message);
     setImportacoes(impRes.data || []);
 
+    if (repRes.error) toast.error('Erro ao carregar repasses: ' + repRes.error.message);
+    setRepasses(
+      (repRes.data || []).map((r: any) => ({
+        id:             r.id,
+        dia_referencia: r.dia_referencia,
+        data_hora:      r.data_hora,
+        valor:          safeNum(r.valor),
+        valor_esperado: safeNum(r.valor_esperado),
+        status:         (r.status || 'pendente') as PixRepasseRow['status'],
+      })),
+    );
+
     setLoadingData(false);
   }, [selectedPostoId, dfRange.start, dfRange.end]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // ── conferência de repasses ────────────────────────────────────────────────
+  // Para cada pix_repasse do posto, calcula valor_esperado como:
+  //   SUM(valor_bruto) - SUM(tarifa) das transações do dia de referência.
+  // Aritmética em centavos para evitar imprecisão de ponto flutuante.
+  const calcularRepasses = useCallback(async (): Promise<void> => {
+    if (!selectedPostoId) return;
+
+    const { data: allRepasses, error } = await (supabase as any)
+      .from('pix_repasses')
+      .select('id, dia_referencia, valor')
+      .eq('posto_id', selectedPostoId);
+
+    if (error) throw new Error('Erro ao buscar repasses: ' + error.message);
+    if (!allRepasses?.length) return;
+
+    await Promise.all(
+      (allRepasses as any[]).map(async (rep) => {
+        const diaRef = rep.dia_referencia as string; // "YYYY-MM-DD"
+
+        const { data: txns } = await (supabase as any)
+          .from('pix_transacoes')
+          .select('valor_bruto, tarifa')
+          .eq('posto_id', selectedPostoId)
+          .gte('data_hora', diaRef + 'T00:00:00')
+          .lte('data_hora', diaRef + 'T23:59:59');
+
+        const hasTxns = Array.isArray(txns) && txns.length > 0;
+        let valorEsperado = 0;
+        let status: PixRepasseRow['status'] = 'pendente';
+
+        if (hasTxns) {
+          const brutoCents  = (txns as any[]).reduce((s, t) => s + Math.round(safeNum(t.valor_bruto) * 100), 0);
+          const tarifaCents = (txns as any[]).reduce((s, t) => s + Math.round(safeNum(t.tarifa)      * 100), 0);
+          valorEsperado = (brutoCents - tarifaCents) / 100;
+          status = Math.abs(safeNum(rep.valor) - valorEsperado) < 0.01 ? 'conferido' : 'divergente';
+        }
+
+        await (supabase as any)
+          .from('pix_repasses')
+          .update({ valor_esperado: valorEsperado, status })
+          .eq('id', rep.id);
+      }),
+    );
+  }, [selectedPostoId]);
+
+  // ── recalcular button handler ──────────────────────────────────────────────
+  async function handleRecalcular() {
+    if (!selectedPostoId) return;
+    setRecalculating(true);
+    try {
+      await calcularRepasses();
+      loadData();
+    } catch (err: unknown) {
+      toast.error('Erro ao calcular repasses: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setRecalculating(false);
+    }
+  }
 
   // ── derived data ───────────────────────────────────────────────────────────
   const uniqueFuncs = useMemo(
@@ -302,7 +406,6 @@ export default function ConciliacaoPix() {
 
   const pag = usePagination(filteredData, [excludedFunc, excludedPag, sortField, sortDir, dfRange]);
 
-  // Summary cards computed from ALL date-filtered rows (before FilterableHead filters)
   const totalVendas   = useMemo(() => transacoes.reduce((s, t) => s + t.valor_bruto, 0), [transacoes]);
   const totalTarifas  = useMemo(() => transacoes.reduce((s, t) => s + t.tarifa,      0), [transacoes]);
   const qtdTransacoes = transacoes.length;
@@ -339,10 +442,10 @@ export default function ConciliacaoPix() {
     setImporting(true);
     try {
       const buffer = await file.arrayBuffer();
-      const { vendas, repasses, error: parseError } = parsePixXLSX(buffer);
+      const { vendas, repasses: repassesFromFile, error: parseError } = parsePixXLSX(buffer);
 
       if (parseError) { toast.error(parseError); return; }
-      if (vendas.length === 0 && repasses.length === 0) {
+      if (vendas.length === 0 && repassesFromFile.length === 0) {
         toast.error('Nenhuma transação reconhecida no arquivo.');
         return;
       }
@@ -371,7 +474,7 @@ export default function ConciliacaoPix() {
 
       const allDates = [
         ...vendasFinal.map((v) => v.data_hora.split('T')[0]),
-        ...repasses.map((r) => r.data_hora.split('T')[0]),
+        ...repassesFromFile.map((r) => r.data_hora.split('T')[0]),
       ].sort();
       const { data: importRow, error: importError } = await (supabase as any)
         .from('pix_importacoes')
@@ -421,20 +524,20 @@ export default function ConciliacaoPix() {
       }
 
       let existingRepassesCount = 0;
-      if (repasses.length > 0) {
+      if (repassesFromFile.length > 0) {
         const { data: existingRep } = await (supabase as any)
           .from('pix_repasses')
           .select('data_hora')
           .eq('posto_id', selectedPostoId)
-          .in('data_hora', repasses.map((r) => r.data_hora));
+          .in('data_hora', repassesFromFile.map((r) => r.data_hora));
         existingRepassesCount = (existingRep || []).length;
       }
 
-      if (repasses.length > 0) {
+      if (repassesFromFile.length > 0) {
         const { error: repError } = await (supabase as any)
           .from('pix_repasses')
           .upsert(
-            repasses.map((r) => ({
+            repassesFromFile.map((r) => ({
               posto_id:       selectedPostoId,
               data_hora:      r.data_hora,
               valor:          r.valor,
@@ -449,7 +552,7 @@ export default function ConciliacaoPix() {
 
       const novas      = vendasFinal.length - existingCount;
       const jaExistiam = existingCount;
-      const novosRep   = repasses.length - existingRepassesCount;
+      const novosRep   = repassesFromFile.length - existingRepassesCount;
 
       toast.success(
         `${novas} transaç${novas === 1 ? 'ão nova' : 'ões novas'}` +
@@ -457,6 +560,8 @@ export default function ConciliacaoPix() {
         `, ${novosRep} repasse${novosRep === 1 ? '' : 's'}`,
       );
 
+      // Conferência automática após importação
+      try { await calcularRepasses(); } catch { /* silently ignore */ }
       loadData();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Erro inesperado na importação');
@@ -479,7 +584,7 @@ export default function ConciliacaoPix() {
     <div className="space-y-4">
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <QrCode className="w-5 h-5 text-muted-foreground" />
           <h1 className="text-lg font-semibold">Conciliação Pix</h1>
@@ -502,11 +607,7 @@ export default function ConciliacaoPix() {
       />
 
       {/* Date filter */}
-      <DateFilter
-        preset={dfPreset}
-        range={dfRange}
-        onChange={setDfPreset}
-      />
+      <DateFilter preset={dfPreset} range={dfRange} onChange={setDfPreset} />
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -632,6 +733,91 @@ export default function ConciliacaoPix() {
           />
         </div>
       </HorizontalScrollSync>
+
+      {/* Repasses section */}
+      <div className="rounded-md border">
+        <div className="flex items-center justify-between px-4 py-3">
+          <button
+            className="flex items-center gap-1.5 text-sm font-medium hover:text-foreground transition-colors"
+            onClick={() => setShowRepasses((v) => !v)}
+          >
+            {showRepasses
+              ? <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+            <span>Repasses ({repasses.length})</span>
+          </button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1.5 text-xs"
+            disabled={recalculating || importing}
+            onClick={handleRecalcular}
+          >
+            <RefreshCw className={`w-3 h-3 ${recalculating ? 'animate-spin' : ''}`} />
+            {recalculating ? 'Calculando...' : 'Recalcular'}
+          </Button>
+        </div>
+
+        {showRepasses && (
+          <div className="border-t overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="whitespace-nowrap text-xs">Dia de Referência</TableHead>
+                  <TableHead className="whitespace-nowrap text-xs">Data/Hora Repasse</TableHead>
+                  <TableHead className="whitespace-nowrap text-xs text-right">Esperado (R$)</TableHead>
+                  <TableHead className="whitespace-nowrap text-xs text-right">Recebido (R$)</TableHead>
+                  <TableHead className="whitespace-nowrap text-xs text-right">Diferença (R$)</TableHead>
+                  <TableHead className="whitespace-nowrap text-xs">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loadingData ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground text-xs py-6">
+                      Carregando...
+                    </TableCell>
+                  </TableRow>
+                ) : repasses.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground text-xs py-6">
+                      Nenhum repasse registrado. Importe um extrato para começar.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  repasses.map((r) => {
+                    const diff = r.valor - r.valor_esperado;
+                    const diffNonZero = Math.abs(diff) >= 0.01;
+                    const diffSign = diff > 0 ? '+' : '';
+                    return (
+                      <TableRow key={r.id}>
+                        <TableCell className="text-xs whitespace-nowrap font-medium">
+                          {fmtDate(r.dia_referencia)}
+                        </TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          {fmtDatetime(r.data_hora)}
+                        </TableCell>
+                        <TableCell className="text-xs text-right whitespace-nowrap">
+                          {fmtBRL(r.valor_esperado)}
+                        </TableCell>
+                        <TableCell className="text-xs text-right whitespace-nowrap font-medium">
+                          {fmtBRL(r.valor)}
+                        </TableCell>
+                        <TableCell className={`text-xs text-right whitespace-nowrap font-medium ${diffNonZero ? 'text-red-500' : 'text-muted-foreground'}`}>
+                          {diffNonZero ? `${diffSign}${fmtBRL(diff)}` : '—'}
+                        </TableCell>
+                        <TableCell>
+                          <RepasseStatusBadge status={r.status} />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
 
       {/* Importações section */}
       <div className="rounded-md border">
