@@ -24,6 +24,7 @@ export const ALL_PERMISSIONS = [
   { key: 'caixa-entrada',         label: 'Caixa de Entrada (Currículos e Feedback)' },
   { key: 'almoxarifado',          label: 'Almoxarifado (Patrimônio)' },
   { key: 'chamados',              label: 'Chamados de Manutenção' },
+  { key: 'conciliacao-pix',       label: 'Conciliação Pix' },
 ] as const;
 
 export type PermissionKey = (typeof ALL_PERMISSIONS)[number]['key'];
@@ -64,6 +65,7 @@ export const ROUTE_PERMISSION_MAP: { path: string; permission: string }[] = [
   { path: '/caixa-entrada',    permission: 'caixa-entrada' },
   { path: '/almoxarifado',          permission: 'almoxarifado' },
   { path: '/manutencao/chamados',   permission: 'chamados' },
+  { path: '/financeiro/conciliacao-pix', permission: 'conciliacao-pix' },
 ];
 
 export function firstAllowedPath(hasPermission: (k: string) => boolean): string {

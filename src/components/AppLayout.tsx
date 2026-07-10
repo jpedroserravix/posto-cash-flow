@@ -15,7 +15,7 @@ import {
   Fuel, LogOut, FileSpreadsheet, PenLine, BarChart3, Building2, Users,
   Landmark, Receipt, Zap, LayoutDashboard, FileCheck2, ShoppingBag,
   UserCircle, Clock, Calculator, History, ClipboardList, Package,
-  Info, Copy, Check, GraduationCap, LayoutGrid, Settings, KeyRound, ChevronDown, ShieldCheck, UserSearch, Inbox, BookOpen, Palette, Archive, Wrench,
+  Info, Copy, Check, GraduationCap, LayoutGrid, Settings, KeyRound, ChevronDown, ShieldCheck, UserSearch, Inbox, BookOpen, Palette, Archive, Wrench, QrCode,
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -82,6 +82,7 @@ const primaryNavGroups: NavGroup[] = [
       { to: '/manuais', label: 'Depósitos Manuais', icon: PenLine,         permission: 'manuais' },
       { to: '/resumo',  label: 'Resumo Diário / CAIXAS', icon: BarChart3, permission: 'resumo' },
       { to: '/extrato', label: 'Extrato Bancário',   icon: Receipt,         permission: 'extrato' },
+      { to: '/financeiro/conciliacao-pix', label: 'Conciliação Pix', icon: QrCode, permission: 'conciliacao-pix' },
     ],
   },
   {
