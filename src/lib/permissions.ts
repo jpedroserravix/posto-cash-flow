@@ -25,13 +25,14 @@ export const ALL_PERMISSIONS = [
   { key: 'almoxarifado',          label: 'Almoxarifado (Patrimônio)' },
   { key: 'chamados',              label: 'Chamados de Manutenção' },
   { key: 'conciliacao-pix',       label: 'Conciliação Pix' },
+  { key: 'trancar-caixa',         label: 'Trancar Caixa' },
 ] as const;
 
 export type PermissionKey = (typeof ALL_PERMISSIONS)[number]['key'];
 
 export const PROFILE_PRESETS: Record<string, string[]> = {
   master:    ALL_PERMISSIONS.map((p) => p.key),
-  admin:     ALL_PERMISSIONS.map((p) => p.key),
+  admin:     ALL_PERMISSIONS.map((p) => p.key).filter((k) => k !== 'trancar-caixa'),
   gerente:   ['envio-rapido', 'brinks', 'manuais', 'resumo', 'pessoal', 'alvaras', 'garantias', 'docs-empresa', 'pedidos-compra', 'almoxarifado', 'chamados'],
   frentista: ['envio-rapido'],
 };

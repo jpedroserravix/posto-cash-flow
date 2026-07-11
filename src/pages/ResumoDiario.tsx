@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { Save, Upload, FileText, X, ExternalLink, Paperclip, Gauge, AlertTriangle, Ban, RotateCcw, UserMinus, Camera, Plus, CheckCircle2, Check, MessageSquare, Receipt, ClipboardList, UserPlus, Package, Trash2 } from 'lucide-react';
+import { Save, Upload, FileText, X, ExternalLink, Paperclip, Gauge, AlertTriangle, Ban, RotateCcw, UserMinus, Camera, Plus, CheckCircle2, Check, MessageSquare, Receipt, ClipboardList, UserPlus, Package, Trash2, Lock, Unlock } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { openInNewTab } from '@/lib/utils';
 import { usePagination } from '@/hooks/usePagination';
@@ -113,6 +113,9 @@ interface GroupData {
   comprovantes: Comprovante[];
   turnosConferidos: string[];
   qualityDispensado: boolean;
+  trancado: boolean;
+  trancadoPorNome: string | null;
+  trancadoEm: string | null;
   pixFechamentoId?: string;
   pixBrutoConferido: boolean;
   pixRecebidoBanco: boolean;
@@ -127,7 +130,7 @@ interface PreviewFile {
 // ─── component ───────────────────────────────────────────────────────────────
 
 export default function ResumoDiario() {
-  const { selectedPostoId, nome, perfil } = useAuth();
+  const { selectedPostoId, nome, perfil, hasPermission } = useAuth();
   const isMobile = useIsMobile();
   const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter();
   const [groups, setGroups] = useState<GroupData[]>([]);
@@ -199,6 +202,7 @@ export default function ResumoDiario() {
   // Multi-day selection for Pix batch operations
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [confirmBatchReceive, setConfirmBatchReceive] = useState(false);
+  const [confirmDestrancar, setConfirmDestrancar] = useState<{ data: string; centroCusto: string } | null>(null);
 
   const pagination = usePagination(displayGroups, [selectedPostoId, ccFilter], {
     defaultPageSize: 10,
@@ -347,7 +351,7 @@ export default function ResumoDiario() {
     });
 
     // Conferencia map
-    const confMap = new Map<string, { conferido: string; observacao: string; id: string; turnos_conferidos: string[]; quality_dispensado: boolean }>();
+    const confMap = new Map<string, { conferido: string; observacao: string; id: string; turnos_conferidos: string[]; quality_dispensado: boolean; trancado: boolean; trancado_por_nome: string | null; trancado_em: string | null }>();
     conferencias?.forEach((c) => {
       const cc = c.centro_custo || 'SEM CENTRO';
       const key = `${c.data}|${cc}`;
@@ -359,6 +363,9 @@ export default function ResumoDiario() {
           id: c.id,
           turnos_conferidos: (c as any).turnos_conferidos || [],
           quality_dispensado: (c as any).quality_dispensado ?? false,
+          trancado: (c as any).trancado ?? false,
+          trancado_por_nome: (c as any).trancado_por_nome ?? null,
+          trancado_em: (c as any).trancado_em ?? null,
         });
       }
     });
@@ -412,6 +419,9 @@ export default function ResumoDiario() {
           comprovantes: comprovantesMap.get(data) || [],
           turnosConferidos: conf?.turnos_conferidos || [],
           qualityDispensado: conf?.quality_dispensado ?? false,
+          trancado: conf?.trancado ?? false,
+          trancadoPorNome: conf?.trancado_por_nome ?? null,
+          trancadoEm: conf?.trancado_em ?? null,
           pixFechamentoId:  pixFech?.id,
           pixBrutoConferido: pixFech?.bruto_conferido ?? false,
           pixRecebidoBanco:  pixFech?.recebido_banco  ?? false,
@@ -1031,6 +1041,64 @@ export default function ResumoDiario() {
     loadMesVigentePendencias();
   };
 
+  // ─── trancar / destrancar caixa ───────────────────────────────────────────
+
+  const handleTrancar = async (group: GroupData) => {
+    if (!selectedPostoId) return;
+    const trancadoEm = new Date().toISOString();
+    const trancadoPorNome = nome || 'Usuário';
+    const cc = group.centroCusto === 'SEM CENTRO' ? null : group.centroCusto;
+    setGroups((prev) => prev.map((g) =>
+      g.data === group.data && g.centroCusto === group.centroCusto
+        ? { ...g, trancado: true, trancadoPorNome, trancadoEm } : g,
+    ));
+    if (group.resumoId) {
+      const { error } = await supabase.from('resumo_conferencia')
+        .update({ trancado: true, trancado_por_nome: trancadoPorNome, trancado_em: trancadoEm } as any).eq('id', group.resumoId);
+      if (error) {
+        toast.error('Erro ao trancar caixa');
+        setGroups((prev) => prev.map((g) =>
+          g.data === group.data && g.centroCusto === group.centroCusto
+            ? { ...g, trancado: false, trancadoPorNome: null, trancadoEm: null } : g,
+        ));
+      } else { toast.success('Caixa trancado!'); }
+    } else {
+      const { data: newRec, error } = await supabase.from('resumo_conferencia')
+        .insert({ posto_id: selectedPostoId, data: group.data, turno: null, centro_custo: cc, conferido: 'OK', observacao: group.observacao || null, turnos_conferidos: group.turnosConferidos, trancado: true, trancado_por_nome: trancadoPorNome, trancado_em: trancadoEm } as any)
+        .select('id').single();
+      if (error) {
+        toast.error('Erro ao trancar caixa');
+        setGroups((prev) => prev.map((g) =>
+          g.data === group.data && g.centroCusto === group.centroCusto
+            ? { ...g, trancado: false, trancadoPorNome: null, trancadoEm: null } : g,
+        ));
+      } else {
+        toast.success('Caixa trancado!');
+        if (newRec) setGroups((prev) => prev.map((g) =>
+          g.data === group.data && g.centroCusto === group.centroCusto ? { ...g, resumoId: (newRec as any).id } : g,
+        ));
+      }
+    }
+  };
+
+  const handleDestrancar = async (group: GroupData) => {
+    if (!selectedPostoId || !group.resumoId) return;
+    setGroups((prev) => prev.map((g) =>
+      g.data === group.data && g.centroCusto === group.centroCusto
+        ? { ...g, trancado: false, trancadoPorNome: null, trancadoEm: null } : g,
+    ));
+    setConfirmDestrancar(null);
+    const { error } = await supabase.from('resumo_conferencia')
+      .update({ trancado: false, trancado_por_nome: null, trancado_em: null } as any).eq('id', group.resumoId);
+    if (error) {
+      toast.error('Erro ao destrancar caixa');
+      setGroups((prev) => prev.map((g) =>
+        g.data === group.data && g.centroCusto === group.centroCusto
+          ? { ...g, trancado: group.trancado, trancadoPorNome: group.trancadoPorNome, trancadoEm: group.trancadoEm } : g,
+      ));
+    } else { toast.success('Caixa destrancado!'); }
+  };
+
   // ─── batch mark Pix received ──────────────────────────────────────────────
 
   const handleBatchMarkReceived = async () => {
@@ -1163,6 +1231,9 @@ export default function ResumoDiario() {
             {pagination.paginatedData.map((group, idx) => {
               const rowKey = `${group.data}-${group.centroCusto}`;
               const isExpanded = expandedKey === rowKey;
+              const isLocked = group.trancado;
+              const canTrancar = hasPermission('trancar-caixa');
+              const isOK = group.conferido === 'OK';
               const pdfUrl = group.quality?.pdf_path
                 ? getStorageUrl('quality-pdfs', group.quality.pdf_path)
                 : null;
@@ -1176,9 +1247,13 @@ export default function ResumoDiario() {
               const isLast = idx === pagination.paginatedData.length - 1;
 
               return (
-                <div key={rowKey} className={!isLast ? 'border-b' : ''}>
+                <div key={rowKey} className={`${!isLast ? 'border-b' : ''} ${isOK ? 'border-l-4 border-l-green-200 dark:border-l-green-800' : ''}`}>
                   {/* Closed row: checkbox + accordion trigger */}
-                  <div className={`flex items-center transition-colors hover:bg-muted/30 ${isExpanded ? 'bg-muted/20' : ''}`}>
+                  <div className={`flex items-center transition-colors ${
+                    isOK
+                      ? isExpanded ? 'bg-green-50 dark:bg-green-950/10' : 'bg-green-50/60 hover:bg-green-50 dark:bg-green-950/5 dark:hover:bg-green-950/10'
+                      : isExpanded ? 'bg-muted/20' : 'hover:bg-muted/30'
+                  }`}>
                     {/* Selection checkbox — stopPropagation prevents accordion toggle */}
                     <div
                       className="w-10 shrink-0 flex items-center justify-center py-2.5"
@@ -1186,6 +1261,7 @@ export default function ResumoDiario() {
                     >
                       <Checkbox
                         checked={selectedKeys.has(rowKey)}
+                        disabled={isLocked}
                         onCheckedChange={() => setSelectedKeys((prev) => {
                           const next = new Set(prev);
                           if (next.has(rowKey)) next.delete(rowKey); else next.add(rowKey);
@@ -1226,11 +1302,14 @@ export default function ResumoDiario() {
 
                   {/* Expanded detail — R2 */}
                   {isExpanded && (
-                    <div className="border-t bg-muted/50 p-4 space-y-3">
+                    <div className={`border-t p-4 space-y-3 ${isOK ? 'bg-green-50 dark:bg-green-950/10' : 'bg-muted/50'}`}>
 
                       {/* Expansion header: date label + "+" dropdown */}
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-muted-foreground">{dateLabel} — {group.centroCusto}</span>
+                        {isLocked ? (
+                          <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                        ) : (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
@@ -1270,10 +1349,11 @@ export default function ResumoDiario() {
                             )}
                           </DropdownMenuContent>
                         </DropdownMenu>
+                        )}
                       </div>
 
                       {/* Two-column grid */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${isLocked ? 'pointer-events-none opacity-60 select-none' : ''}`}>
 
                         {/* Left: compact turnos table (no checkboxes) */}
                         <div className="space-y-2">
@@ -1478,7 +1558,22 @@ export default function ResumoDiario() {
 
                       {/* ── Footer: pills + obs icon + status + save ── */}
                       <div className="pt-2 border-t">
-                        <div className="flex flex-wrap items-start gap-1.5">
+                        {/* Locked banner */}
+                        {isLocked && (
+                          <div className="mb-2 flex items-center gap-2 rounded-md border border-border bg-muted/60 px-3 py-1.5 text-[11px] text-muted-foreground">
+                            <Lock className="h-3.5 w-3.5 shrink-0" />
+                            <span>Trancado por <strong>{group.trancadoPorNome}</strong> em {formatDateTime(group.trancadoEm)}</span>
+                            {canTrancar && (
+                              <button
+                                className="ml-auto flex items-center gap-1 text-[11px] underline-offset-2 hover:underline hover:text-foreground"
+                                onClick={() => setConfirmDestrancar({ data: group.data, centroCusto: group.centroCusto })}
+                              >
+                                <Unlock className="h-3 w-3" />Destrancar
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        <div className={`flex flex-wrap items-start gap-1.5 ${isLocked ? 'pointer-events-none opacity-60 select-none' : ''}`}>
 
                           {/* Dinheiro pill with expandable T1/T2/T3 */}
                           <div>
@@ -1707,12 +1802,21 @@ export default function ResumoDiario() {
                                     <span className="inline-flex items-center gap-1 rounded-full border border-green-500 bg-green-50 px-2.5 py-1 text-[11px] font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
                                       <CheckCircle2 className="h-3 w-3" />Conferido
                                     </span>
-                                    <button
-                                      className="text-[10px] text-muted-foreground underline-offset-2 hover:underline hover:text-foreground"
-                                      onClick={() => handleSetPendente(group)}
-                                    >
-                                      Reabrir
-                                    </button>
+                                    {!isLocked && (
+                                      <>
+                                        <button
+                                          className="text-[10px] text-muted-foreground underline-offset-2 hover:underline hover:text-foreground"
+                                          onClick={() => handleSetPendente(group)}
+                                        >
+                                          Reabrir
+                                        </button>
+                                        {canTrancar && (
+                                          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => handleTrancar(group)}>
+                                            <Lock className="h-3 w-3" />Trancar
+                                          </Button>
+                                        )}
+                                      </>
+                                    )}
                                   </div>
                                 );
                               }
@@ -2122,6 +2226,27 @@ export default function ResumoDiario() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ── Destrancar Caixa ── */}
+      <AlertDialog open={confirmDestrancar !== null} onOpenChange={(o) => { if (!o) setConfirmDestrancar(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Destrancar caixa?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O caixa voltará ao status OK sem trava. Você poderá editá-lo normalmente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              const g = groups.find((g) => g.data === confirmDestrancar?.data && g.centroCusto === confirmDestrancar?.centroCusto);
+              if (g) handleDestrancar(g);
+            }}>
+              Destrancar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ── Confirmar Marcar Recebido em Lote ── */}
       <AlertDialog open={confirmBatchReceive} onOpenChange={(o) => { if (!o) setConfirmBatchReceive(false); }}>
