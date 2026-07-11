@@ -19,7 +19,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { openInNewTab } from '@/lib/utils';
+import { openInNewTab, formatarDataHoraLiteral } from '@/lib/utils';
 import { useListaConfig } from '@/hooks/useListaConfig';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -1310,7 +1310,10 @@ export default function ConciliacaoPix() {
               <input
                 type="date"
                 value={fechamentoData}
-                onChange={(e) => setFechamentoData(e.target.value)}
+                onChange={(e) => {
+                  setFechamentoData(e.target.value);
+                  if (e.target.value) setDfPreset('custom', e.target.value, e.target.value);
+                }}
                 className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
               <Select value={fechamentoCc} onValueChange={setFechamentoCc}>
@@ -1534,7 +1537,7 @@ export default function ConciliacaoPix() {
                           {fmtDate(r.dia_referencia)}
                         </TableCell>
                         <TableCell className="text-xs whitespace-nowrap">
-                          {fmtDatetime(r.data_hora)}
+                          {formatarDataHoraLiteral(r.data_hora)}
                         </TableCell>
                         <TableCell className="text-xs text-right whitespace-nowrap">
                           {fmtBRL(r.valor_esperado)}
@@ -1613,7 +1616,7 @@ export default function ConciliacaoPix() {
                     return (
                       <TableRow key={t.id} className={rowBg}>
                         <TableCell className="text-xs whitespace-nowrap">
-                          {fmtDatetime(t.data_hora)}
+                          {formatarDataHoraLiteral(t.data_hora)}
                           {turno !== undefined && (
                             turno === 'sem_turno'
                               ? <span className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-orange-200 px-1 py-0.5 text-[10px] font-medium text-orange-800"><AlertTriangle className="h-2.5 w-2.5" />S/T</span>
@@ -1880,7 +1883,7 @@ export default function ConciliacaoPix() {
                                     {item.dbTx.nome_funcionario && <CopyBtn value={item.dbTx.nome_funcionario} />}
                                   </span>
                                   <span className="text-muted-foreground">
-                                    {fmtDatetime(item.dbTx.data_hora)}
+                                    {formatarDataHoraLiteral(item.dbTx.data_hora)}
                                     {' '}
                                     {item.dbTx.turno !== null && item.dbTx.turno !== 'outro_dia' && (
                                       <span className="ml-0.5 rounded bg-black/10 px-1 py-0.5 text-[10px] font-medium">
