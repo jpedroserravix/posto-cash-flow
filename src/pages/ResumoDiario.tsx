@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { Save, Upload, FileText, X, ExternalLink, Paperclip, Gauge, AlertTriangle, Ban, RotateCcw, UserMinus, Camera, Plus, CheckCircle2, Check, MessageSquare, Receipt, ClipboardList, UserPlus, Package } from 'lucide-react';
+import { Save, Upload, FileText, X, ExternalLink, Paperclip, Gauge, AlertTriangle, Ban, RotateCcw, UserMinus, Camera, Plus, CheckCircle2, Check, MessageSquare, Receipt, ClipboardList, UserPlus, Package, Trash2 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { openInNewTab } from '@/lib/utils';
 import { usePagination } from '@/hooks/usePagination';
@@ -112,6 +112,7 @@ interface GroupData {
   afericoes: AfericaoInfo[];
   comprovantes: Comprovante[];
   turnosConferidos: string[];
+  qualityDispensado: boolean;
   pixFechamentoId?: string;
   pixBrutoConferido: boolean;
   pixRecebidoBanco: boolean;
@@ -346,7 +347,7 @@ export default function ResumoDiario() {
     });
 
     // Conferencia map
-    const confMap = new Map<string, { conferido: string; observacao: string; id: string; turnos_conferidos: string[] }>();
+    const confMap = new Map<string, { conferido: string; observacao: string; id: string; turnos_conferidos: string[]; quality_dispensado: boolean }>();
     conferencias?.forEach((c) => {
       const cc = c.centro_custo || 'SEM CENTRO';
       const key = `${c.data}|${cc}`;
@@ -357,6 +358,7 @@ export default function ResumoDiario() {
           observacao: c.observacao || '',
           id: c.id,
           turnos_conferidos: (c as any).turnos_conferidos || [],
+          quality_dispensado: (c as any).quality_dispensado ?? false,
         });
       }
     });
@@ -409,6 +411,7 @@ export default function ResumoDiario() {
           afericoes: afericaoMap.get(data) || [],
           comprovantes: comprovantesMap.get(data) || [],
           turnosConferidos: conf?.turnos_conferidos || [],
+          qualityDispensado: conf?.quality_dispensado ?? false,
           pixFechamentoId:  pixFech?.id,
           pixBrutoConferido: pixFech?.bruto_conferido ?? false,
           pixRecebidoBanco:  pixFech?.recebido_banco  ?? false,
@@ -792,11 +795,43 @@ export default function ResumoDiario() {
   const handleDeleteQualityPDF = async (data_caixa: string, pdf_path: string) => {
     await supabase.storage.from('quality-pdfs').remove([pdf_path]);
     await supabase.from('relatorio_quality')
-      .update({ pdf_path: null, quality_conferido: 'PENDENTE' } as any)
+      .delete()
       .eq('posto_id', selectedPostoId!).eq('data_caixa', data_caixa);
     toast.success('PDF removido.');
     setDeletingQualityDate(null);
     loadResumo();
+  };
+
+  const handleSetQualityDispensado = async (group: GroupData, dispensado: boolean) => {
+    if (!selectedPostoId) return;
+    const cc = group.centroCusto === 'SEM CENTRO' ? null : group.centroCusto;
+    setGroups((prev) => prev.map((g) =>
+      g.data === group.data && g.centroCusto === group.centroCusto ? { ...g, qualityDispensado: dispensado } : g,
+    ));
+    if (group.resumoId) {
+      const { error } = await supabase.from('resumo_conferencia')
+        .update({ quality_dispensado: dispensado } as any).eq('id', group.resumoId);
+      if (error) {
+        toast.error('Erro ao salvar');
+        setGroups((prev) => prev.map((g) =>
+          g.data === group.data && g.centroCusto === group.centroCusto ? { ...g, qualityDispensado: group.qualityDispensado } : g,
+        ));
+      }
+    } else {
+      const { data: newRec, error } = await supabase.from('resumo_conferencia')
+        .insert({ posto_id: selectedPostoId, data: group.data, turno: null, centro_custo: cc, conferido: group.conferido, observacao: group.observacao || null, turnos_conferidos: group.turnosConferidos, quality_dispensado: dispensado } as any)
+        .select('id').single();
+      if (error) {
+        toast.error('Erro ao salvar');
+        setGroups((prev) => prev.map((g) =>
+          g.data === group.data && g.centroCusto === group.centroCusto ? { ...g, qualityDispensado: group.qualityDispensado } : g,
+        ));
+      } else if (newRec) {
+        setGroups((prev) => prev.map((g) =>
+          g.data === group.data && g.centroCusto === group.centroCusto ? { ...g, resumoId: (newRec as any).id } : g,
+        ));
+      }
+    }
   };
 
   // ─── comprovantes handlers ─────────────────────────────────────────────────
@@ -905,6 +940,7 @@ export default function ResumoDiario() {
     // PDF Quality
     total += 1;
     if (group.quality?.pdf_path) feitos++;
+    else if (group.qualityDispensado) feitos++;
     // Itens do caixa
     const afAtivos = group.afericoes.filter((a) => !a.cancelado);
     const visComp = group.comprovantes.filter(
@@ -1551,32 +1587,58 @@ export default function ResumoDiario() {
                             </button>
                           )}
 
-                          {/* PDF Quality pill */}
+                          {/* PDF Quality pill — 3 states: com PDF / dispensado / pendente */}
                           {pdfUrl ? (
-                            <HoverCard openDelay={300} closeDelay={100}>
-                              <HoverCardTrigger asChild>
-                                <button
-                                  className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-400 transition-colors"
-                                  onClick={() => {
-                                    if (isMobile) { openInNewTab(pdfUrl); return; }
-                                    setPreviewFile({ url: pdfUrl, label: `PDF Quality — ${dateLabel}`, fileType: 'pdf' });
-                                  }}
-                                >
-                                  <Check className="h-3 w-3" />PDF Quality
-                                </button>
-                              </HoverCardTrigger>
-                              <HoverCardContent className="w-80 p-1.5" align="start" side="top">
-                                <p className="mb-1 px-0.5 text-[10px] text-muted-foreground">Clique para abrir com zoom</p>
-                                <iframe src={pdfUrl} className="h-52 w-full rounded border border-border" title="Preview PDF Quality" />
-                              </HoverCardContent>
-                            </HoverCard>
-                          ) : (
+                            <div className="inline-flex items-center">
+                              <HoverCard openDelay={300} closeDelay={100}>
+                                <HoverCardTrigger asChild>
+                                  <button
+                                    className="inline-flex items-center gap-1 rounded-l-full border border-r-0 border-green-500 bg-green-100 px-2.5 py-1 text-[11px] font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400 transition-colors"
+                                    onClick={() => {
+                                      if (isMobile) { openInNewTab(pdfUrl); return; }
+                                      setPreviewFile({ url: pdfUrl, label: `PDF Quality — ${dateLabel}`, fileType: 'pdf' });
+                                    }}
+                                  >
+                                    <Check className="h-3 w-3" />PDF Quality
+                                  </button>
+                                </HoverCardTrigger>
+                                <HoverCardContent className="w-80 p-1.5" align="start" side="top">
+                                  <p className="mb-1 px-0.5 text-[10px] text-muted-foreground">Clique para abrir com zoom</p>
+                                  <iframe src={pdfUrl} className="h-52 w-full rounded border border-border" title="Preview PDF Quality" />
+                                </HoverCardContent>
+                              </HoverCard>
+                              <button
+                                className="inline-flex items-center justify-center rounded-r-full border border-green-500 bg-green-100 px-1.5 py-1 text-green-700 transition-colors hover:bg-red-100 hover:border-red-400 hover:text-red-600 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-red-900/30 dark:hover:text-red-400"
+                                title="Excluir PDF Quality"
+                                onClick={() => setDeletingQualityDate(group.data)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ) : group.qualityDispensado ? (
                             <button
-                              className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium border-border text-muted-foreground transition-colors"
-                              onClick={() => { setUploadingQualityDate(group.data); qualityFileInputRef.current?.click(); }}
+                              className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-foreground"
+                              title="Clique para desfazer a dispensa"
+                              onClick={() => handleSetQualityDispensado(group, false)}
                             >
-                              PDF Quality
+                              <Check className="h-3 w-3" />Quality dispensado
                             </button>
+                          ) : (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary hover:text-foreground">
+                                  PDF Quality
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start">
+                                <DropdownMenuItem onClick={() => { setUploadingQualityDate(group.data); qualityFileInputRef.current?.click(); }}>
+                                  <Upload className="mr-2 h-4 w-4" />Importar PDF
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleSetQualityDispensado(group, true)}>
+                                  <X className="mr-2 h-4 w-4" />Dispensar por hoje
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           )}
 
                           {/* Itens pill */}
