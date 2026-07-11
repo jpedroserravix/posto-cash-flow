@@ -622,11 +622,12 @@ export default function ResumoDiario() {
     return 'border-l-4 border-l-warning';
   };
 
-  const fmtDayLabel = (iso: string) => {
+  const fmtDayLabel = (iso: string): { weekday: string; date: string } => {
     const d = new Date(`${iso}T00:00:00`);
     const wd = d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${wd.charAt(0).toUpperCase() + wd.slice(1)}, ${day}`;
+    const weekday = wd.charAt(0).toUpperCase() + wd.slice(1);
+    const date = d.toLocaleDateString('pt-BR');
+    return { weekday, date };
   };
 
   const updateGroup = (data: string, cc: string, field: 'conferido' | 'observacao', value: string) => {
@@ -1275,7 +1276,20 @@ export default function ResumoDiario() {
                       onClick={() => setExpandedKey(isExpanded ? null : rowKey)}
                     >
                       <div className="flex-1 min-w-0">
-                        <span className="font-medium tabular-nums text-sm">{fmtDayLabel(group.data)}</span>
+                        {(() => {
+                          const { weekday, date } = fmtDayLabel(group.data);
+                          return (
+                            <div className="leading-tight">
+                              {/* mobile: weekday on its own small line */}
+                              <span className="block sm:hidden text-[10px] font-normal text-muted-foreground">{weekday}</span>
+                              <span className="font-medium tabular-nums text-sm">
+                                {/* desktop: "Sex, 10/07/2026" inline */}
+                                <span className="hidden sm:inline">{weekday}, </span>
+                                {date}
+                              </span>
+                            </div>
+                          );
+                        })()}
                         {datesWithMultipleCC.has(group.data) && (
                           <span className="block text-[10px] text-muted-foreground leading-tight mt-0.5">{group.centroCusto}</span>
                         )}
