@@ -10,11 +10,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { Save, Upload, FileText, X, ExternalLink, Paperclip, Gauge, AlertTriangle, Ban, RotateCcw, UserMinus, Camera, Plus, CheckCircle2 } from 'lucide-react';
+import { Save, Upload, FileText, X, ExternalLink, Paperclip, Gauge, AlertTriangle, Ban, RotateCcw, UserMinus, Camera, Plus, CheckCircle2, Check, MessageSquare, Receipt, ClipboardList, UserPlus, Package } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { openInNewTab } from '@/lib/utils';
 import { usePagination } from '@/hooks/usePagination';
@@ -187,6 +189,9 @@ export default function ResumoDiario() {
   // Accordion expanded row key
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
+  // Which pill's turno chips are expanded (e.g. "dinheiro-2024-01-10-GERAL")
+  const [expandedPill, setExpandedPill] = useState<string | null>(null);
+
   const pagination = usePagination(displayGroups, [selectedPostoId, ccFilter], {
     defaultPageSize: 10,
     sessionKey: 'resumo_diario_pageSize',
@@ -195,6 +200,9 @@ export default function ResumoDiario() {
   useEffect(() => {
     if (selectedPostoId) loadResumo();
   }, [selectedPostoId, dfRange.start, dfRange.end]);
+
+  // Reset pill expansion when accordion row changes
+  useEffect(() => { setExpandedPill(null); }, [expandedKey]);
 
   // Auto-expand most recent entry when groups data changes
   useEffect(() => {
@@ -1015,380 +1023,459 @@ export default function ResumoDiario() {
                     </div>
                   </button>
 
-                  {/* Expanded detail */}
+                  {/* Expanded detail — R2 */}
                   {isExpanded && (
-                    <div className="border-t bg-muted/50 p-4 space-y-4">
+                    <div className="border-t bg-muted/50 p-4 space-y-3">
+
+                      {/* Expansion header: date label + "+" dropdown */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">{dateLabel} — {group.centroCusto}</span>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {perfil !== 'frentista' && (
+                              <DropdownMenuItem onClick={() => setLancarDialog({ data: group.data, centroCusto: group.centroCusto, tipo: 'Despesa', descricao: '', turno: '', observacao: '', file: null, saving: false })}>
+                                <Receipt className="mr-2 h-4 w-4" />Lançar item
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={() => setFaltaDialog({ data: group.data, centroCusto: group.centroCusto, tipo: 'Falta de Caixa', funcionarioId: '', valor: '', observacao: '', saving: false })}>
+                              <UserMinus className="mr-2 h-4 w-4" />Falta de Caixa
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => { setUploadingComprovDate(group.data); comprovantesFileInputRef.current?.click(); }}>
+                              <Upload className="mr-2 h-4 w-4" />Adicionar comprovante
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => { setUploadingQualityDate(group.data); qualityFileInputRef.current?.click(); }}>
+                              <FileText className="mr-2 h-4 w-4" />{pdfUrl ? 'Substituir PDF Quality' : 'Importar PDF Quality'}
+                            </DropdownMenuItem>
+                            {pdfUrl && (
+                              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setDeletingQualityDate(group.data)}>
+                                <X className="mr-2 h-4 w-4" />Remover PDF Quality
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+
+                      {/* Two-column grid */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-                        {/* ─ Left: caixa summary ─ */}
-                        <div className="space-y-3">
-                          <div className="overflow-x-auto">
+                        {/* Left: compact turnos table (no checkboxes) */}
+                        <div className="space-y-2">
                           <Table>
                             <TableHeader>
                               <TableRow>
-                                <TableHead className="text-xs">Turno</TableHead>
-                                <TableHead className="text-right text-xs">Brinks</TableHead>
-                                <TableHead className="text-right text-xs">Manual</TableHead>
-                                <TableHead className="text-right text-xs">Total Dinheiro</TableHead>
-                                <TableHead className="text-center text-xs w-8" title="Conferido">✓</TableHead>
-                                <TableHead className="text-right text-xs text-primary">Pix</TableHead>
-                                <TableHead className="text-center text-xs w-8" title="Pix Conferido">✓</TableHead>
+                                <TableHead className="text-xs h-7 py-0">Turno</TableHead>
+                                <TableHead className="text-right text-xs h-7 py-0">Brinks</TableHead>
+                                <TableHead className="text-right text-xs h-7 py-0">Manual</TableHead>
+                                <TableHead className="text-right text-xs h-7 py-0">Dinheiro</TableHead>
+                                <TableHead className="text-right text-xs h-7 py-0 text-primary">Pix</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
                               {group.turnos.map((turno) => (
-                                <TableRow key={turno.turno}>
-                                  <TableCell className="py-1 text-xs">{turno.turno}</TableCell>
+                                <TableRow key={turno.turno} className="bg-muted/30">
+                                  <TableCell className="py-1 text-xs text-muted-foreground">{turno.turno}</TableCell>
                                   <TableCell className="py-1 text-right text-xs">{fmt(turno.cofreBrinks)}</TableCell>
                                   <TableCell className="py-1 text-right text-xs">{fmt(turno.manual)}</TableCell>
                                   <TableCell className="py-1 text-right text-xs font-medium">{fmt(turno.total)}</TableCell>
-                                  <TableCell className="py-1 text-center">
-                                    <Checkbox
-                                      checked={group.turnosConferidos.includes(turno.turno)}
-                                      onCheckedChange={() => handleToggleTurno(group, turno.turno)}
-                                      className="h-4 w-4"
-                                    />
-                                  </TableCell>
-                                  <TableCell className="py-1 text-right text-xs text-primary whitespace-nowrap">
-                                    {turno.pix !== undefined ? (
-                                      <span>
-                                        {fmt(turno.pix)}
-                                        {turno.pixTarifa !== undefined && turno.pixTarifa > 0 && (
-                                          <span className="block text-[10px] text-muted-foreground">-{fmt(turno.pixTarifa)}</span>
-                                        )}
-                                      </span>
-                                    ) : '—'}
-                                  </TableCell>
-                                  <TableCell className="py-1 text-center">
-                                    <Checkbox
-                                      checked={turno.pixStatus === 'conferido'}
-                                      onCheckedChange={() => handleTogglePixTurno(group, turno)}
-                                      disabled={!turno.pixTurnoId}
-                                      className="h-4 w-4"
-                                    />
+                                  <TableCell className="py-1 text-right text-xs text-primary">
+                                    {turno.pix !== undefined ? fmt(turno.pix) : '—'}
                                   </TableCell>
                                 </TableRow>
                               ))}
-                              <TableRow className="border-t-2">
-                                <TableCell className="py-1 text-xs font-bold">Soma</TableCell>
-                                <TableCell className="py-1 text-right text-xs font-bold">{fmt(group.totalBrinks)}</TableCell>
-                                <TableCell className="py-1 text-right text-xs font-bold">{fmt(group.totalManual)}</TableCell>
-                                <TableCell className="py-1 text-right text-xs font-bold">{fmt(group.totalGeral)}</TableCell>
-                                <TableCell />
-                                <TableCell className="py-1 text-right text-xs font-bold text-primary whitespace-nowrap">
-                                  {group.totalPix > 0 ? (
-                                    <span>
-                                      {fmt(group.totalPix)}
-                                      {group.totalPixTarifa > 0 && (
-                                        <span className="block text-[10px] text-muted-foreground">-{fmt(group.totalPixTarifa)}</span>
-                                      )}
-                                    </span>
-                                  ) : '—'}
-                                </TableCell>
-                                <TableCell className="py-1 text-center">
-                                  <Checkbox
-                                    checked={group.pixBrutoConferido}
-                                    onCheckedChange={() => handleTogglePixBruto(group)}
-                                    disabled={!group.pixFechamentoId || group.totalPix === 0}
-                                    className="h-4 w-4"
-                                    title="Bruto conferido"
-                                  />
+                              <TableRow className="border-t-2 font-semibold">
+                                <TableCell className="py-1 text-xs">Total</TableCell>
+                                <TableCell className="py-1 text-right text-xs">{fmt(group.totalBrinks)}</TableCell>
+                                <TableCell className="py-1 text-right text-xs">{fmt(group.totalManual)}</TableCell>
+                                <TableCell className="py-1 text-right text-xs">{fmt(group.totalGeral)}</TableCell>
+                                <TableCell className="py-1 text-right text-xs text-primary">
+                                  {group.totalPix > 0 ? fmt(group.totalPix) : '—'}
                                 </TableCell>
                               </TableRow>
-                              {group.totalPix > 0 && (
-                                <TableRow>
-                                  <TableCell colSpan={5} className="py-1 text-right text-xs text-primary">
-                                    Líquido Pix a receber:{' '}
-                                    <span className="font-semibold">
-                                      {fmt(group.totalPix - group.totalPixTarifa)}
-                                    </span>
-                                  </TableCell>
-                                  <TableCell className="py-1 text-right text-xs text-muted-foreground whitespace-nowrap">
-                                    Recebido no banco
-                                  </TableCell>
-                                  <TableCell className="py-1 text-center">
-                                    <Checkbox
-                                      checked={group.pixRecebidoBanco}
-                                      onCheckedChange={() => handleTogglePixRecebido(group)}
-                                      disabled={!group.pixFechamentoId}
-                                      className="h-4 w-4"
-                                      title="Recebido no banco"
-                                    />
-                                  </TableCell>
-                                </TableRow>
-                              )}
                             </TableBody>
                           </Table>
-                          </div>
-
-                          {/* Quality PDF */}
-                          <div className="flex flex-wrap items-center gap-2">
-                            {pdfUrl ? (
-                              <div className="group/pdf relative">
-                                <HoverCard openDelay={300} closeDelay={100}>
-                                  <HoverCardTrigger asChild>
-                                    <button
-                                      className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-all hover:scale-105 hover:border-primary hover:text-foreground"
-                                      onClick={() => {
-                                        if (isMobile) { openInNewTab(pdfUrl); return; }
-                                        setPreviewFile({ url: pdfUrl, label: `PDF Quality — ${dateLabel}`, fileType: 'pdf' });
-                                      }}
-                                    >
-                                      <FileText className="h-3.5 w-3.5 text-red-500" />
-                                      <span>PDF Quality</span>
-                                    </button>
-                                  </HoverCardTrigger>
-                                  <HoverCardContent className="w-80 p-1.5" align="start" side="bottom">
-                                    <p className="mb-1 px-0.5 text-[10px] text-muted-foreground">Clique para abrir com zoom</p>
-                                    <iframe src={pdfUrl} className="h-52 w-full rounded border border-border" title="Preview PDF Quality" />
-                                  </HoverCardContent>
-                                </HoverCard>
-                                <button
-                                  className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 transition-opacity group-hover/pdf:opacity-100"
-                                  onClick={() => setDeletingQualityDate(group.data)}
-                                  title="Remover PDF"
-                                >
-                                  <X className="h-2.5 w-2.5" />
-                                </button>
-                              </div>
-                            ) : (
-                              <Badge variant="secondary" className="text-xs opacity-60">Sem PDF Quality</Badge>
-                            )}
-                            <Button size="sm" variant="ghost" className="ml-auto h-7 text-xs"
-                              onClick={() => { setUploadingQualityDate(group.data); qualityFileInputRef.current?.click(); }}>
-                              <Upload className="mr-1 h-3 w-3" />
-                              {pdfUrl ? 'Substituir PDF' : 'Importar PDF Quality'}
-                            </Button>
-                          </div>
+                          {group.totalPix > 0 && (
+                            <p className="text-[11px] text-muted-foreground border-t pt-1.5">
+                              Líquido Pix a receber{' '}
+                              <span className="font-medium text-foreground">{fmt(group.totalPix - group.totalPixTarifa)}</span>
+                              {group.totalPixTarifa > 0 && (
+                                <> · tarifas <span className="font-medium">{fmt(group.totalPixTarifa)}</span></>
+                              )}
+                            </p>
+                          )}
                         </div>
 
-                        {/* ─ Right: itens do caixa ─ */}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5">
-                              <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground font-medium">Itens do Caixa</span>
-                              {totalItens > 0 && (
-                                <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">{totalItens}</Badge>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1">
-                              {perfil !== 'frentista' && (
-                                <Button size="sm" variant="ghost" className="h-6 text-xs"
-                                  onClick={() => setLancarDialog({ data: group.data, centroCusto: group.centroCusto, tipo: 'Despesa', descricao: '', turno: '', observacao: '', file: null, saving: false })}>
-                                  <Plus className="mr-1 h-3 w-3" />Lançar
-                                </Button>
+                        {/* Right: compact itens do caixa */}
+                        <div className="space-y-1.5">
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Itens do Caixa</p>
+
+                          {group.afericoes.length === 0 && visibleComprovantes.length === 0 && (
+                            <p className="text-xs text-muted-foreground py-2">Nenhum item de caixa.</p>
                           )}
-                          <Button size="sm" variant="ghost" className="h-6 text-xs"
-                            onClick={() => setFaltaDialog({ data: group.data, centroCusto: group.centroCusto, tipo: 'Falta de Caixa', funcionarioId: '', valor: '', observacao: '', saving: false })}>
-                            <UserMinus className="mr-1 h-3 w-3" />Falta de Caixa
-                          </Button>
-                          <Button size="sm" variant="ghost" className="h-6 text-xs"
-                            onClick={() => { setUploadingComprovDate(group.data); comprovantesFileInputRef.current?.click(); }}>
-                            <Upload className="mr-1 h-3 w-3" />Adicionar
-                          </Button>
+
+                          {group.afericoes.map((af) => {
+                            const afUrl = af.pdf_path ? getStorageUrl('despesas-comprovantes', af.pdf_path) : null;
+                            return (
+                              <div key={af.id} className={`group/af flex items-center gap-2 rounded-md border p-2 ${af.cancelado ? 'bg-muted/40 opacity-70' : ''}`}>
+                                <Gauge className={`h-4 w-4 shrink-0 ${af.cancelado ? 'text-muted-foreground' : 'text-blue-500'}`} />
+                                <div className="flex-1 min-w-0">
+                                  <span className={`text-xs ${af.cancelado ? 'line-through text-muted-foreground' : ''}`}>
+                                    Aferição de Bicos{af.criado_por_nome ? ` — ${af.criado_por_nome}` : ''}
+                                  </span>
+                                  {af.cancelado && af.cancelado_por_nome && (
+                                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                                      Cancelado por {af.cancelado_por_nome} em {formatDateTime(af.cancelado_em)}
+                                    </p>
+                                  )}
+                                </div>
+                                {afUrl && !af.cancelado && (
+                                  <HoverCard openDelay={300} closeDelay={100}>
+                                    <HoverCardTrigger asChild>
+                                      <button
+                                        className="flex items-center rounded border border-border px-1.5 py-1 text-xs text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
+                                        onClick={() => {
+                                          if (isMobile) { openInNewTab(afUrl); return; }
+                                          setPreviewFile({ url: afUrl, label: `Aferição de Bicos — ${dateLabel}`, fileType: 'pdf' });
+                                        }}
+                                      >
+                                        <Paperclip className="h-3.5 w-3.5" />
+                                      </button>
+                                    </HoverCardTrigger>
+                                    <HoverCardContent className="w-80 p-1.5" align="start" side="bottom">
+                                      {af.criado_por_nome && (
+                                        <p className="mb-1 px-0.5 text-[10px] text-muted-foreground">Por: {af.criado_por_nome}</p>
+                                      )}
+                                      <p className="mb-1 px-0.5 text-[10px] text-muted-foreground">Clique para abrir com zoom</p>
+                                      <iframe src={afUrl} className="h-52 w-full rounded border border-border" title="Aferição de Bicos" />
+                                    </HoverCardContent>
+                                  </HoverCard>
+                                )}
+                                {!af.cancelado && (
+                                  <Checkbox
+                                    checked={af.item_conferido}
+                                    onCheckedChange={() => handleToggleAfericao(af.id, af.item_conferido)}
+                                    className="h-4 w-4 shrink-0"
+                                  />
+                                )}
+                                {af.cancelado ? (
+                                  <button
+                                    className="shrink-0 flex h-5 w-5 items-center justify-center rounded-full border border-border text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
+                                    title="Restaurar"
+                                    onClick={() => handleRestoreItem('afericao', af.id)}
+                                  >
+                                    <RotateCcw className="h-3 w-3" />
+                                  </button>
+                                ) : (
+                                  <button
+                                    className="opacity-0 group-hover/af:opacity-100 transition-opacity shrink-0 flex h-5 w-5 items-center justify-center rounded-full border border-border text-muted-foreground hover:border-destructive hover:text-destructive"
+                                    title="Cancelar aferição"
+                                    onClick={() => setCancelingItem({ type: 'afericao', id: af.id })}
+                                  >
+                                    <Ban className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+
+                          {visibleComprovantes.map((comp) => {
+                            const compUrl = comp.file_path ? getStorageUrl('despesas-comprovantes', comp.file_path) : null;
+                            const compLabel = comp.tipo === 'Despesa'
+                              ? `Despesa${comp.descricao_despesa ? ` — ${comp.descricao_despesa}` : ''}`
+                              : comp.tipo === 'Outros'
+                                ? `Outros${comp.titulo ? ` — ${comp.titulo}` : ''}`
+                                : comp.tipo === 'Nota a Prazo'
+                                  ? 'Nota a Prazo'
+                                  : comp.tipo === 'Falta de Caixa'
+                                    ? `Falta de Caixa${comp.funcionario_nome ? ` — ${comp.funcionario_nome}` : ''}${comp.valor != null ? ` — ${fmt(comp.valor)}` : ''}`
+                                    : comp.tipo === 'Sobra de Caixa'
+                                      ? `Sobra de Caixa${comp.funcionario_nome ? ` — ${comp.funcionario_nome}` : ''}${comp.valor != null ? ` — +${fmt(comp.valor)}` : ''}`
+                                      : comp.file_name ?? '(arquivo)';
+                            const compIcon = comp.tipo === 'Despesa' ? <Receipt className="h-4 w-4 shrink-0 text-orange-500" />
+                              : comp.tipo === 'Falta de Caixa' ? <UserMinus className="h-4 w-4 shrink-0 text-red-500" />
+                              : comp.tipo === 'Sobra de Caixa' ? <UserPlus className="h-4 w-4 shrink-0 text-green-500" />
+                              : comp.tipo === 'Nota a Prazo' ? <ClipboardList className="h-4 w-4 shrink-0 text-purple-500" />
+                              : comp.tipo === 'Outros' ? <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
+                              : <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />;
+                            return (
+                              <div key={comp.id} className={`group/comp flex items-center gap-2 rounded-md border p-2 ${comp.cancelado ? 'bg-muted/40 opacity-70' : ''}`}>
+                                <span className={comp.cancelado ? 'opacity-50' : ''}>{compIcon}</span>
+                                <span className={`flex-1 min-w-0 text-xs truncate ${
+                                  comp.cancelado ? 'line-through text-muted-foreground' :
+                                  comp.tipo === 'Falta de Caixa' ? 'text-red-600 dark:text-red-400 font-medium' :
+                                  comp.tipo === 'Sobra de Caixa' ? 'text-green-600 dark:text-green-400 font-medium' : ''
+                                }`}>{compLabel}</span>
+                                {compUrl && !comp.cancelado && (
+                                  <HoverCard openDelay={300} closeDelay={100}>
+                                    <HoverCardTrigger asChild>
+                                      <button
+                                        className="flex items-center rounded border border-border px-1.5 py-1 text-xs text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
+                                        onClick={() => {
+                                          if (comp.file_type !== 'image' && isMobile) { openInNewTab(compUrl); return; }
+                                          setPreviewFile({ url: compUrl, label: comp.file_name ?? compLabel, fileType: comp.file_type ?? 'pdf' });
+                                        }}
+                                      >
+                                        <Paperclip className="h-3.5 w-3.5" />
+                                      </button>
+                                    </HoverCardTrigger>
+                                    <HoverCardContent className="w-64 p-1.5" align="start" side="bottom">
+                                      {comp.file_type === 'image' ? (
+                                        <img src={compUrl} className="w-full max-h-48 rounded border object-contain" alt={comp.file_name ?? ''} />
+                                      ) : (
+                                        <>
+                                          <p className="mb-1 px-0.5 text-[10px] text-muted-foreground">Clique para abrir com zoom</p>
+                                          <iframe src={compUrl} className="h-40 w-full rounded border border-border" title={comp.file_name ?? ''} />
+                                        </>
+                                      )}
+                                    </HoverCardContent>
+                                  </HoverCard>
+                                )}
+                                {!comp.cancelado && (
+                                  <Checkbox
+                                    checked={comp.item_conferido}
+                                    onCheckedChange={() => handleToggleComprovante(comp.id, comp.item_conferido)}
+                                    className="h-4 w-4 shrink-0"
+                                  />
+                                )}
+                                {comp.cancelado ? (
+                                  <button
+                                    className="shrink-0 flex h-5 w-5 items-center justify-center rounded-full border border-border text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
+                                    title="Restaurar"
+                                    onClick={() => handleRestoreItem('comprovante', comp.id)}
+                                  >
+                                    <RotateCcw className="h-3 w-3" />
+                                  </button>
+                                ) : (
+                                  <button
+                                    className="opacity-0 group-hover/comp:opacity-100 transition-opacity shrink-0 flex h-5 w-5 items-center justify-center rounded-full border border-border text-muted-foreground hover:border-destructive hover:text-destructive"
+                                    onClick={() => setCancelingItem({ type: 'comprovante', id: comp.id })}
+                                    title="Cancelar item"
+                                  >
+                                    <Ban className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
 
-                      {group.afericoes.length === 0 && visibleComprovantes.length === 0 && (
-                        <p className="text-xs text-muted-foreground py-2">Nenhum item de caixa.</p>
-                      )}
+                      {/* ── Footer: pills + obs icon + status + save ── */}
+                      <div className="pt-2 border-t">
+                        <div className="flex flex-wrap items-start gap-1.5">
 
-                      {/* Aferições */}
-                      {group.afericoes.map((af) => {
-                        const afUrl = af.pdf_path ? getStorageUrl('despesas-comprovantes', af.pdf_path) : null;
-                        return (
-                          <div key={af.id} className={`group/af flex items-center gap-2 rounded-md border p-2 ${af.cancelado ? 'bg-muted/40 opacity-70' : ''}`}>
-                            {!af.cancelado && (
-                              <Checkbox
-                                checked={af.item_conferido}
-                                onCheckedChange={() => handleToggleAfericao(af.id, af.item_conferido)}
-                                className="h-4 w-4 shrink-0"
-                              />
-                            )}
-                            <Gauge className={`h-4 w-4 shrink-0 ${af.cancelado ? 'text-muted-foreground' : 'text-blue-500'}`} />
-                            <div className="flex-1 min-w-0">
-                              <span className={`text-xs ${af.cancelado ? 'line-through text-muted-foreground' : ''}`}>
-                                Aferição de Bicos{af.criado_por_nome ? ` — ${af.criado_por_nome}` : ''}
-                              </span>
-                              {af.cancelado && af.cancelado_por_nome && (
-                                <p className="text-[10px] text-muted-foreground mt-0.5">
-                                  Cancelado por {af.cancelado_por_nome} em {formatDateTime(af.cancelado_em)}
-                                </p>
+                          {/* Dinheiro pill with expandable T1/T2/T3 */}
+                          <div>
+                            <button
+                              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                                group.turnosConferidos.length === group.turnos.length && group.turnos.length > 0
+                                  ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                  : 'border-border text-muted-foreground'
+                              }`}
+                              onClick={() => setExpandedPill((p) => p === `${rowKey}-din` ? null : `${rowKey}-din`)}
+                            >
+                              {group.turnosConferidos.length === group.turnos.length && group.turnos.length > 0 && (
+                                <Check className="h-3 w-3" />
                               )}
-                            </div>
-                            {afUrl && !af.cancelado && (
-                              <HoverCard openDelay={300} closeDelay={100}>
-                                <HoverCardTrigger asChild>
-                                  <button
-                                    className="flex items-center gap-1 rounded border border-border px-1.5 py-1 text-xs text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
-                                    onClick={() => {
-                                      if (isMobile) { openInNewTab(afUrl); return; }
-                                      setPreviewFile({ url: afUrl, label: `Aferição de Bicos — ${dateLabel}`, fileType: 'pdf' });
-                                    }}
-                                  >
-                                    <FileText className="h-3.5 w-3.5 text-red-500" />
-                                  </button>
-                                </HoverCardTrigger>
-                                <HoverCardContent className="w-80 p-1.5" align="start" side="bottom">
-                                  {af.criado_por_nome && (
-                                    <p className="mb-1 px-0.5 text-[10px] text-muted-foreground">Por: {af.criado_por_nome}</p>
-                                  )}
-                                  <p className="mb-1 px-0.5 text-[10px] text-muted-foreground">Clique para abrir com zoom</p>
-                                  <iframe src={afUrl} className="h-52 w-full rounded border border-border" title="Aferição de Bicos" />
-                                </HoverCardContent>
-                              </HoverCard>
-                            )}
-                            {af.cancelado ? (
-                              <button
-                                className="shrink-0 flex h-5 w-5 items-center justify-center rounded-full border border-border text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
-                                title="Restaurar"
-                                onClick={() => handleRestoreItem('afericao', af.id)}
-                              >
-                                <RotateCcw className="h-3 w-3" />
-                              </button>
-                            ) : (
-                              <button
-                                className="opacity-0 group-hover/af:opacity-100 transition-opacity shrink-0 flex h-5 w-5 items-center justify-center rounded-full border border-border text-muted-foreground hover:border-destructive hover:text-destructive"
-                                title="Cancelar aferição"
-                                onClick={() => setCancelingItem({ type: 'afericao', id: af.id })}
-                              >
-                                <Ban className="h-3 w-3" />
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-
-                      {/* Comprovantes (Despesa, Outros, Nota a Prazo) */}
-                      {visibleComprovantes.map((comp) => {
-                        const compUrl = comp.file_path ? getStorageUrl('despesas-comprovantes', comp.file_path) : null;
-                        const compLabel = comp.tipo === 'Despesa'
-                          ? `Despesa${comp.descricao_despesa ? ` — ${comp.descricao_despesa}` : ''}`
-                          : comp.tipo === 'Outros'
-                            ? `Outros${comp.titulo ? ` — ${comp.titulo}` : ''}`
-                            : comp.tipo === 'Nota a Prazo'
-                              ? 'Nota a Prazo'
-                              : comp.tipo === 'Falta de Caixa'
-                                ? `Falta de Caixa${comp.funcionario_nome ? ` — ${comp.funcionario_nome}` : ''}${comp.valor != null ? ` — ${fmt(comp.valor)}` : ''}`
-                                : comp.tipo === 'Sobra de Caixa'
-                                  ? `Sobra de Caixa${comp.funcionario_nome ? ` — ${comp.funcionario_nome}` : ''}${comp.valor != null ? ` — +${fmt(comp.valor)}` : ''}`
-                                  : comp.file_name ?? '(arquivo)';
-                        return (
-                          <div key={comp.id} className={`group/comp flex items-start gap-2 rounded-md border p-2 ${comp.cancelado ? 'bg-muted/40 opacity-70' : ''}`}>
-                            {!comp.cancelado && (
-                              <Checkbox
-                                checked={comp.item_conferido}
-                                onCheckedChange={() => handleToggleComprovante(comp.id, comp.item_conferido)}
-                                className="h-4 w-4 shrink-0 mt-0.5"
-                              />
-                            )}
-                            {/* Preview trigger — only when file exists and not cancelled */}
-                            {compUrl && !comp.cancelado && (
-                              <div className="relative shrink-0">
-                                <HoverCard openDelay={300} closeDelay={100}>
-                                  <HoverCardTrigger asChild>
+                              Dinheiro {group.turnosConferidos.length}/{group.turnos.length}
+                            </button>
+                            {expandedPill === `${rowKey}-din` && (
+                              <div className="mt-1 flex gap-1 flex-wrap">
+                                {group.turnos.map((turno) => {
+                                  const checked = group.turnosConferidos.includes(turno.turno);
+                                  return (
                                     <button
-                                      className="flex items-center gap-1 rounded border border-border px-1.5 py-1 text-xs text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
-                                      onClick={() => {
-                                        if (comp.file_type !== 'image' && isMobile) { openInNewTab(compUrl); return; }
-                                        setPreviewFile({ url: compUrl, label: comp.file_name ?? compLabel, fileType: comp.file_type ?? 'pdf' });
-                                      }}
+                                      key={turno.turno}
+                                      className={`inline-flex items-center gap-0.5 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                                        checked ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'border-border text-muted-foreground'
+                                      }`}
+                                      onClick={() => handleToggleTurno(group, turno.turno)}
                                     >
-                                      {comp.file_type === 'image' ? (
-                                        <img src={compUrl} className="h-5 w-5 rounded object-cover" alt="" />
-                                      ) : (
-                                        <FileText className="h-4 w-4 text-red-500" />
-                                      )}
+                                      {checked && <Check className="h-2.5 w-2.5" />}{turno.turno}
                                     </button>
-                                  </HoverCardTrigger>
-                                  <HoverCardContent className="w-64 p-1.5" align="start" side="bottom">
-                                    {comp.file_type === 'image' ? (
-                                      <img src={compUrl} className="w-full max-h-48 rounded border object-contain" alt={comp.file_name ?? ''} />
-                                    ) : (
-                                      <>
-                                        <p className="mb-1 px-0.5 text-[10px] text-muted-foreground">Clique para abrir com zoom</p>
-                                        <iframe src={compUrl} className="h-40 w-full rounded border border-border" title={comp.file_name ?? ''} />
-                                      </>
-                                    )}
-                                  </HoverCardContent>
-                                </HoverCard>
+                                  );
+                                })}
                               </div>
                             )}
+                          </div>
 
-                            {/* Label + observation (or cancelled info) */}
-                            <div className="flex-1 min-w-0 space-y-0.5">
-                              <div className={`text-[10px] truncate ${
-                                comp.cancelado ? 'line-through text-muted-foreground' :
-                                comp.tipo === 'Falta de Caixa' ? 'text-red-600 dark:text-red-400 font-medium' :
-                                comp.tipo === 'Sobra de Caixa' ? 'text-green-600 dark:text-green-400 font-medium' :
-                                'text-muted-foreground'
-                              }`}>{compLabel}</div>
-                              {comp.cancelado ? (
-                                <p className="text-[10px] text-muted-foreground">
-                                  Cancelado por {comp.cancelado_por_nome} em {formatDateTime(comp.cancelado_em)}
-                                </p>
-                              ) : (
-                                <Input
-                                  className="h-6 text-xs border-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-b-primary bg-transparent"
-                                  value={getCompObs(comp)}
-                                  onChange={(e) => handleCompObsChange(comp.id, e.target.value)}
+                          {/* Pix pill with expandable T1/T2/T3 */}
+                          {group.totalPix > 0 && (() => {
+                            const pixConf = group.turnos.filter((t) => t.pixStatus === 'conferido').length;
+                            const pixTotal = group.turnos.filter((t) => t.pix !== undefined).length;
+                            return (
+                              <div>
+                                <button
+                                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                                    pixConf === pixTotal && pixTotal > 0
+                                      ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                      : 'border-border text-muted-foreground'
+                                  }`}
+                                  onClick={() => setExpandedPill((p) => p === `${rowKey}-pix` ? null : `${rowKey}-pix`)}
+                                >
+                                  {pixConf === pixTotal && pixTotal > 0 && <Check className="h-3 w-3" />}
+                                  Pix {pixConf}/{pixTotal}
+                                </button>
+                                {expandedPill === `${rowKey}-pix` && (
+                                  <div className="mt-1 flex gap-1 flex-wrap">
+                                    {group.turnos.filter((t) => t.pix !== undefined).map((turno) => {
+                                      const checked = turno.pixStatus === 'conferido';
+                                      return (
+                                        <button
+                                          key={turno.turno}
+                                          className={`inline-flex items-center gap-0.5 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                                            checked ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'border-border text-muted-foreground'
+                                          } ${!turno.pixTurnoId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                          disabled={!turno.pixTurnoId}
+                                          onClick={() => handleTogglePixTurno(group, turno)}
+                                        >
+                                          {checked && <Check className="h-2.5 w-2.5" />}{turno.turno}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+
+                          {/* Pix bruto pill */}
+                          {group.totalPix > 0 && (
+                            <button
+                              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                                group.pixBrutoConferido
+                                  ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                  : 'border-border text-muted-foreground'
+                              } ${!group.pixFechamentoId || group.totalPix === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              disabled={!group.pixFechamentoId || group.totalPix === 0}
+                              onClick={() => handleTogglePixBruto(group)}
+                            >
+                              {group.pixBrutoConferido && <Check className="h-3 w-3" />}
+                              Pix bruto
+                            </button>
+                          )}
+
+                          {/* Recebido no banco pill */}
+                          {group.totalPix > 0 && (
+                            <button
+                              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                                group.pixRecebidoBanco
+                                  ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                  : 'border-border text-muted-foreground'
+                              } ${!group.pixFechamentoId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              disabled={!group.pixFechamentoId}
+                              onClick={() => handleTogglePixRecebido(group)}
+                            >
+                              {group.pixRecebidoBanco && <Check className="h-3 w-3" />}
+                              Recebido no banco
+                            </button>
+                          )}
+
+                          {/* PDF Quality pill */}
+                          {pdfUrl ? (
+                            <HoverCard openDelay={300} closeDelay={100}>
+                              <HoverCardTrigger asChild>
+                                <button
+                                  className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-400 transition-colors"
+                                  onClick={() => {
+                                    if (isMobile) { openInNewTab(pdfUrl); return; }
+                                    setPreviewFile({ url: pdfUrl, label: `PDF Quality — ${dateLabel}`, fileType: 'pdf' });
+                                  }}
+                                >
+                                  <Check className="h-3 w-3" />PDF Quality
+                                </button>
+                              </HoverCardTrigger>
+                              <HoverCardContent className="w-80 p-1.5" align="start" side="top">
+                                <p className="mb-1 px-0.5 text-[10px] text-muted-foreground">Clique para abrir com zoom</p>
+                                <iframe src={pdfUrl} className="h-52 w-full rounded border border-border" title="Preview PDF Quality" />
+                              </HoverCardContent>
+                            </HoverCard>
+                          ) : (
+                            <button
+                              className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium border-border text-muted-foreground transition-colors"
+                              onClick={() => { setUploadingQualityDate(group.data); qualityFileInputRef.current?.click(); }}
+                            >
+                              PDF Quality
+                            </button>
+                          )}
+
+                          {/* Itens pill */}
+                          {totalItens > 0 && (() => {
+                            const conferidos = [
+                              ...group.afericoes.filter((a) => !a.cancelado && a.item_conferido),
+                              ...visibleComprovantes.filter((c) => !c.cancelado && c.item_conferido),
+                            ].length;
+                            const ativos = [
+                              ...group.afericoes.filter((a) => !a.cancelado),
+                              ...visibleComprovantes.filter((c) => !c.cancelado),
+                            ].length;
+                            return (
+                              <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                                conferidos === ativos
+                                  ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                  : 'border-border text-muted-foreground'
+                              }`}>
+                                {conferidos === ativos && <Check className="h-3 w-3" />}
+                                Itens {conferidos}/{ativos}
+                              </span>
+                            );
+                          })()}
+
+                          {/* Right side: obs icon + status + save */}
+                          <div className="ml-auto flex items-center gap-2">
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <button
+                                  title={group.observacao ? group.observacao : 'Observação geral'}
+                                  className={`flex h-7 w-7 items-center justify-center rounded-full border transition-colors ${
+                                    group.observacao
+                                      ? 'border-primary bg-primary/10 text-primary'
+                                      : 'border-border text-muted-foreground hover:border-primary hover:text-primary'
+                                  }`}
+                                >
+                                  <MessageSquare className="h-3.5 w-3.5" />
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-72 p-3" align="end" side="top">
+                                <p className="text-xs font-medium mb-2">Observação geral do caixa</p>
+                                <Textarea
+                                  className="text-xs min-h-[60px] resize-none"
+                                  value={group.observacao}
+                                  onChange={(e) => updateGroup(group.data, group.centroCusto, 'observacao', e.target.value)}
                                   placeholder="Observação..."
                                 />
-                              )}
-                            </div>
+                                <Button size="sm" className="mt-2 w-full h-7 text-xs" onClick={() => handleSaveGroup(group)}>
+                                  <Save className="mr-1.5 h-3 w-3" />Salvar
+                                </Button>
+                              </PopoverContent>
+                            </Popover>
 
-                            {/* Cancel / Restore */}
-                            {comp.cancelado ? (
-                              <button
-                                className="shrink-0 flex h-5 w-5 items-center justify-center rounded-full border border-border text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
-                                title="Restaurar"
-                                onClick={() => handleRestoreItem('comprovante', comp.id)}
-                              >
-                                <RotateCcw className="h-3 w-3" />
-                              </button>
-                            ) : (
-                              <button
-                                className="opacity-0 group-hover/comp:opacity-100 transition-opacity shrink-0 flex h-5 w-5 items-center justify-center rounded-full border border-border text-muted-foreground hover:border-destructive hover:text-destructive"
-                                onClick={() => setCancelingItem({ type: 'comprovante', id: comp.id })}
-                                title="Cancelar item"
-                              >
-                                <Ban className="h-3 w-3" />
-                              </button>
-                            )}
+                            <Select
+                              value={group.conferido}
+                              onValueChange={(v) => updateGroup(group.data, group.centroCusto, 'conferido', v)}
+                            >
+                              <SelectTrigger className={`h-7 w-32 text-xs ${
+                                group.conferido === 'OK' ? 'border-success text-success'
+                                : group.conferido === 'DIVERGÊNCIA' ? 'border-destructive text-destructive'
+                                : 'border-warning text-warning'
+                              }`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {CONFERIDO_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleSaveGroup(group)}>
+                              <Save className="h-3.5 w-3.5" />
+                            </Button>
                           </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                      {/* ── Footer: status + observação geral + save ── */}
-                      <div className="flex flex-wrap items-center gap-2 pt-2 border-t">
-                        <Select
-                          value={group.conferido}
-                          onValueChange={(v) => updateGroup(group.data, group.centroCusto, 'conferido', v)}
-                        >
-                          <SelectTrigger className={`h-8 w-36 text-xs ${
-                            group.conferido === 'OK' ? 'border-success text-success'
-                            : group.conferido === 'DIVERGÊNCIA' ? 'border-destructive text-destructive'
-                            : 'border-warning text-warning'
-                          }`}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {CONFERIDO_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-
-                        <Input
-                          className="h-8 min-w-[120px] flex-1 text-xs"
-                          value={group.observacao}
-                          onChange={(e) => updateGroup(group.data, group.centroCusto, 'observacao', e.target.value)}
-                          placeholder="Observação geral do caixa"
-                        />
-
-                        <Button size="sm" variant="ghost" onClick={() => handleSaveGroup(group)}>
-                          <Save className="h-4 w-4" />
-                        </Button>
+                        </div>
                       </div>
                     </div>
                   )}
