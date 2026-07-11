@@ -195,6 +195,10 @@ export default function ResumoDiario() {
   // Divergência dialog state
   const [divDialog, setDivDialog] = useState<{ data: string; centroCusto: string; obs: string; saving: boolean } | null>(null);
 
+  // Multi-day selection for Pix batch operations
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [confirmBatchReceive, setConfirmBatchReceive] = useState(false);
+
   const pagination = usePagination(displayGroups, [selectedPostoId, ccFilter], {
     defaultPageSize: 10,
     sessionKey: 'resumo_diario_pageSize',
@@ -991,6 +995,37 @@ export default function ResumoDiario() {
     loadMesVigentePendencias();
   };
 
+  // ─── batch mark Pix received ──────────────────────────────────────────────
+
+  const handleBatchMarkReceived = async () => {
+    const toUpdate = displayGroups
+      .filter((g) => selectedKeys.has(`${g.data}-${g.centroCusto}`) && g.pixFechamentoId)
+      .map((g) => g.pixFechamentoId!);
+
+    if (toUpdate.length === 0) {
+      toast.error('Nenhum dia selecionado tem fechamento Pix');
+      setConfirmBatchReceive(false);
+      return;
+    }
+
+    const { error } = await (supabase as any)
+      .from('pix_fechamentos')
+      .update({ recebido_banco: true })
+      .in('id', toUpdate);
+
+    if (error) { toast.error('Erro ao atualizar: ' + error.message); setConfirmBatchReceive(false); return; }
+
+    setGroups((prev) => prev.map((g) =>
+      selectedKeys.has(`${g.data}-${g.centroCusto}`) && g.pixFechamentoId
+        ? { ...g, pixRecebidoBanco: true }
+        : g,
+    ));
+
+    toast.success(`${toUpdate.length} dia(s) marcados como recebidos no banco!`);
+    setSelectedKeys(new Set());
+    setConfirmBatchReceive(false);
+  };
+
   // ─── item_conferido toggles ────────────────────────────────────────────────
 
   const handleToggleComprovante = async (compId: string, currentVal: boolean) => {
@@ -1080,7 +1115,8 @@ export default function ResumoDiario() {
         <>
           <div className="rounded-md border overflow-hidden">
             {/* Column headers */}
-            <div className="flex items-center border-b bg-muted/70 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            <div className="flex items-center border-b bg-muted/70 pr-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="w-10 shrink-0" />
               <div className="flex-1">Dia</div>
               <div className="w-24 text-right">Dinheiro</div>
               <div className="w-24 text-right">Pix</div>
@@ -1105,35 +1141,52 @@ export default function ResumoDiario() {
 
               return (
                 <div key={rowKey} className={!isLast ? 'border-b' : ''}>
-                  {/* Compact row button */}
-                  <button
-                    className={`w-full flex items-center px-3 py-2.5 text-left transition-colors hover:bg-muted/30 ${isExpanded ? 'bg-muted/20' : ''}`}
-                    onClick={() => setExpandedKey(isExpanded ? null : rowKey)}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <span className="font-medium tabular-nums text-sm">{fmtDayLabel(group.data)}</span>
-                      {datesWithMultipleCC.has(group.data) && (
-                        <span className="block text-[10px] text-muted-foreground leading-tight mt-0.5">{group.centroCusto}</span>
-                      )}
+                  {/* Closed row: checkbox + accordion trigger */}
+                  <div className={`flex items-center transition-colors hover:bg-muted/30 ${isExpanded ? 'bg-muted/20' : ''}`}>
+                    {/* Selection checkbox — stopPropagation prevents accordion toggle */}
+                    <div
+                      className="w-10 shrink-0 flex items-center justify-center py-2.5"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Checkbox
+                        checked={selectedKeys.has(rowKey)}
+                        onCheckedChange={() => setSelectedKeys((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(rowKey)) next.delete(rowKey); else next.add(rowKey);
+                          return next;
+                        })}
+                        className="h-4 w-4"
+                      />
                     </div>
-                    <div className="w-24 text-right tabular-nums text-xs">{fmt(group.totalGeral)}</div>
-                    <div className="w-24 text-right tabular-nums text-xs text-primary">
-                      {group.totalPix > 0 ? fmt(group.totalPix) : <span className="text-muted-foreground">—</span>}
-                    </div>
-                    <div className="hidden sm:block w-24 text-right tabular-nums text-xs">
-                      {liquidoPix !== null ? fmt(liquidoPix) : <span className="text-muted-foreground">—</span>}
-                    </div>
-                    <div className="w-20 flex justify-center">
-                      {group.conferido === 'OK' ? (
-                        <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-500" />
-                      ) : group.conferido === 'DIVERGÊNCIA' ? (
-                        <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">difere</span>
-                      ) : (() => {
-                        const { feitos, total } = calcChecklist(group);
-                        return <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-500">{feitos}/{total}</span>;
-                      })()}
-                    </div>
-                  </button>
+                    <button
+                      className="flex-1 flex items-center py-2.5 pr-3 text-left"
+                      onClick={() => setExpandedKey(isExpanded ? null : rowKey)}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <span className="font-medium tabular-nums text-sm">{fmtDayLabel(group.data)}</span>
+                        {datesWithMultipleCC.has(group.data) && (
+                          <span className="block text-[10px] text-muted-foreground leading-tight mt-0.5">{group.centroCusto}</span>
+                        )}
+                      </div>
+                      <div className="w-24 text-right tabular-nums text-xs">{fmt(group.totalGeral)}</div>
+                      <div className="w-24 text-right tabular-nums text-xs text-primary">
+                        {group.totalPix > 0 ? fmt(group.totalPix) : <span className="text-muted-foreground">—</span>}
+                      </div>
+                      <div className="hidden sm:block w-24 text-right tabular-nums text-xs">
+                        {liquidoPix !== null ? fmt(liquidoPix) : <span className="text-muted-foreground">—</span>}
+                      </div>
+                      <div className="w-20 flex justify-center">
+                        {group.conferido === 'OK' ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-500" />
+                        ) : group.conferido === 'DIVERGÊNCIA' ? (
+                          <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">difere</span>
+                        ) : (() => {
+                          const { feitos, total } = calcChecklist(group);
+                          return <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-500">{feitos}/{total}</span>;
+                        })()}
+                      </div>
+                    </button>
+                  </div>
 
                   {/* Expanded detail — R2 */}
                   {isExpanded && (
@@ -1624,6 +1677,41 @@ export default function ResumoDiario() {
             })}
           </div>
 
+          {/* ── Multi-day Pix selection bar ── */}
+          {selectedKeys.size > 0 && (() => {
+            const sel = displayGroups.filter((g) => selectedKeys.has(`${g.data}-${g.centroCusto}`));
+            const pixBruto = sel.reduce((s, g) => s + g.totalPix, 0);
+            const pixTarifa = sel.reduce((s, g) => s + g.totalPixTarifa, 0);
+            const liquidoPixSel = pixBruto - pixTarifa;
+            const semFechamento = sel.filter((g) => !g.pixFechamentoId).length;
+            return (
+              <div className="sticky bottom-2 z-20 rounded-md border bg-background shadow-lg px-4 py-3 flex flex-wrap items-center gap-3">
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <span className="text-sm font-medium">
+                    {selectedKeys.size} {selectedKeys.size === 1 ? 'dia selecionado' : 'dias selecionados'}
+                    {' · '}Pix bruto{' '}
+                    <span className="font-semibold">{fmt(pixBruto)}</span>
+                    {' · '}Líquido a receber{' '}
+                    <span className="font-semibold text-primary">{fmt(liquidoPixSel)}</span>
+                  </span>
+                  {semFechamento > 0 && (
+                    <span className="text-[11px] text-muted-foreground">
+                      {semFechamento} dia(s) sem fechamento Pix — somados como zero
+                    </span>
+                  )}
+                </div>
+                <div className="ml-auto flex gap-2 shrink-0">
+                  <Button size="sm" variant="outline" onClick={() => setSelectedKeys(new Set())}>
+                    Limpar seleção
+                  </Button>
+                  <Button size="sm" onClick={() => setConfirmBatchReceive(true)}>
+                    Marcar recebido no banco
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
+
           <PaginationControls
             page={pagination.page} totalPages={pagination.totalPages}
             pageSize={pagination.pageSize} totalItems={pagination.totalItems}
@@ -1972,6 +2060,37 @@ export default function ResumoDiario() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ── Confirmar Marcar Recebido em Lote ── */}
+      <AlertDialog open={confirmBatchReceive} onOpenChange={(o) => { if (!o) setConfirmBatchReceive(false); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Marcar recebido no banco?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {(() => {
+                const sel = displayGroups.filter((g) => selectedKeys.has(`${g.data}-${g.centroCusto}`));
+                const comFechamento = sel.filter((g) => g.pixFechamentoId).length;
+                const semFechamento = sel.length - comFechamento;
+                const pixBruto = sel.reduce((s, g) => s + g.totalPix, 0);
+                const liquido = pixBruto - sel.reduce((s, g) => s + g.totalPixTarifa, 0);
+                return (
+                  <>
+                    Será marcado <strong>recebido_banco = true</strong> em {comFechamento} fechamento(s) Pix.
+                    {semFechamento > 0 && ` ${semFechamento} dia(s) sem fechamento Pix serão ignorados.`}
+                    {' '}Total líquido: <strong>{fmt(liquido)}</strong>.
+                  </>
+                );
+              })()}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBatchMarkReceived}>
+              Confirmar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
