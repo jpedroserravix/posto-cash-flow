@@ -192,6 +192,9 @@ export default function ResumoDiario() {
   // Which pill's turno chips are expanded (e.g. "dinheiro-2024-01-10-GERAL")
   const [expandedPill, setExpandedPill] = useState<string | null>(null);
 
+  // Divergência dialog state
+  const [divDialog, setDivDialog] = useState<{ data: string; centroCusto: string; obs: string; saving: boolean } | null>(null);
+
   const pagination = usePagination(displayGroups, [selectedPostoId, ccFilter], {
     defaultPageSize: 10,
     sessionKey: 'resumo_diario_pageSize',
@@ -880,6 +883,114 @@ export default function ResumoDiario() {
   const getCompObs = (comp: Comprovante) =>
     compObsEdits.has(comp.id) ? (compObsEdits.get(comp.id) ?? '') : (comp.observacao ?? '');
 
+  // ─── checklist counter ─────────────────────────────────────────────────────
+
+  const calcChecklist = (group: GroupData): { feitos: number; total: number } => {
+    let feitos = 0, total = 0;
+    // Dinheiro por turno
+    total += group.turnos.length;
+    feitos += group.turnosConferidos.length;
+    // Pix — only when fechamento Pix exists
+    if (group.pixFechamentoId) {
+      const pixTurnos = group.turnos.filter((t) => t.pix !== undefined);
+      total += pixTurnos.length + 2; // turno status + bruto + recebido
+      feitos += pixTurnos.filter((t) => t.pixStatus === 'conferido').length;
+      if (group.pixBrutoConferido) feitos++;
+      if (group.pixRecebidoBanco) feitos++;
+    }
+    // PDF Quality
+    total += 1;
+    if (group.quality?.pdf_path) feitos++;
+    // Itens do caixa
+    const afAtivos = group.afericoes.filter((a) => !a.cancelado);
+    const visComp = group.comprovantes.filter(
+      (c) => !c.cancelado && (c.tipo !== 'Nota a Prazo' || c.centro_custo === group.centroCusto),
+    );
+    total += afAtivos.length + visComp.length;
+    feitos += afAtivos.filter((a) => a.item_conferido).length + visComp.filter((c) => c.item_conferido).length;
+    return { feitos, total };
+  };
+
+  // ─── status transitions ────────────────────────────────────────────────────
+
+  const handleSetOK = async (group: GroupData) => {
+    if (!selectedPostoId) return;
+    const cc = group.centroCusto === 'SEM CENTRO' ? null : group.centroCusto;
+    setGroups((prev) => prev.map((g) =>
+      g.data === group.data && g.centroCusto === group.centroCusto ? { ...g, conferido: 'OK' } : g,
+    ));
+    if (group.resumoId) {
+      const { error } = await supabase.from('resumo_conferencia')
+        .update({ conferido: 'OK' } as any).eq('id', group.resumoId);
+      if (error) {
+        toast.error('Erro ao salvar');
+        setGroups((prev) => prev.map((g) => g.data === group.data && g.centroCusto === group.centroCusto ? { ...g, conferido: group.conferido } : g));
+        return;
+      }
+    } else {
+      const { data: newRec, error } = await supabase.from('resumo_conferencia')
+        .insert({ posto_id: selectedPostoId, data: group.data, turno: null, centro_custo: cc, conferido: 'OK', observacao: group.observacao || null, turnos_conferidos: group.turnosConferidos } as any)
+        .select('id').single();
+      if (error) {
+        toast.error('Erro ao salvar');
+        setGroups((prev) => prev.map((g) => g.data === group.data && g.centroCusto === group.centroCusto ? { ...g, conferido: group.conferido } : g));
+        return;
+      }
+      if (newRec) setGroups((prev) => prev.map((g) => g.data === group.data && g.centroCusto === group.centroCusto ? { ...g, resumoId: (newRec as any).id } : g));
+    }
+    toast.success('Caixa marcado como OK!');
+    loadMesVigentePendencias();
+  };
+
+  const handleSetPendente = async (group: GroupData) => {
+    if (!selectedPostoId) return;
+    const cc = group.centroCusto === 'SEM CENTRO' ? null : group.centroCusto;
+    setGroups((prev) => prev.map((g) =>
+      g.data === group.data && g.centroCusto === group.centroCusto ? { ...g, conferido: 'PENDENTE' } : g,
+    ));
+    if (group.resumoId) {
+      const { error } = await supabase.from('resumo_conferencia')
+        .update({ conferido: 'PENDENTE' } as any).eq('id', group.resumoId);
+      if (error) {
+        toast.error('Erro ao salvar');
+        setGroups((prev) => prev.map((g) => g.data === group.data && g.centroCusto === group.centroCusto ? { ...g, conferido: group.conferido } : g));
+      }
+    } else {
+      const { data: newRec, error } = await supabase.from('resumo_conferencia')
+        .insert({ posto_id: selectedPostoId, data: group.data, turno: null, centro_custo: cc, conferido: 'PENDENTE', observacao: group.observacao || null, turnos_conferidos: group.turnosConferidos } as any)
+        .select('id').single();
+      if (!error && newRec) setGroups((prev) => prev.map((g) => g.data === group.data && g.centroCusto === group.centroCusto ? { ...g, resumoId: (newRec as any).id } : g));
+    }
+    loadMesVigentePendencias();
+  };
+
+  const handleSetDivergencia = async () => {
+    if (!divDialog || !selectedPostoId) return;
+    const { data: dataCaixa, centroCusto, obs } = divDialog;
+    if (!obs.trim()) { toast.error('Informe a observação para a divergência'); return; }
+    const group = groups.find((g) => g.data === dataCaixa && g.centroCusto === centroCusto);
+    if (!group) return;
+    const cc = centroCusto === 'SEM CENTRO' ? null : centroCusto;
+    setDivDialog((prev) => prev ? { ...prev, saving: true } : null);
+    setGroups((prev) => prev.map((g) =>
+      g.data === dataCaixa && g.centroCusto === centroCusto ? { ...g, conferido: 'DIVERGÊNCIA', observacao: obs } : g,
+    ));
+    if (group.resumoId) {
+      const { error } = await supabase.from('resumo_conferencia')
+        .update({ conferido: 'DIVERGÊNCIA', observacao: obs } as any).eq('id', group.resumoId);
+      if (error) { toast.error('Erro ao salvar'); setDivDialog((prev) => prev ? { ...prev, saving: false } : null); return; }
+    } else {
+      const { data: newRec, error } = await supabase.from('resumo_conferencia')
+        .insert({ posto_id: selectedPostoId, data: dataCaixa, turno: null, centro_custo: cc, conferido: 'DIVERGÊNCIA', observacao: obs, turnos_conferidos: group.turnosConferidos } as any)
+        .select('id').single();
+      if (error) { toast.error('Erro ao salvar'); setDivDialog((prev) => prev ? { ...prev, saving: false } : null); return; }
+      if (newRec) setGroups((prev) => prev.map((g) => g.data === dataCaixa && g.centroCusto === centroCusto ? { ...g, resumoId: (newRec as any).id } : g));
+    }
+    toast.success('Divergência registrada!');
+    setDivDialog(null);
+    loadMesVigentePendencias();
+  };
+
   // ─── item_conferido toggles ────────────────────────────────────────────────
 
   const handleToggleComprovante = async (compId: string, currentVal: boolean) => {
@@ -1017,9 +1128,10 @@ export default function ResumoDiario() {
                         <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-500" />
                       ) : group.conferido === 'DIVERGÊNCIA' ? (
                         <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">difere</span>
-                      ) : (
-                        <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-500">{group.conferido}</span>
-                      )}
+                      ) : (() => {
+                        const { feitos, total } = calcChecklist(group);
+                        return <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-500">{feitos}/{total}</span>;
+                      })()}
                     </div>
                   </button>
 
@@ -1055,6 +1167,16 @@ export default function ResumoDiario() {
                             {pdfUrl && (
                               <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setDeletingQualityDate(group.data)}>
                                 <X className="mr-2 h-4 w-4" />Remover PDF Quality
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
+                            {group.conferido === 'DIVERGÊNCIA' ? (
+                              <DropdownMenuItem onClick={() => handleSetPendente(group)}>
+                                <RotateCcw className="mr-2 h-4 w-4" />Voltar para Pendente
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setDivDialog({ data: group.data, centroCusto: group.centroCusto, obs: group.observacao, saving: false })}>
+                                <AlertTriangle className="mr-2 h-4 w-4" />Marcar divergência
                               </DropdownMenuItem>
                             )}
                           </DropdownMenuContent>
@@ -1426,7 +1548,7 @@ export default function ResumoDiario() {
                             );
                           })()}
 
-                          {/* Right side: obs icon + status + save */}
+                          {/* Right side: obs icon + status widget */}
                           <div className="ml-auto flex items-center gap-2">
                             <Popover>
                               <PopoverTrigger asChild>
@@ -1455,25 +1577,43 @@ export default function ResumoDiario() {
                               </PopoverContent>
                             </Popover>
 
-                            <Select
-                              value={group.conferido}
-                              onValueChange={(v) => updateGroup(group.data, group.centroCusto, 'conferido', v)}
-                            >
-                              <SelectTrigger className={`h-7 w-32 text-xs ${
-                                group.conferido === 'OK' ? 'border-success text-success'
-                                : group.conferido === 'DIVERGÊNCIA' ? 'border-destructive text-destructive'
-                                : 'border-warning text-warning'
-                              }`}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {CONFERIDO_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleSaveGroup(group)}>
-                              <Save className="h-3.5 w-3.5" />
-                            </Button>
+                            {(() => {
+                              const { feitos, total } = calcChecklist(group);
+                              if (group.conferido === 'DIVERGÊNCIA') {
+                                return (
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-red-400 bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                                    <AlertTriangle className="h-3 w-3" />Divergência
+                                  </span>
+                                );
+                              }
+                              if (group.conferido === 'OK') {
+                                return (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="inline-flex items-center gap-1 rounded-full border border-green-500 bg-green-50 px-2.5 py-1 text-[11px] font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                                      <CheckCircle2 className="h-3 w-3" />Conferido
+                                    </span>
+                                    <button
+                                      className="text-[10px] text-muted-foreground underline-offset-2 hover:underline hover:text-foreground"
+                                      onClick={() => handleSetPendente(group)}
+                                    >
+                                      Reabrir
+                                    </button>
+                                  </div>
+                                );
+                              }
+                              if (feitos === total) {
+                                return (
+                                  <Button size="sm" className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white" onClick={() => handleSetOK(group)}>
+                                    <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Marcar caixa OK
+                                  </Button>
+                                );
+                              }
+                              return (
+                                <span className="inline-flex items-center gap-1 rounded-full border border-yellow-400 bg-yellow-50 px-2.5 py-1 text-[11px] font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                                  Pendente · {feitos} de {total}
+                                </span>
+                              );
+                            })()}
                           </div>
                         </div>
                       </div>
@@ -1798,6 +1938,40 @@ export default function ResumoDiario() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Marcar Divergência ── */}
+      <Dialog open={divDialog !== null} onOpenChange={(o) => { if (!o && !divDialog?.saving) setDivDialog(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Marcar Divergência</DialogTitle>
+          </DialogHeader>
+          {divDialog && (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                {new Date(`${divDialog.data}T00:00:00`).toLocaleDateString('pt-BR')} — {divDialog.centroCusto}
+              </p>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Observação <span className="text-destructive">*</span></Label>
+                <Textarea
+                  className="text-xs min-h-[80px] resize-none"
+                  value={divDialog.obs}
+                  onChange={(e) => setDivDialog((prev) => prev ? { ...prev, obs: e.target.value } : null)}
+                  placeholder="Descreva a divergência encontrada..."
+                  autoFocus
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setDivDialog(null)} disabled={divDialog.saving}>
+                  Cancelar
+                </Button>
+                <Button size="sm" variant="destructive" onClick={handleSetDivergencia} disabled={divDialog.saving || !divDialog.obs.trim()}>
+                  {divDialog.saving ? 'Salvando…' : 'Confirmar Divergência'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
