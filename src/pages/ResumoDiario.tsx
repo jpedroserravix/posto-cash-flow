@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { Save, Upload, FileText, X, ExternalLink, Paperclip, Gauge, AlertTriangle, Ban, RotateCcw, UserMinus, Camera, Plus } from 'lucide-react';
+import { Save, Upload, FileText, X, ExternalLink, Paperclip, Gauge, AlertTriangle, Ban, RotateCcw, UserMinus, Camera, Plus, CheckCircle2 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { openInNewTab } from '@/lib/utils';
 import { usePagination } from '@/hooks/usePagination';
@@ -147,6 +147,12 @@ export default function ResumoDiario() {
     [groups, ccFilter],
   );
 
+  const datesWithMultipleCC = useMemo(() => {
+    const count = new Map<string, number>();
+    displayGroups.forEach((g) => count.set(g.data, (count.get(g.data) ?? 0) + 1));
+    return new Set([...count.entries()].filter(([, n]) => n > 1).map(([d]) => d));
+  }, [displayGroups]);
+
   // Reset filter when posto changes
   useEffect(() => { setCcFilter(null); }, [selectedPostoId]);
 
@@ -178,6 +184,9 @@ export default function ResumoDiario() {
   // Shared preview modal
   const [previewFile, setPreviewFile] = useState<PreviewFile | null>(null);
 
+  // Accordion expanded row key
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+
   const pagination = usePagination(displayGroups, [selectedPostoId, ccFilter], {
     defaultPageSize: 10,
     sessionKey: 'resumo_diario_pageSize',
@@ -186,6 +195,17 @@ export default function ResumoDiario() {
   useEffect(() => {
     if (selectedPostoId) loadResumo();
   }, [selectedPostoId, dfRange.start, dfRange.end]);
+
+  // Auto-expand most recent entry when groups data changes
+  useEffect(() => {
+    if (groups.length === 0) return;
+    const firstKey = `${groups[0].data}-${groups[0].centroCusto}`;
+    setExpandedKey((prev) => {
+      if (prev === null) return firstKey;
+      const stillExists = groups.some((g) => `${g.data}-${g.centroCusto}` === prev);
+      return stillExists ? prev : firstKey;
+    });
+  }, [groups]);
 
   useEffect(() => {
     if (selectedPostoId) loadMesVigentePendencias();
@@ -574,6 +594,13 @@ export default function ResumoDiario() {
     return 'border-l-4 border-l-warning';
   };
 
+  const fmtDayLabel = (iso: string) => {
+    const d = new Date(`${iso}T00:00:00`);
+    const wd = d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${wd.charAt(0).toUpperCase() + wd.slice(1)}, ${day}`;
+  };
+
   const updateGroup = (data: string, cc: string, field: 'conferido' | 'observacao', value: string) => {
     setGroups((prev) => prev.map((g) =>
       g.data === data && g.centroCusto === cc ? { ...g, [field]: value } : g,
@@ -932,191 +959,225 @@ export default function ResumoDiario() {
         </Card>
       ) : (
         <>
-          {pagination.paginatedData.map((group) => {
-            const pdfUrl = group.quality?.pdf_path
-              ? getStorageUrl('quality-pdfs', group.quality.pdf_path)
-              : null;
-            const dateLabel = new Date(`${group.data}T00:00:00`).toLocaleDateString('pt-BR');
-            const visibleComprovantes = group.comprovantes.filter(
-              (c) => c.tipo !== 'Nota a Prazo' || c.centro_custo === group.centroCusto
-            );
-            const totalItens = group.afericoes.filter((a) => !a.cancelado).length
-              + visibleComprovantes.filter((c) => !c.cancelado).length;
+          <div className="rounded-md border overflow-hidden">
+            {/* Column headers */}
+            <div className="flex items-center border-b bg-muted/70 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="flex-1">Dia</div>
+              <div className="w-24 text-right">Dinheiro</div>
+              <div className="w-24 text-right">Pix</div>
+              <div className="hidden sm:block w-24 text-right">Líquido Pix</div>
+              <div className="w-20 text-center">Status</div>
+            </div>
 
-            return (
-              <Card key={`${group.data}-${group.centroCusto}`} className={borderColor(group.conferido)}>
-                {/* ── Header ── */}
-                <CardHeader className="px-4 pb-2 pt-4">
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <CardTitle className="text-base">
-                      {dateLabel} — {group.centroCusto}
-                    </CardTitle>
-                    <span className="text-lg font-bold">{fmt(group.totalGeral)}</span>
-                  </div>
-                </CardHeader>
+            {pagination.paginatedData.map((group, idx) => {
+              const rowKey = `${group.data}-${group.centroCusto}`;
+              const isExpanded = expandedKey === rowKey;
+              const pdfUrl = group.quality?.pdf_path
+                ? getStorageUrl('quality-pdfs', group.quality.pdf_path)
+                : null;
+              const dateLabel = new Date(`${group.data}T00:00:00`).toLocaleDateString('pt-BR');
+              const visibleComprovantes = group.comprovantes.filter(
+                (c) => c.tipo !== 'Nota a Prazo' || c.centro_custo === group.centroCusto
+              );
+              const totalItens = group.afericoes.filter((a) => !a.cancelado).length
+                + visibleComprovantes.filter((c) => !c.cancelado).length;
+              const liquidoPix = group.totalPix > 0 ? group.totalPix - group.totalPixTarifa : null;
+              const isLast = idx === pagination.paginatedData.length - 1;
 
-                {/* ── Two-column body ── */}
-                <CardContent className="px-4 pb-2">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-                    {/* ─ Left: caixa summary ─ */}
-                    <div className="space-y-3">
-                      <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="text-xs">Turno</TableHead>
-                            <TableHead className="text-right text-xs">Brinks</TableHead>
-                            <TableHead className="text-right text-xs">Manual</TableHead>
-                            <TableHead className="text-right text-xs">Total Dinheiro</TableHead>
-                            <TableHead className="text-center text-xs w-8" title="Conferido">✓</TableHead>
-                            <TableHead className="text-right text-xs text-primary">Pix</TableHead>
-                            <TableHead className="text-center text-xs w-8" title="Pix Conferido">✓</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {group.turnos.map((turno) => (
-                            <TableRow key={turno.turno}>
-                              <TableCell className="py-1 text-xs">{turno.turno}</TableCell>
-                              <TableCell className="py-1 text-right text-xs">{fmt(turno.cofreBrinks)}</TableCell>
-                              <TableCell className="py-1 text-right text-xs">{fmt(turno.manual)}</TableCell>
-                              <TableCell className="py-1 text-right text-xs font-medium">{fmt(turno.total)}</TableCell>
-                              <TableCell className="py-1 text-center">
-                                <Checkbox
-                                  checked={group.turnosConferidos.includes(turno.turno)}
-                                  onCheckedChange={() => handleToggleTurno(group, turno.turno)}
-                                  className="h-4 w-4"
-                                />
-                              </TableCell>
-                              <TableCell className="py-1 text-right text-xs text-primary whitespace-nowrap">
-                                {turno.pix !== undefined ? (
-                                  <span>
-                                    {fmt(turno.pix)}
-                                    {turno.pixTarifa !== undefined && turno.pixTarifa > 0 && (
-                                      <span className="block text-[10px] text-muted-foreground">-{fmt(turno.pixTarifa)}</span>
-                                    )}
-                                  </span>
-                                ) : '—'}
-                              </TableCell>
-                              <TableCell className="py-1 text-center">
-                                <Checkbox
-                                  checked={turno.pixStatus === 'conferido'}
-                                  onCheckedChange={() => handleTogglePixTurno(group, turno)}
-                                  disabled={!turno.pixTurnoId}
-                                  className="h-4 w-4"
-                                />
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                          <TableRow className="border-t-2">
-                            <TableCell className="py-1 text-xs font-bold">Soma</TableCell>
-                            <TableCell className="py-1 text-right text-xs font-bold">{fmt(group.totalBrinks)}</TableCell>
-                            <TableCell className="py-1 text-right text-xs font-bold">{fmt(group.totalManual)}</TableCell>
-                            <TableCell className="py-1 text-right text-xs font-bold">{fmt(group.totalGeral)}</TableCell>
-                            <TableCell />
-                            <TableCell className="py-1 text-right text-xs font-bold text-primary whitespace-nowrap">
-                              {group.totalPix > 0 ? (
-                                <span>
-                                  {fmt(group.totalPix)}
-                                  {group.totalPixTarifa > 0 && (
-                                    <span className="block text-[10px] text-muted-foreground">-{fmt(group.totalPixTarifa)}</span>
-                                  )}
-                                </span>
-                              ) : '—'}
-                            </TableCell>
-                            <TableCell className="py-1 text-center">
-                              <Checkbox
-                                checked={group.pixBrutoConferido}
-                                onCheckedChange={() => handleTogglePixBruto(group)}
-                                disabled={!group.pixFechamentoId || group.totalPix === 0}
-                                className="h-4 w-4"
-                                title="Bruto conferido"
-                              />
-                            </TableCell>
-                          </TableRow>
-                          {group.totalPix > 0 && (
-                            <TableRow>
-                              <TableCell colSpan={5} className="py-1 text-right text-xs text-primary">
-                                Líquido Pix a receber:{' '}
-                                <span className="font-semibold">
-                                  {fmt(group.totalPix - group.totalPixTarifa)}
-                                </span>
-                              </TableCell>
-                              <TableCell className="py-1 text-right text-xs text-muted-foreground whitespace-nowrap">
-                                Recebido no banco
-                              </TableCell>
-                              <TableCell className="py-1 text-center">
-                                <Checkbox
-                                  checked={group.pixRecebidoBanco}
-                                  onCheckedChange={() => handleTogglePixRecebido(group)}
-                                  disabled={!group.pixFechamentoId}
-                                  className="h-4 w-4"
-                                  title="Recebido no banco"
-                                />
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
-                      </div>
-
-                      {/* Quality PDF */}
-                      <div className="flex flex-wrap items-center gap-2">
-                        {pdfUrl ? (
-                          <div className="group/pdf relative">
-                            <HoverCard openDelay={300} closeDelay={100}>
-                              <HoverCardTrigger asChild>
-                                <button
-                                  className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-all hover:scale-105 hover:border-primary hover:text-foreground"
-                                  onClick={() => {
-                                    if (isMobile) { openInNewTab(pdfUrl); return; }
-                                    setPreviewFile({ url: pdfUrl, label: `PDF Quality — ${dateLabel}`, fileType: 'pdf' });
-                                  }}
-                                >
-                                  <FileText className="h-3.5 w-3.5 text-red-500" />
-                                  <span>PDF Quality</span>
-                                </button>
-                              </HoverCardTrigger>
-                              <HoverCardContent className="w-80 p-1.5" align="start" side="bottom">
-                                <p className="mb-1 px-0.5 text-[10px] text-muted-foreground">Clique para abrir com zoom</p>
-                                <iframe src={pdfUrl} className="h-52 w-full rounded border border-border" title="Preview PDF Quality" />
-                              </HoverCardContent>
-                            </HoverCard>
-                            <button
-                              className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 transition-opacity group-hover/pdf:opacity-100"
-                              onClick={() => setDeletingQualityDate(group.data)}
-                              title="Remover PDF"
-                            >
-                              <X className="h-2.5 w-2.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <Badge variant="secondary" className="text-xs opacity-60">Sem PDF Quality</Badge>
-                        )}
-                        <Button size="sm" variant="ghost" className="ml-auto h-7 text-xs"
-                          onClick={() => { setUploadingQualityDate(group.data); qualityFileInputRef.current?.click(); }}>
-                          <Upload className="mr-1 h-3 w-3" />
-                          {pdfUrl ? 'Substituir PDF' : 'Importar PDF Quality'}
-                        </Button>
-                      </div>
+              return (
+                <div key={rowKey} className={!isLast ? 'border-b' : ''}>
+                  {/* Compact row button */}
+                  <button
+                    className={`w-full flex items-center px-3 py-2.5 text-left transition-colors hover:bg-muted/30 ${isExpanded ? 'bg-muted/20' : ''}`}
+                    onClick={() => setExpandedKey(isExpanded ? null : rowKey)}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium tabular-nums text-sm">{fmtDayLabel(group.data)}</span>
+                      {datesWithMultipleCC.has(group.data) && (
+                        <span className="block text-[10px] text-muted-foreground leading-tight mt-0.5">{group.centroCusto}</span>
+                      )}
                     </div>
+                    <div className="w-24 text-right tabular-nums text-xs">{fmt(group.totalGeral)}</div>
+                    <div className="w-24 text-right tabular-nums text-xs text-primary">
+                      {group.totalPix > 0 ? fmt(group.totalPix) : <span className="text-muted-foreground">—</span>}
+                    </div>
+                    <div className="hidden sm:block w-24 text-right tabular-nums text-xs">
+                      {liquidoPix !== null ? fmt(liquidoPix) : <span className="text-muted-foreground">—</span>}
+                    </div>
+                    <div className="w-20 flex justify-center">
+                      {group.conferido === 'OK' ? (
+                        <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-500" />
+                      ) : group.conferido === 'DIVERGÊNCIA' ? (
+                        <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">difere</span>
+                      ) : (
+                        <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-500">{group.conferido}</span>
+                      )}
+                    </div>
+                  </button>
 
-                    {/* ─ Right: itens do caixa ─ */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
-                          <span className="text-xs text-muted-foreground font-medium">Itens do Caixa</span>
-                          {totalItens > 0 && (
-                            <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">{totalItens}</Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {perfil !== 'frentista' && (
-                            <Button size="sm" variant="ghost" className="h-6 text-xs"
-                              onClick={() => setLancarDialog({ data: group.data, centroCusto: group.centroCusto, tipo: 'Despesa', descricao: '', turno: '', observacao: '', file: null, saving: false })}>
-                              <Plus className="mr-1 h-3 w-3" />Lançar
+                  {/* Expanded detail */}
+                  {isExpanded && (
+                    <div className="border-t bg-muted/50 p-4 space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                        {/* ─ Left: caixa summary ─ */}
+                        <div className="space-y-3">
+                          <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="text-xs">Turno</TableHead>
+                                <TableHead className="text-right text-xs">Brinks</TableHead>
+                                <TableHead className="text-right text-xs">Manual</TableHead>
+                                <TableHead className="text-right text-xs">Total Dinheiro</TableHead>
+                                <TableHead className="text-center text-xs w-8" title="Conferido">✓</TableHead>
+                                <TableHead className="text-right text-xs text-primary">Pix</TableHead>
+                                <TableHead className="text-center text-xs w-8" title="Pix Conferido">✓</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {group.turnos.map((turno) => (
+                                <TableRow key={turno.turno}>
+                                  <TableCell className="py-1 text-xs">{turno.turno}</TableCell>
+                                  <TableCell className="py-1 text-right text-xs">{fmt(turno.cofreBrinks)}</TableCell>
+                                  <TableCell className="py-1 text-right text-xs">{fmt(turno.manual)}</TableCell>
+                                  <TableCell className="py-1 text-right text-xs font-medium">{fmt(turno.total)}</TableCell>
+                                  <TableCell className="py-1 text-center">
+                                    <Checkbox
+                                      checked={group.turnosConferidos.includes(turno.turno)}
+                                      onCheckedChange={() => handleToggleTurno(group, turno.turno)}
+                                      className="h-4 w-4"
+                                    />
+                                  </TableCell>
+                                  <TableCell className="py-1 text-right text-xs text-primary whitespace-nowrap">
+                                    {turno.pix !== undefined ? (
+                                      <span>
+                                        {fmt(turno.pix)}
+                                        {turno.pixTarifa !== undefined && turno.pixTarifa > 0 && (
+                                          <span className="block text-[10px] text-muted-foreground">-{fmt(turno.pixTarifa)}</span>
+                                        )}
+                                      </span>
+                                    ) : '—'}
+                                  </TableCell>
+                                  <TableCell className="py-1 text-center">
+                                    <Checkbox
+                                      checked={turno.pixStatus === 'conferido'}
+                                      onCheckedChange={() => handleTogglePixTurno(group, turno)}
+                                      disabled={!turno.pixTurnoId}
+                                      className="h-4 w-4"
+                                    />
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                              <TableRow className="border-t-2">
+                                <TableCell className="py-1 text-xs font-bold">Soma</TableCell>
+                                <TableCell className="py-1 text-right text-xs font-bold">{fmt(group.totalBrinks)}</TableCell>
+                                <TableCell className="py-1 text-right text-xs font-bold">{fmt(group.totalManual)}</TableCell>
+                                <TableCell className="py-1 text-right text-xs font-bold">{fmt(group.totalGeral)}</TableCell>
+                                <TableCell />
+                                <TableCell className="py-1 text-right text-xs font-bold text-primary whitespace-nowrap">
+                                  {group.totalPix > 0 ? (
+                                    <span>
+                                      {fmt(group.totalPix)}
+                                      {group.totalPixTarifa > 0 && (
+                                        <span className="block text-[10px] text-muted-foreground">-{fmt(group.totalPixTarifa)}</span>
+                                      )}
+                                    </span>
+                                  ) : '—'}
+                                </TableCell>
+                                <TableCell className="py-1 text-center">
+                                  <Checkbox
+                                    checked={group.pixBrutoConferido}
+                                    onCheckedChange={() => handleTogglePixBruto(group)}
+                                    disabled={!group.pixFechamentoId || group.totalPix === 0}
+                                    className="h-4 w-4"
+                                    title="Bruto conferido"
+                                  />
+                                </TableCell>
+                              </TableRow>
+                              {group.totalPix > 0 && (
+                                <TableRow>
+                                  <TableCell colSpan={5} className="py-1 text-right text-xs text-primary">
+                                    Líquido Pix a receber:{' '}
+                                    <span className="font-semibold">
+                                      {fmt(group.totalPix - group.totalPixTarifa)}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="py-1 text-right text-xs text-muted-foreground whitespace-nowrap">
+                                    Recebido no banco
+                                  </TableCell>
+                                  <TableCell className="py-1 text-center">
+                                    <Checkbox
+                                      checked={group.pixRecebidoBanco}
+                                      onCheckedChange={() => handleTogglePixRecebido(group)}
+                                      disabled={!group.pixFechamentoId}
+                                      className="h-4 w-4"
+                                      title="Recebido no banco"
+                                    />
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                            </TableBody>
+                          </Table>
+                          </div>
+
+                          {/* Quality PDF */}
+                          <div className="flex flex-wrap items-center gap-2">
+                            {pdfUrl ? (
+                              <div className="group/pdf relative">
+                                <HoverCard openDelay={300} closeDelay={100}>
+                                  <HoverCardTrigger asChild>
+                                    <button
+                                      className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-all hover:scale-105 hover:border-primary hover:text-foreground"
+                                      onClick={() => {
+                                        if (isMobile) { openInNewTab(pdfUrl); return; }
+                                        setPreviewFile({ url: pdfUrl, label: `PDF Quality — ${dateLabel}`, fileType: 'pdf' });
+                                      }}
+                                    >
+                                      <FileText className="h-3.5 w-3.5 text-red-500" />
+                                      <span>PDF Quality</span>
+                                    </button>
+                                  </HoverCardTrigger>
+                                  <HoverCardContent className="w-80 p-1.5" align="start" side="bottom">
+                                    <p className="mb-1 px-0.5 text-[10px] text-muted-foreground">Clique para abrir com zoom</p>
+                                    <iframe src={pdfUrl} className="h-52 w-full rounded border border-border" title="Preview PDF Quality" />
+                                  </HoverCardContent>
+                                </HoverCard>
+                                <button
+                                  className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 transition-opacity group-hover/pdf:opacity-100"
+                                  onClick={() => setDeletingQualityDate(group.data)}
+                                  title="Remover PDF"
+                                >
+                                  <X className="h-2.5 w-2.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <Badge variant="secondary" className="text-xs opacity-60">Sem PDF Quality</Badge>
+                            )}
+                            <Button size="sm" variant="ghost" className="ml-auto h-7 text-xs"
+                              onClick={() => { setUploadingQualityDate(group.data); qualityFileInputRef.current?.click(); }}>
+                              <Upload className="mr-1 h-3 w-3" />
+                              {pdfUrl ? 'Substituir PDF' : 'Importar PDF Quality'}
                             </Button>
+                          </div>
+                        </div>
+
+                        {/* ─ Right: itens do caixa ─ */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground font-medium">Itens do Caixa</span>
+                              {totalItens > 0 && (
+                                <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">{totalItens}</Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {perfil !== 'frentista' && (
+                                <Button size="sm" variant="ghost" className="h-6 text-xs"
+                                  onClick={() => setLancarDialog({ data: group.data, centroCusto: group.centroCusto, tipo: 'Despesa', descricao: '', turno: '', observacao: '', file: null, saving: false })}>
+                                  <Plus className="mr-1 h-3 w-3" />Lançar
+                                </Button>
                           )}
                           <Button size="sm" variant="ghost" className="h-6 text-xs"
                             onClick={() => setFaltaDialog({ data: group.data, centroCusto: group.centroCusto, tipo: 'Falta de Caixa', funcionarioId: '', valor: '', observacao: '', saving: false })}>
@@ -1300,40 +1361,41 @@ export default function ResumoDiario() {
                       })}
                     </div>
                   </div>
-                </CardContent>
+                      {/* ── Footer: status + observação geral + save ── */}
+                      <div className="flex flex-wrap items-center gap-2 pt-2 border-t">
+                        <Select
+                          value={group.conferido}
+                          onValueChange={(v) => updateGroup(group.data, group.centroCusto, 'conferido', v)}
+                        >
+                          <SelectTrigger className={`h-8 w-36 text-xs ${
+                            group.conferido === 'OK' ? 'border-success text-success'
+                            : group.conferido === 'DIVERGÊNCIA' ? 'border-destructive text-destructive'
+                            : 'border-warning text-warning'
+                          }`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {CONFERIDO_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
 
-                {/* ── Footer: status + observação geral + save ── */}
-                <CardFooter className="flex flex-wrap items-center gap-2 px-4 pb-3 pt-1 border-t">
-                  <Select
-                    value={group.conferido}
-                    onValueChange={(v) => updateGroup(group.data, group.centroCusto, 'conferido', v)}
-                  >
-                    <SelectTrigger className={`h-8 w-36 text-xs ${
-                      group.conferido === 'OK' ? 'border-success text-success'
-                      : group.conferido === 'DIVERGÊNCIA' ? 'border-destructive text-destructive'
-                      : 'border-warning text-warning'
-                    }`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CONFERIDO_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                        <Input
+                          className="h-8 min-w-[120px] flex-1 text-xs"
+                          value={group.observacao}
+                          onChange={(e) => updateGroup(group.data, group.centroCusto, 'observacao', e.target.value)}
+                          placeholder="Observação geral do caixa"
+                        />
 
-                  <Input
-                    className="h-8 min-w-[120px] flex-1 text-xs"
-                    value={group.observacao}
-                    onChange={(e) => updateGroup(group.data, group.centroCusto, 'observacao', e.target.value)}
-                    placeholder="Observação geral do caixa"
-                  />
-
-                  <Button size="sm" variant="ghost" onClick={() => handleSaveGroup(group)}>
-                    <Save className="h-4 w-4" />
-                  </Button>
-                </CardFooter>
-              </Card>
-            );
-          })}
+                        <Button size="sm" variant="ghost" onClick={() => handleSaveGroup(group)}>
+                          <Save className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
 
           <PaginationControls
             page={pagination.page} totalPages={pagination.totalPages}
