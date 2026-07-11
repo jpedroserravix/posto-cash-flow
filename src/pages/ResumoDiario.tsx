@@ -12,8 +12,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { Save, Upload, FileText, X, ExternalLink, Paperclip, Gauge, AlertTriangle, Ban, RotateCcw, UserMinus } from 'lucide-react';
+import { Save, Upload, FileText, X, ExternalLink, Paperclip, Gauge, AlertTriangle, Ban, RotateCcw, UserMinus, Camera, Plus } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { openInNewTab } from '@/lib/utils';
 import { usePagination } from '@/hooks/usePagination';
@@ -24,6 +25,7 @@ import { DateFilter } from '@/components/DateFilter';
 // ─── types ───────────────────────────────────────────────────────────────────
 
 const CONFERIDO_OPTIONS = ['OK', 'PENDENTE', 'DIVERGÊNCIA'];
+const TURNOS_LANCAR = ['Turno 1', 'Turno 2', 'Turno 3', 'Turno 4'];
 
 interface TurnoRow {
   turno: string;
@@ -81,6 +83,17 @@ interface FaltaDialogState {
   saving: boolean;
 }
 
+interface LancarDialogState {
+  data: string;
+  centroCusto: string;
+  tipo: 'Despesa' | 'Nota a Prazo';
+  descricao: string;
+  turno: string;
+  observacao: string;
+  file: File | null;
+  saving: boolean;
+}
+
 interface GroupData {
   data: string;
   centroCusto: string;
@@ -111,7 +124,7 @@ interface PreviewFile {
 // ─── component ───────────────────────────────────────────────────────────────
 
 export default function ResumoDiario() {
-  const { selectedPostoId, nome } = useAuth();
+  const { selectedPostoId, nome, perfil } = useAuth();
   const isMobile = useIsMobile();
   const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter();
   const [groups, setGroups] = useState<GroupData[]>([]);
@@ -152,6 +165,11 @@ export default function ResumoDiario() {
   // Falta de caixa state
   const [funcionariosAtivos, setFuncionariosAtivos] = useState<{ id: string; nome: string }[]>([]);
   const [faltaDialog, setFaltaDialog] = useState<FaltaDialogState | null>(null);
+
+  // Lançar item de caixa state
+  const [lancarDialog, setLancarDialog] = useState<LancarDialogState | null>(null);
+  const lancarCameraRef = useRef<HTMLInputElement>(null);
+  const lancarFileRef   = useRef<HTMLInputElement>(null);
 
   // Comprovante observation edits (keyed by comprovante id, auto-saved)
   const [compObsEdits, setCompObsEdits] = useState<Map<string, string>>(new Map());
@@ -478,6 +496,68 @@ export default function ResumoDiario() {
     toast.success('Falta de caixa lançada!');
     setFaltaDialog(null);
     loadResumo();
+  };
+
+  const handleLancar = async () => {
+    if (!lancarDialog || !selectedPostoId) return;
+    const { data: dataCaixa, centroCusto, tipo, descricao, turno, observacao, file } = lancarDialog;
+
+    if (tipo === 'Despesa' && !descricao.trim()) {
+      toast.error('Informe a descrição da despesa');
+      return;
+    }
+    if (tipo === 'Nota a Prazo' && !turno) {
+      toast.error('Selecione o turno');
+      return;
+    }
+
+    setLancarDialog((prev) => prev ? { ...prev, saving: true } : null);
+    try {
+      let filePath: string | null = null;
+      let fileName: string | null = null;
+      let fileType: string | null = null;
+
+      if (file) {
+        const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const path = `${selectedPostoId}/${dataCaixa}/${Date.now()}-${safe}`;
+        const { error: uploadError } = await supabase.storage
+          .from('despesas-comprovantes')
+          .upload(path, file, { upsert: false, contentType: file.type });
+        if (uploadError) throw new Error('Erro ao enviar arquivo: ' + uploadError.message);
+        filePath = path;
+        fileName = file.name;
+        fileType = file.type.startsWith('image/') ? 'image' : 'pdf';
+      }
+
+      const cc = centroCusto === 'SEM CENTRO' ? null : centroCusto;
+      const payload: Record<string, unknown> = {
+        posto_id:     selectedPostoId,
+        data_caixa:   dataCaixa,
+        centro_custo: cc,
+        tipo,
+        file_path:    filePath,
+        file_name:    fileName,
+        file_type:    fileType,
+      };
+
+      if (tipo === 'Despesa') {
+        payload.descricao_despesa = descricao.trim();
+        payload.observacao = observacao.trim() || null;
+        if (turno) payload.turno = turno;
+      } else {
+        payload.turno = turno;
+      }
+
+      const { error } = await (supabase as any).from('comprovantes_despesas').insert(payload);
+      if (error) throw new Error(error.message);
+
+      toast.success(`${tipo} lançada!`);
+      setLancarDialog(null);
+      loadResumo();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao salvar');
+      setLancarDialog((prev) => prev ? { ...prev, saving: false } : null);
+    }
   };
 
   // ─── helpers ───────────────────────────────────────────────────────────────
@@ -1032,6 +1112,12 @@ export default function ResumoDiario() {
                           )}
                         </div>
                         <div className="flex items-center gap-1">
+                          {perfil !== 'frentista' && (
+                            <Button size="sm" variant="ghost" className="h-6 text-xs"
+                              onClick={() => setLancarDialog({ data: group.data, centroCusto: group.centroCusto, tipo: 'Despesa', descricao: '', turno: '', observacao: '', file: null, saving: false })}>
+                              <Plus className="mr-1 h-3 w-3" />Lançar
+                            </Button>
+                          )}
                           <Button size="sm" variant="ghost" className="h-6 text-xs"
                             onClick={() => setFaltaDialog({ data: group.data, centroCusto: group.centroCusto, tipo: 'Falta de Caixa', funcionarioId: '', valor: '', observacao: '', saving: false })}>
                             <UserMinus className="mr-1 h-3 w-3" />Falta de Caixa
@@ -1258,6 +1344,169 @@ export default function ResumoDiario() {
           />
         </>
       )}
+
+      {/* ── Lançar Item de Caixa (Despesa / Nota a Prazo) ── */}
+      <Dialog open={lancarDialog !== null} onOpenChange={(o) => { if (!o && !lancarDialog?.saving) setLancarDialog(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Lançar Item de Caixa</DialogTitle>
+          </DialogHeader>
+          {lancarDialog && (
+            <>
+              <p className="text-xs text-muted-foreground -mt-2">
+                {new Date(`${lancarDialog.data}T00:00:00`).toLocaleDateString('pt-BR')} — {lancarDialog.centroCusto}
+              </p>
+
+              {/* Tipo toggle */}
+              <div className="flex rounded-md border overflow-hidden">
+                <button
+                  type="button"
+                  className={`flex-1 py-1.5 text-xs font-medium transition-colors ${lancarDialog.tipo === 'Despesa' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'}`}
+                  onClick={() => setLancarDialog((prev) => prev ? { ...prev, tipo: 'Despesa', descricao: '', turno: '', observacao: '', file: null } : null)}
+                >
+                  Despesa
+                </button>
+                <button
+                  type="button"
+                  className={`flex-1 py-1.5 text-xs font-medium transition-colors border-l ${lancarDialog.tipo === 'Nota a Prazo' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'}`}
+                  onClick={() => setLancarDialog((prev) => prev ? { ...prev, tipo: 'Nota a Prazo', descricao: '', turno: '', observacao: '', file: null } : null)}
+                >
+                  Nota a Prazo
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {/* Descrição — Despesa */}
+                {lancarDialog.tipo === 'Despesa' && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Descrição *</Label>
+                    <Input
+                      className="h-8 text-xs"
+                      placeholder="Ex: Gás, material de limpeza..."
+                      value={lancarDialog.descricao}
+                      onChange={(e) => setLancarDialog((prev) => prev ? { ...prev, descricao: e.target.value } : null)}
+                    />
+                  </div>
+                )}
+
+                {/* Turno — Nota a Prazo */}
+                {lancarDialog.tipo === 'Nota a Prazo' && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Turno *</Label>
+                    <Select
+                      value={lancarDialog.turno || undefined}
+                      onValueChange={(v) => setLancarDialog((prev) => prev ? { ...prev, turno: v } : null)}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Selecione o turno" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TURNOS_LANCAR.map((t) => (
+                          <SelectItem key={t} value={t}>{t}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Observação — Despesa */}
+                {lancarDialog.tipo === 'Despesa' && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Observação</Label>
+                    <Textarea
+                      className="text-xs min-h-[60px] resize-none"
+                      placeholder="Observações adicionais..."
+                      value={lancarDialog.observacao}
+                      onChange={(e) => setLancarDialog((prev) => prev ? { ...prev, observacao: e.target.value } : null)}
+                    />
+                  </div>
+                )}
+
+                {/* Foto / Arquivo (opcional) */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs">
+                    Foto / Arquivo{' '}
+                    <span className="text-muted-foreground font-normal">(opcional)</span>
+                  </Label>
+                  {lancarDialog.file ? (
+                    <div className="flex items-center gap-2 rounded-md border p-2">
+                      {lancarDialog.file.type.startsWith('image/') ? (
+                        <img
+                          src={URL.createObjectURL(lancarDialog.file)}
+                          className="h-10 w-10 rounded object-cover shrink-0"
+                          alt=""
+                        />
+                      ) : (
+                        <FileText className="h-6 w-6 text-red-500 shrink-0" />
+                      )}
+                      <p className="text-xs flex-1 min-w-0 truncate">{lancarDialog.file.name}</p>
+                      <button
+                        onClick={() => setLancarDialog((prev) => prev ? { ...prev, file: null } : null)}
+                        className="shrink-0 rounded-full p-1 hover:bg-muted"
+                      >
+                        <X className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-14 flex-col gap-1 text-xs"
+                        onClick={() => lancarCameraRef.current?.click()}
+                      >
+                        <Camera className="h-5 w-5" />
+                        Câmera
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-14 flex-col gap-1 text-xs"
+                        onClick={() => lancarFileRef.current?.click()}
+                      >
+                        <Paperclip className="h-5 w-5" />
+                        Arquivo
+                      </Button>
+                    </div>
+                  )}
+                  <input
+                    ref={lancarCameraRef}
+                    type="file"
+                    accept="image/*"
+                    {...({ capture: 'environment' } as any)}
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) setLancarDialog((prev) => prev ? { ...prev, file: f } : null);
+                      e.target.value = '';
+                    }}
+                  />
+                  <input
+                    ref={lancarFileRef}
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) setLancarDialog((prev) => prev ? { ...prev, file: f } : null);
+                      e.target.value = '';
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <Button variant="outline" size="sm" disabled={lancarDialog.saving} onClick={() => setLancarDialog(null)}>
+                  Cancelar
+                </Button>
+                <Button size="sm" disabled={lancarDialog.saving} onClick={handleLancar}>
+                  {lancarDialog.saving ? 'Salvando...' : 'Lançar'}
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* ── Lançar Falta de Caixa ── */}
       <Dialog open={faltaDialog !== null} onOpenChange={(o) => { if (!o) setFaltaDialog(null); }}>
