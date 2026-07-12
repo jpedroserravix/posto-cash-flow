@@ -693,6 +693,31 @@ export default function DepositosBrinks() {
 
   const activeFilterCount = [filterDataDeposito, filterDepositante, filterTurno, filterCentroCusto, filterStatus].filter(f => f.size > 0).length;
 
+  // ── Summary cards: track the 3 most recently edited data_caixa+turno combos ──
+  const [recentCombos, setRecentCombos] = useState<string[]>([]);
+
+  const addRecentCombo = (data_caixa: string, turno: string) => {
+    if (!data_caixa || !turno) return;
+    const key = `${data_caixa}|${turno}`;
+    setRecentCombos(prev => [key, ...prev.filter(k => k !== key)].slice(0, 3));
+  };
+
+  const summaryCards = useMemo(() => {
+    return recentCombos.map(key => {
+      const [data, turno] = key.split('|');
+      const rows = allDepositos.filter(d => d.data_caixa === data && d.turno === turno);
+      if (rows.length === 0) return null;
+      const total = rows.reduce((s, r) => s + r.valor, 0);
+      const byCentro = new Map<string, number>();
+      rows.forEach(r => {
+        const cc = r.centro_custo || '(sem centro)';
+        byCentro.set(cc, (byCentro.get(cc) ?? 0) + r.valor);
+      });
+      const [y, m, d] = data.split('-');
+      return { key, dateLabel: `${d}/${m}`, turno, total, byCentro };
+    }).filter(Boolean) as { key: string; dateLabel: string; turno: string; total: number; byCentro: Map<string, number> }[];
+  }, [recentCombos, allDepositos]);
+
   if (!selectedPostoId) {
     return <p className="text-muted-foreground text-center py-8">Selecione um posto para continuar.</p>;
   }
@@ -712,6 +737,30 @@ export default function DepositosBrinks() {
       </div>
 
       <DateFilter preset={dfPreset} range={dfRange} onChange={setDfPreset} />
+
+      {/* Summary cards — 3 most recently edited data+turno combos */}
+      {!isImporting && summaryCards.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {summaryCards.map(card => (
+            <Card key={card.key} className="py-3">
+              <CardContent className="px-4 pt-0 pb-0 space-y-1.5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  {card.dateLabel} — {card.turno}
+                </p>
+                <p className="text-xl font-bold tabular-nums">{formatCurrency(card.total)}</p>
+                <div className="space-y-0.5 pt-0.5 border-t">
+                  {[...card.byCentro.entries()].map(([cc, val]) => (
+                    <div key={cc} className="flex justify-between text-xs text-muted-foreground">
+                      <span>{cc}</span>
+                      <span className="tabular-nums font-medium">{formatCurrency(val)}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* Import view */}
       {isImporting && importRows.length > 0 && (
@@ -868,6 +917,7 @@ export default function DepositosBrinks() {
                           uniqueValues={uniqueStatus}
                           selectedValues={filterStatus}
                           onFilterChange={setFilterStatus}
+                          className="bg-muted/50"
                         />
                         <FilterableHead
                           label="Data Depósito"
@@ -876,6 +926,7 @@ export default function DepositosBrinks() {
                           uniqueValues={uniqueDataDeposito}
                           selectedValues={filterDataDeposito}
                           onFilterChange={setFilterDataDeposito}
+                          className="bg-muted/50"
                         />
                         <FilterableHead
                           label="Valor"
@@ -884,7 +935,7 @@ export default function DepositosBrinks() {
                           uniqueValues={[]}
                           selectedValues={new Set()}
                           onFilterChange={() => {}}
-                          className="text-right"
+                          className="text-right bg-muted/50"
                         />
                         <FilterableHead
                           label="Depositante"
@@ -893,6 +944,7 @@ export default function DepositosBrinks() {
                           uniqueValues={uniqueDepositantes}
                           selectedValues={filterDepositante}
                           onFilterChange={setFilterDepositante}
+                          className="bg-muted/50 border-r-2 border-border"
                         />
                         <FilterableHead
                           label="Data Caixa"
@@ -935,7 +987,7 @@ export default function DepositosBrinks() {
                                 <Checkbox checked={isSelected} onCheckedChange={() => toggleConcSelect(dep.id)} />
                               </TableCell>
                             )}
-                            <TableCell>
+                            <TableCell className="bg-muted/50">
                               <Badge
                                 variant={isConciliado ? 'default' : 'secondary'}
                                 className={cn(
@@ -947,9 +999,9 @@ export default function DepositosBrinks() {
                                 {isConciliado ? (dep.conciliado_forcado ? 'Conciliado*' : 'Conciliado') : 'Pendente'}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-xs whitespace-nowrap">{formatDateDirect(dep.data_deposito)}</TableCell>
-                            <TableCell className="text-right text-xs font-medium">{formatCurrency(dep.valor)}</TableCell>
-                            <TableCell className="text-xs">{dep.depositante}</TableCell>
+                            <TableCell className="text-xs whitespace-nowrap bg-muted/50">{formatDateDirect(dep.data_deposito)}</TableCell>
+                            <TableCell className="text-right text-xs font-medium bg-muted/50">{formatCurrency(dep.valor)}</TableCell>
+                            <TableCell className="text-xs bg-muted/50 border-r-2 border-border">{dep.depositante}</TableCell>
                             <TableCell>
                               <Input
                                 type="date"
@@ -957,6 +1009,7 @@ export default function DepositosBrinks() {
                                 value={dep.data_caixa}
                                 onChange={e => {
                                   setAllDepositos(prev => prev.map(d => d.id === dep.id ? { ...d, data_caixa: e.target.value } : d));
+                                  addRecentCombo(e.target.value, dep.turno);
                                 }}
                               />
                             </TableCell>
@@ -967,6 +1020,7 @@ export default function DepositosBrinks() {
                                   const updated = { ...dep, turno: v };
                                   setAllDepositos(prev => prev.map(d => d.id === dep.id ? updated : d));
                                   handleUpdateRow(updated);
+                                  addRecentCombo(dep.data_caixa, v);
                                 }}
                               >
                                 <SelectTrigger className="h-8 text-xs w-28"><SelectValue placeholder="Turno" /></SelectTrigger>
@@ -980,6 +1034,7 @@ export default function DepositosBrinks() {
                                   const updated = { ...dep, centro_custo: v === '__empty__' ? '' : v };
                                   setAllDepositos(prev => prev.map(d => d.id === dep.id ? updated : d));
                                   handleUpdateRow(updated);
+                                  addRecentCombo(dep.data_caixa, dep.turno);
                                 }}
                               >
                                 <SelectTrigger className="h-8 text-xs w-36"><SelectValue placeholder="Centro Custo" /></SelectTrigger>
