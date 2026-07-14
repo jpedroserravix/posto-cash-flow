@@ -10,7 +10,6 @@ import { PaginationControls } from '@/components/PaginationControls';
 import { HorizontalScrollSync } from '@/components/HorizontalScrollSync';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -26,7 +25,7 @@ import {
 } from '@/components/ui/select';
 import {
   QrCode, Upload, Download, ChevronDown, ChevronRight,
-  TrendingUp, Hash, Receipt, RefreshCw, Plus, AlertTriangle, Trash2,
+  RefreshCw, Plus, AlertTriangle, Trash2,
   Copy, Check, FileCheck2,
 } from 'lucide-react';
 import {
@@ -872,10 +871,6 @@ export default function ConciliacaoPix() {
     return map;
   }, [transacoes, fechamentoTurnos, fechamentoData]);
 
-  const totalVendas   = useMemo(() => transacoes.reduce((s, t) => s + t.valor_bruto, 0), [transacoes]);
-  const totalTarifas  = useMemo(() => transacoes.reduce((s, t) => s + t.tarifa,      0), [transacoes]);
-  const qtdTransacoes = transacoes.length;
-
   // ── sort toggle ────────────────────────────────────────────────────────────
   function toggleSort(field: 'nome_funcionario' | 'nome_pagador') {
     if (sortField !== field) { setSortField(field); setSortDir('asc'); }
@@ -1248,49 +1243,6 @@ export default function ConciliacaoPix() {
       {/* Date filter */}
       <DateFilter preset={dfPreset} range={dfRange} onChange={setDfPreset} />
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <Card>
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 shrink-0">
-                <TrendingUp className="h-4 w-4 text-primary" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">Total de Vendas Pix</p>
-                <p className="text-lg font-bold leading-tight">R$ {fmtBRL(totalVendas)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/10 shrink-0">
-                <Hash className="h-4 w-4 text-blue-500" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">Transações</p>
-                <p className="text-lg font-bold leading-tight">{qtdTransacoes}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-500/10 shrink-0">
-                <Receipt className="h-4 w-4 text-orange-500" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">Total de Tarifas</p>
-                <p className="text-lg font-bold leading-tight">R$ {fmtBRL(totalTarifas)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Fechamento por Turno section */}
       <div className="rounded-md border">
         <button
@@ -1303,174 +1255,181 @@ export default function ConciliacaoPix() {
             : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
         </button>
         {showFechamento && (
-          <div className="border-t p-4 space-y-4">
+          <div className="border-t p-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-            {/* Seletores: data + CC + status */}
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="date"
-                value={fechamentoData}
-                onChange={(e) => {
-                  setFechamentoData(e.target.value);
-                  if (e.target.value) setDfPreset('custom', e.target.value, e.target.value);
-                }}
-                className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              />
-              <Select value={fechamentoCc} onValueChange={setFechamentoCc}>
-                <SelectTrigger className="h-9 w-[160px] text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {centrosCusto.map((cc) => (
-                    <SelectItem key={cc} value={cc}>{cc}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {fechamentoStatus && !turnosDirty && (
-                <RepasseStatusBadge status={fechamentoStatus} />
-              )}
-            </div>
+              {/* Coluna esquerda: horários e ações */}
+              <div className="space-y-4">
 
-            {/* Horários de corte por turno */}
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">
-                Horários de corte — hora da última venda de cada turno (do relatório de caixa)
-              </p>
-              {cortes.map((corte, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground w-14 shrink-0">Turno {idx + 1}</span>
+                {/* Seletores: data + CC + status */}
+                <div className="flex flex-wrap items-center gap-2">
                   <input
-                    type="time"
-                    step="1"
-                    value={corte}
+                    type="date"
+                    value={fechamentoData}
                     onChange={(e) => {
-                      const next = [...cortes];
-                      next[idx] = e.target.value;
-                      setCortes(next);
+                      setFechamentoData(e.target.value);
+                      if (e.target.value) setDfPreset('custom', e.target.value, e.target.value);
                     }}
-                    className="h-8 w-36 rounded-md border border-input bg-transparent px-2 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   />
-                  {cortes.length > 1 && (
-                    <button
-                      className="text-xs text-muted-foreground hover:text-destructive transition-colors px-1"
-                      onClick={() => setCortes(cortes.filter((_, i) => i !== idx))}
-                      title="Remover turno"
-                    >
-                      ×
-                    </button>
+                  <Select value={fechamentoCc} onValueChange={setFechamentoCc}>
+                    <SelectTrigger className="h-9 w-[160px] text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {centrosCusto.map((cc) => (
+                        <SelectItem key={cc} value={cc}>{cc}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {fechamentoStatus && !turnosDirty && (
+                    <RepasseStatusBadge status={fechamentoStatus} />
                   )}
                 </div>
-              ))}
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 gap-1 text-xs text-muted-foreground"
-                onClick={() => setCortes([...cortes, ''])}
-              >
-                <Plus className="w-3 h-3" />
-                Adicionar Turno
-              </Button>
-            </div>
 
-            {/* Ações */}
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-9 gap-1.5 text-xs"
-                disabled={calculando || salvando || importing}
-                onClick={calcularTurnos}
-              >
-                <RefreshCw className={`w-3 h-3 ${calculando ? 'animate-spin' : ''}`} />
-                {calculando ? 'Calculando...' : 'Calcular Turnos'}
-              </Button>
-              <Button
-                size="sm"
-                className="h-9 gap-1.5 text-xs"
-                disabled={!turnosDirty || salvando || fechamentoTurnos.length === 0}
-                onClick={salvarFechamento}
-              >
-                {salvando ? 'Salvando...' : 'Salvar Fechamento'}
-              </Button>
-            </div>
+                {/* Horários de corte por turno */}
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Horários de corte — hora da última venda de cada turno (do relatório de caixa)
+                  </p>
+                  {cortes.map((corte, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground w-14 shrink-0">Turno {idx + 1}</span>
+                      <input
+                        type="time"
+                        step="1"
+                        value={corte}
+                        onChange={(e) => {
+                          const next = [...cortes];
+                          next[idx] = e.target.value;
+                          setCortes(next);
+                        }}
+                        className="h-8 w-36 rounded-md border border-input bg-transparent px-2 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      />
+                      {cortes.length > 1 && (
+                        <button
+                          className="text-xs text-muted-foreground hover:text-destructive transition-colors px-1"
+                          onClick={() => setCortes(cortes.filter((_, i) => i !== idx))}
+                          title="Remover turno"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 gap-1 text-xs text-muted-foreground"
+                    onClick={() => setCortes([...cortes, ''])}
+                  >
+                    <Plus className="w-3 h-3" />
+                    Adicionar Turno
+                  </Button>
+                </div>
 
-            {/* Aviso: transações sem turno (após último corte) */}
-            {semTurno && semTurno.count > 0 && (
-              <div className="flex items-start gap-2 rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950/20 dark:text-yellow-300">
-                <span className="shrink-0">⚠</span>
-                <span>
-                  {semTurno.count} transaç{semTurno.count === 1 ? 'ão' : 'ões'} (R$ {fmtBRL(semTurno.valor)}) ficaram após o último horário de corte e não foram atribuídas a nenhum turno.
-                </span>
+                {/* Ações */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-9 gap-1.5 text-xs"
+                    disabled={calculando || salvando || importing}
+                    onClick={calcularTurnos}
+                  >
+                    <RefreshCw className={`w-3 h-3 ${calculando ? 'animate-spin' : ''}`} />
+                    {calculando ? 'Calculando...' : 'Calcular Turnos'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-9 gap-1.5 text-xs"
+                    disabled={!turnosDirty || salvando || fechamentoTurnos.length === 0}
+                    onClick={salvarFechamento}
+                  >
+                    {salvando ? 'Salvando...' : 'Salvar Fechamento'}
+                  </Button>
+                </div>
+
+                {/* Aviso: transações sem turno (após último corte) */}
+                {semTurno && semTurno.count > 0 && (
+                  <div className="flex items-start gap-2 rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950/20 dark:text-yellow-300">
+                    <span className="shrink-0">⚠</span>
+                    <span>
+                      {semTurno.count} transaç{semTurno.count === 1 ? 'ão' : 'ões'} (R$ {fmtBRL(semTurno.valor)}) ficaram após o último horário de corte e não foram atribuídas a nenhum turno.
+                    </span>
+                  </div>
+                )}
               </div>
-            )}
 
-            {/* Tabela de resultado */}
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="whitespace-nowrap text-xs">Turno</TableHead>
-                    <TableHead className="whitespace-nowrap text-xs">Hora de Corte</TableHead>
-                    <TableHead className="whitespace-nowrap text-xs text-right">Total Bruto (R$)</TableHead>
-                    <TableHead className="whitespace-nowrap text-xs">Status</TableHead>
-                    <TableHead className="whitespace-nowrap text-xs">Observação</TableHead>
-                    <TableHead className="whitespace-nowrap text-xs"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loadingFechamento ? (
+              {/* Coluna direita: tabela de turnos */}
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground text-xs py-6">
-                        Carregando...
-                      </TableCell>
+                      <TableHead className="whitespace-nowrap text-xs">Turno</TableHead>
+                      <TableHead className="whitespace-nowrap text-xs">Hora de Corte</TableHead>
+                      <TableHead className="whitespace-nowrap text-xs text-right">Total Bruto (R$)</TableHead>
+                      <TableHead className="whitespace-nowrap text-xs">Status</TableHead>
+                      <TableHead className="whitespace-nowrap text-xs">Observação</TableHead>
+                      <TableHead className="whitespace-nowrap text-xs"></TableHead>
                     </TableRow>
-                  ) : fechamentoTurnos.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground text-xs py-6">
-                        {turnosDirty
-                          ? 'Nenhuma transação encontrada para essa data.'
-                          : `Nenhum fechamento salvo para ${fmtDate(fechamentoData)} — ${fechamentoCc}. Informe os horários e clique em Calcular Turnos.`}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    fechamentoTurnos.map((t) => (
-                      <TableRow key={`${t.id || t.numero_turno}`}>
-                        <TableCell className="text-xs font-medium whitespace-nowrap">
-                          Turno {t.numero_turno}
-                        </TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">
-                          {fmtTime(t.hora_corte)}
-                        </TableCell>
-                        <TableCell className="text-xs text-right whitespace-nowrap">
-                          <div className="font-medium">{fmtBRL(t.total_calculado)}</div>
-                          {t.total_tarifa !== undefined && t.total_tarifa > 0 && (
-                            <div className="text-[10px] text-muted-foreground">
-                              tarifa: {fmtBRL(t.total_tarifa)}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <RepasseStatusBadge status={t.status} />
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground max-w-[220px] truncate">
-                          {t.observacao || '—'}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 gap-1.5 text-xs whitespace-nowrap"
-                            onClick={() => { setQualityDialogTurno(t); setQualityResult(null); }}
-                          >
-                            <FileCheck2 className="w-3 h-3" />
-                            Quality
-                          </Button>
+                  </TableHeader>
+                  <TableBody>
+                    {loadingFechamento ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground text-xs py-6">
+                          Carregando...
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                    ) : fechamentoTurnos.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground text-xs py-6">
+                          {turnosDirty
+                            ? 'Nenhuma transação encontrada para essa data.'
+                            : `Nenhum fechamento salvo para ${fmtDate(fechamentoData)} — ${fechamentoCc}. Informe os horários e clique em Calcular Turnos.`}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      fechamentoTurnos.map((t) => (
+                        <TableRow key={`${t.id || t.numero_turno}`}>
+                          <TableCell className="text-xs font-medium whitespace-nowrap">
+                            Turno {t.numero_turno}
+                          </TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">
+                            {fmtTime(t.hora_corte)}
+                          </TableCell>
+                          <TableCell className="text-xs text-right whitespace-nowrap">
+                            <div className="font-medium">{fmtBRL(t.total_calculado)}</div>
+                            {t.total_tarifa !== undefined && t.total_tarifa > 0 && (
+                              <div className="text-[10px] text-muted-foreground">
+                                tarifa: {fmtBRL(t.total_tarifa)}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <RepasseStatusBadge status={t.status} />
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground max-w-[220px] truncate">
+                            {t.observacao || '—'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 gap-1.5 text-xs whitespace-nowrap"
+                              onClick={() => { setQualityDialogTurno(t); setQualityResult(null); }}
+                            >
+                              <FileCheck2 className="w-3 h-3" />
+                              Quality
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
             </div>
           </div>
         )}
