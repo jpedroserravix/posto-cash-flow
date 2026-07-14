@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useDateFilter } from '@/hooks/useDateFilter';
@@ -51,10 +51,6 @@ function safeNum(v: unknown): number {
   if (typeof v === 'number') return v;
   if (typeof v === 'string') return parseFloat(v) || 0;
   return 0;
-}
-
-function sumLiq(items: Recebivel[]): number {
-  return items.reduce((s, r) => s + r.valor_liquido, 0);
 }
 
 // ─── types ───────────────────────────────────────────────────────────────────
@@ -111,9 +107,10 @@ interface GrupoData {
 // ─── component ───────────────────────────────────────────────────────────────
 
 export default function CartoesAReceber() {
-  const { selectedPostoId } = useAuth();
+  const { selectedPostoId, postoId, postoNome, allPostos } = useAuth();
   const { preset: dfPreset, range: dfRange, setPreset: setDfPreset } = useDateFilter('thisMonth');
 
+  const [localPostoId, setLocalPostoId] = useState<string>('');
   const [recebiveis, setRecebiveis] = useState<Recebivel[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -128,10 +125,25 @@ export default function CartoesAReceber() {
   const [dataRecebimento, setDataRecebimento] = useState<string>(TODAY);
   const [salvando, setSalvando] = useState(false);
 
-  // ── load ────────────────────────────────────────────────────────────────────
+  const postoOptions = useMemo(
+    () =>
+      allPostos.length > 0
+        ? allPostos
+        : postoId
+        ? [{ id: postoId, nome: postoNome ?? 'Meu Posto', cnpj: '' }]
+        : [],
+    [allPostos, postoId, postoNome],
+  );
+
+  useEffect(() => {
+    const next = selectedPostoId ?? postoId ?? '';
+    if (next) setLocalPostoId(next);
+  }, [selectedPostoId, postoId]);
+
+  // ── load ─────────────────────────────────────────────────────────────────────
 
   const loadData = useCallback(async () => {
-    if (!selectedPostoId) return;
+    if (!localPostoId) return;
     setLoading(true);
     try {
       const { data, error } = await (supabase as any)
@@ -142,15 +154,12 @@ export default function CartoesAReceber() {
            data_prevista_credito, status_recebimento, data_recebimento_real,
            cartoes_vendas(nome, cpf, codigo_transacao)`,
         )
-        .eq('posto_id', selectedPostoId)
+        .eq('posto_id', localPostoId)
         .gte('data_prevista_credito', dfRange.start)
         .lte('data_prevista_credito', dfRange.end)
         .order('data_prevista_credito', { ascending: true });
 
-      if (error) {
-        toast.error('Erro ao carregar recebíveis: ' + error.message);
-        return;
-      }
+      if (error) { toast.error('Erro ao carregar recebíveis: ' + error.message); return; }
 
       setRecebiveis(
         ((data as any[]) || []).map((r: any) => ({
@@ -174,11 +183,11 @@ export default function CartoesAReceber() {
     } finally {
       setLoading(false);
     }
-  }, [selectedPostoId, dfRange.start, dfRange.end]);
+  }, [localPostoId, dfRange.start, dfRange.end]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // ── derived data ─────────────────────────────────────────────────────────────
+  // ── derived ───────────────────────────────────────────────────────────────────
 
   const uniqueAdquirentes = useMemo(
     () => [...new Set(recebiveis.map((r) => r.adquirente))].sort(),
@@ -191,7 +200,8 @@ export default function CartoesAReceber() {
   );
 
   const totalPendente = useMemo(
-    () => recebiveis.filter((r) => r.status_recebimento === 'pendente').reduce((s, r) => s + r.valor_liquido, 0),
+    () => recebiveis.filter((r) => r.status_recebimento === 'pendente')
+      .reduce((s, r) => s + r.valor_liquido, 0),
     [recebiveis],
   );
 
@@ -242,10 +252,10 @@ export default function CartoesAReceber() {
             key,
             modalidade:           parts[1],
             condicao_recebimento: parts[2],
-            count:         modItems.length,
-            total_bruto:   modItems.reduce((s, r) => s + r.valor_bruto, 0),
+            count:          modItems.length,
+            total_bruto:    modItems.reduce((s, r) => s + r.valor_bruto, 0),
             total_desconto: modItems.reduce((s, r) => s + r.valor_desconto, 0),
-            total_liquido: modItems.reduce((s, r) => s + r.valor_liquido, 0),
+            total_liquido:  modItems.reduce((s, r) => s + r.valor_liquido, 0),
             items: modItems,
           };
         });
@@ -257,7 +267,7 @@ export default function CartoesAReceber() {
           hasPendente: pendentes.length > 0,
           total_bruto:    items.reduce((s, r) => s + r.valor_bruto, 0),
           total_desconto: items.reduce((s, r) => s + r.valor_desconto, 0),
-          total_liquido:  sumLiq(items),
+          total_liquido:  items.reduce((s, r) => s + r.valor_liquido, 0),
           count: items.length,
           pendentes,
           recebidos,
@@ -322,16 +332,6 @@ export default function CartoesAReceber() {
     }
   }
 
-  // ── empty state ───────────────────────────────────────────────────────────────
-
-  if (!selectedPostoId) {
-    return (
-      <p className="text-muted-foreground text-center py-8">
-        Selecione um posto para continuar.
-      </p>
-    );
-  }
-
   // ── render ────────────────────────────────────────────────────────────────────
 
   return (
@@ -387,6 +387,25 @@ export default function CartoesAReceber() {
 
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-2">
+        {/* Posto */}
+        {postoOptions.length > 1 ? (
+          <Select value={localPostoId} onValueChange={setLocalPostoId}>
+            <SelectTrigger className="h-9 w-[180px] text-sm">
+              <SelectValue placeholder="Selecionar posto" />
+            </SelectTrigger>
+            <SelectContent>
+              {postoOptions.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : postoOptions.length === 1 ? (
+          <div className="h-9 flex items-center px-3 rounded-md border bg-muted/30 text-sm text-muted-foreground">
+            {postoOptions[0].nome}
+          </div>
+        ) : null}
+
+        {/* Adquirente */}
         {uniqueAdquirentes.length > 1 && (
           <Select
             value={filtroAdquirente || '__all__'}
@@ -404,6 +423,7 @@ export default function CartoesAReceber() {
           </Select>
         )}
 
+        {/* Modalidade */}
         {uniqueModalidades.length > 1 && (
           <Select
             value={filtroModalidade || '__all__'}
@@ -421,6 +441,7 @@ export default function CartoesAReceber() {
           </Select>
         )}
 
+        {/* Status */}
         <Select
           value={filtroStatus || '__all__'}
           onValueChange={(v) => setFiltroStatus(v === '__all__' ? '' : v)}
@@ -439,8 +460,12 @@ export default function CartoesAReceber() {
       {/* Filtro de período */}
       <DateFilter preset={dfPreset} range={dfRange} onChange={setDfPreset} />
 
-      {/* Lista agrupada por data */}
-      {loading ? (
+      {/* Empty state — sem posto */}
+      {!localPostoId ? (
+        <p className="text-muted-foreground text-center py-8">
+          Selecione um posto para continuar.
+        </p>
+      ) : loading ? (
         <p className="text-center text-muted-foreground text-sm py-10">Carregando...</p>
       ) : grupos.length === 0 ? (
         <p className="text-center text-muted-foreground text-sm py-10">
@@ -504,15 +529,11 @@ export default function CartoesAReceber() {
                         onClick={(e) => {
                           e.stopPropagation();
                           setDataRecebimento(TODAY);
-                          setMarcarDialog({
-                            items: grupo.pendentes,
-                            dataGrupo: grupo.data_prevista_credito,
-                          });
+                          setMarcarDialog({ items: grupo.pendentes, dataGrupo: grupo.data_prevista_credito });
                         }}
                       >
                         <Check className="w-3 h-3" />
-                        <span className="hidden xs:inline">Marcar recebido</span>
-                        <span className="xs:hidden">Receber</span>
+                        Marcar recebido
                       </Button>
                     )}
 
@@ -530,7 +551,7 @@ export default function CartoesAReceber() {
                   </div>
                 </div>
 
-                {/* Tabela de modalidades (expandida) */}
+                {/* Tabela de modalidades */}
                 {isExpanded && (
                   <div className="border-t overflow-x-auto">
                     <Table>
@@ -579,19 +600,14 @@ export default function CartoesAReceber() {
                                 </TableCell>
                               </TableRow>
 
-                              {/* Transações individuais */}
                               {modExpanded && mod.items.map((r) => (
                                 <TableRow key={r.id} className="bg-muted/20 hover:bg-muted/30">
                                   <TableCell className="py-1.5" />
                                   <TableCell colSpan={2} className="text-xs py-1.5 pl-8">
                                     <div>
-                                      <span className="font-medium">
-                                        {r.cartoes_vendas?.nome || '—'}
-                                      </span>
+                                      <span className="font-medium">{r.cartoes_vendas?.nome || '—'}</span>
                                       {r.cartoes_vendas?.cpf && (
-                                        <span className="text-muted-foreground ml-2">
-                                          {r.cartoes_vendas.cpf}
-                                        </span>
+                                        <span className="text-muted-foreground ml-2">{r.cartoes_vendas.cpf}</span>
                                       )}
                                     </div>
                                     {r.cartoes_vendas?.codigo_transacao && (
