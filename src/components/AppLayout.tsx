@@ -15,7 +15,7 @@ import {
   Fuel, LogOut, FileSpreadsheet, PenLine, BarChart3, Building2, Users,
   Landmark, Receipt, Zap, LayoutDashboard, FileCheck2, ShoppingBag,
   UserCircle, Clock, Calculator, History, ClipboardList, Package,
-  Info, Copy, Check, GraduationCap, LayoutGrid, Settings, KeyRound, ChevronDown, ShieldCheck, UserSearch, Inbox, BookOpen, Palette, Archive, Wrench, QrCode, CreditCard,
+  Info, Copy, Check, GraduationCap, LayoutGrid, Settings, KeyRound, ChevronDown, ShieldCheck, UserSearch, Inbox, BookOpen, Palette, Archive, Wrench, QrCode, CreditCard, Wallet,
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -112,6 +112,7 @@ const primaryNavGroups: NavGroup[] = [
     label: 'Cartões',
     items: [
       { to: '/financeiro/cartoes/importar', label: 'Importar Vendas', icon: CreditCard, permission: 'cartoes-importar' },
+        { to: '/financeiro/cartoes/a-receber', label: 'A Receber', icon: Wallet, permission: 'cartoes-a-receber' },
     ],
   },
   {

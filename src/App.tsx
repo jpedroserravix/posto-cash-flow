@@ -34,6 +34,7 @@ import Almoxarifado from "./pages/manutencao/Almoxarifado";
 import Chamados from "./pages/manutencao/Chamados";
 import ConciliacaoPix from "./pages/financeiro/ConciliacaoPix";
 import ImportarVendasCartoes from "./pages/financeiro/cartoes/ImportarVendas";
+import CartoesAReceber from "./pages/financeiro/cartoes/AReceber";
 import Publico from "./pages/Publico";
 import NotFound from "./pages/NotFound";
 
@@ -116,6 +117,7 @@ function AppRoutes() {
       <Route path="/manutencao/chamados"   element={<ProtectedRoute permission="chamados"><Chamados /></ProtectedRoute>} />
       <Route path="/financeiro/conciliacao-pix"    element={<ProtectedRoute permission="conciliacao-pix"><ConciliacaoPix /></ProtectedRoute>} />
       <Route path="/financeiro/cartoes/importar" element={<ProtectedRoute permission="cartoes-importar"><ImportarVendasCartoes /></ProtectedRoute>} />
+      <Route path="/financeiro/cartoes/a-receber" element={<ProtectedRoute permission="cartoes-a-receber"><CartoesAReceber /></ProtectedRoute>} />
       <Route path="/publico"          element={<Publico />} />
       {/* backward-compat redirect */}
       <Route path="/notas"           element={<Navigate to="/compras/notas" replace />} />
