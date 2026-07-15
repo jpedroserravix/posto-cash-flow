@@ -33,7 +33,6 @@ import CaixaEntrada from "./pages/CaixaEntrada";
 import Almoxarifado from "./pages/manutencao/Almoxarifado";
 import Chamados from "./pages/manutencao/Chamados";
 import ConciliacaoPix from "./pages/financeiro/ConciliacaoPix";
-import CartoesAReceber from "./pages/financeiro/cartoes/AReceber";
 import CartoesPremmia from "./pages/financeiro/cartoes/CartoesPremmia";
 import Publico from "./pages/Publico";
 import NotFound from "./pages/NotFound";
@@ -116,12 +115,12 @@ function AppRoutes() {
       <Route path="/almoxarifado"          element={<ProtectedRoute permission="almoxarifado"><Almoxarifado /></ProtectedRoute>} />
       <Route path="/manutencao/chamados"   element={<ProtectedRoute permission="chamados"><Chamados /></ProtectedRoute>} />
       <Route path="/financeiro/conciliacao-pix"    element={<ProtectedRoute permission="conciliacao-pix"><ConciliacaoPix /></ProtectedRoute>} />
-      <Route path="/financeiro/cartoes"            element={<ProtectedRoute permission="cartoes-importar"><CartoesPremmia /></ProtectedRoute>} />
-      <Route path="/financeiro/cartoes/a-receber"  element={<ProtectedRoute permission="cartoes-a-receber"><CartoesAReceber /></ProtectedRoute>} />
+      <Route path="/financeiro/cartoes" element={<ProtectedRoute permission="cartoes-importar"><CartoesPremmia /></ProtectedRoute>} />
       {/* redirects for old routes */}
-      <Route path="/financeiro/cartoes/importar"   element={<Navigate to="/financeiro/cartoes" replace />} />
-      <Route path="/financeiro/cartoes/vendas"     element={<Navigate to="/financeiro/cartoes?tab=vendas" replace />} />
-      <Route path="/financeiro/cartoes/conferencia" element={<Navigate to="/financeiro/cartoes?tab=conferencia" replace />} />
+      <Route path="/financeiro/cartoes/a-receber"   element={<Navigate to="/financeiro/cartoes?tab=a-receber" replace />} />
+      <Route path="/financeiro/cartoes/importar"    element={<Navigate to="/financeiro/cartoes" replace />} />
+      <Route path="/financeiro/cartoes/vendas"      element={<Navigate to="/financeiro/cartoes" replace />} />
+      <Route path="/financeiro/cartoes/conferencia" element={<Navigate to="/financeiro/cartoes" replace />} />
       <Route path="/publico"          element={<Publico />} />
       {/* backward-compat redirect */}
       <Route path="/notas"           element={<Navigate to="/compras/notas" replace />} />

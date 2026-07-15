@@ -72,8 +72,7 @@ export const ROUTE_PERMISSION_MAP: { path: string; permission: string }[] = [
   { path: '/almoxarifado',          permission: 'almoxarifado' },
   { path: '/manutencao/chamados',   permission: 'chamados' },
   { path: '/financeiro/conciliacao-pix',      permission: 'conciliacao-pix' },
-  { path: '/financeiro/cartoes',             permission: 'cartoes-importar' },
-  { path: '/financeiro/cartoes/a-receber',   permission: 'cartoes-a-receber' },
+  { path: '/financeiro/cartoes', permission: 'cartoes-importar' },
 ];
 
 export function firstAllowedPath(hasPermission: (k: string) => boolean): string {

@@ -80,11 +80,10 @@ const primaryNavGroups: NavGroup[] = [
     items: [
       { to: '/brinks',  label: 'Depósitos Brinks',  icon: FileSpreadsheet, permission: 'brinks' },
       { to: '/manuais', label: 'Depósitos Manuais', icon: PenLine,         permission: 'manuais' },
-      { to: '/financeiro/conciliacao-pix', label: 'PIX - Mais Pagamentos', icon: QrCode, permission: 'conciliacao-pix' },
+      { to: '/financeiro/conciliacao-pix', label: 'PIX - Mais Pagamentos', icon: QrCode,     permission: 'conciliacao-pix' },
+      { to: '/financeiro/cartoes',         label: 'Cartões e Premmia',    icon: CreditCard, permission: 'cartoes-importar' },
       { to: '/resumo',  label: 'Resumo Diário / CAIXAS', icon: BarChart3, permission: 'resumo' },
-      { to: '/extrato', label: 'Extrato Bancário',   icon: Receipt,         permission: 'extrato' },
-      { to: '/financeiro/cartoes',           label: 'Cartões e Premmia', icon: CreditCard, permission: 'cartoes-importar' },
-      { to: '/financeiro/cartoes/a-receber', label: 'Cartões a Receber', icon: Wallet,     permission: 'cartoes-a-receber' },
+      { to: '/extrato', label: 'Extrato Bancário',        icon: Receipt,   permission: 'extrato' },
     ],
   },
   {
