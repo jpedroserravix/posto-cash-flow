@@ -1221,7 +1221,7 @@ export default function ConciliacaoPix() {
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <QrCode className="w-5 h-5 text-muted-foreground" />
-          <h1 className="text-lg font-semibold">Conciliação Pix</h1>
+          <h1 className="text-lg font-semibold">PIX - Mais Pagamentos</h1>
         </div>
         <Button
           className="gap-2 text-xs"
