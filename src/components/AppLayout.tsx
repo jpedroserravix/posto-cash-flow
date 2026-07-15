@@ -113,7 +113,8 @@ const primaryNavGroups: NavGroup[] = [
     items: [
       { to: '/financeiro/cartoes/importar', label: 'Importar Vendas', icon: CreditCard, permission: 'cartoes-importar' },
         { to: '/financeiro/cartoes/a-receber', label: 'A Receber', icon: Wallet, permission: 'cartoes-a-receber' },
-        { to: '/financeiro/cartoes/vendas', label: 'Vendas Importadas', icon: FileSpreadsheet, permission: 'cartoes-vendas' },
+        { to: '/financeiro/cartoes/vendas',       label: 'Vendas Importadas', icon: FileSpreadsheet, permission: 'cartoes-vendas' },
+      { to: '/financeiro/cartoes/conferencia', label: 'Conferência',        icon: FileCheck2,      permission: 'cartoes-conferencia' },
     ],
   },
   {

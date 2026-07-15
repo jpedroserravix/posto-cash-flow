@@ -29,6 +29,7 @@ export const ALL_PERMISSIONS = [
   { key: 'cartoes-a-receber',     label: 'Cartões – A Receber' },
   { key: 'cartoes-vendas',        label: 'Cartões – Vendas Importadas' },
   { key: 'cartoes-excluir',       label: 'Cartões – Excluir Vendas' },
+  { key: 'cartoes-conferencia',   label: 'Cartões – Conferência por Turno' },
   { key: 'trancar-caixa',         label: 'Trancar Caixa' },
 ] as const;
 
@@ -73,7 +74,8 @@ export const ROUTE_PERMISSION_MAP: { path: string; permission: string }[] = [
   { path: '/financeiro/conciliacao-pix',     permission: 'conciliacao-pix' },
   { path: '/financeiro/cartoes/importar',    permission: 'cartoes-importar' },
   { path: '/financeiro/cartoes/a-receber',   permission: 'cartoes-a-receber' },
-  { path: '/financeiro/cartoes/vendas',      permission: 'cartoes-vendas' },
+  { path: '/financeiro/cartoes/vendas',        permission: 'cartoes-vendas' },
+  { path: '/financeiro/cartoes/conferencia',  permission: 'cartoes-conferencia' },
 ];
 
 export function firstAllowedPath(hasPermission: (k: string) => boolean): string {
