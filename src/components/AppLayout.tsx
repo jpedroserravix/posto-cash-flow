@@ -83,6 +83,8 @@ const primaryNavGroups: NavGroup[] = [
       { to: '/financeiro/conciliacao-pix', label: 'PIX - Mais Pagamentos', icon: QrCode, permission: 'conciliacao-pix' },
       { to: '/resumo',  label: 'Resumo Diário / CAIXAS', icon: BarChart3, permission: 'resumo' },
       { to: '/extrato', label: 'Extrato Bancário',   icon: Receipt,         permission: 'extrato' },
+      { to: '/financeiro/cartoes',           label: 'Cartões e Premmia', icon: CreditCard, permission: 'cartoes-importar' },
+      { to: '/financeiro/cartoes/a-receber', label: 'Cartões a Receber', icon: Wallet,     permission: 'cartoes-a-receber' },
     ],
   },
   {
@@ -106,15 +108,6 @@ const primaryNavGroups: NavGroup[] = [
     items: [
       { to: '/compras/pedidos', label: 'Pedidos',             icon: Package,       permission: 'pedidos-compra' },
       { to: '/compras/notas',   label: 'Lançamento de Notas', icon: ClipboardList, permission: 'lancamento-notas' },
-    ],
-  },
-  {
-    label: 'Cartões e Premmia',
-    items: [
-      { to: '/financeiro/cartoes/importar', label: 'Importar Vendas', icon: CreditCard, permission: 'cartoes-importar' },
-        { to: '/financeiro/cartoes/a-receber', label: 'A Receber', icon: Wallet, permission: 'cartoes-a-receber' },
-        { to: '/financeiro/cartoes/vendas',       label: 'Vendas Importadas', icon: FileSpreadsheet, permission: 'cartoes-vendas' },
-      { to: '/financeiro/cartoes/conferencia', label: 'Conferência',        icon: FileCheck2,      permission: 'cartoes-conferencia' },
     ],
   },
   {
