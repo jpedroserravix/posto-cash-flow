@@ -33,10 +33,14 @@ interface TurnoRow {
   turno: string;
   cofreBrinks: number;
   manual: number;
+  semCaixa?: boolean;
   pix?: number;
   pixTarifa?: number;
   pixTurnoId?: string;
   pixStatus?: string;
+  cartoes?: number;
+  cartoesTurnoId?: string;
+  cartoesStatus?: string;
   total: number;
 }
 
@@ -104,6 +108,7 @@ interface GroupData {
   totalManual: number;
   totalPix: number;
   totalPixTarifa: number;
+  totalCartoes: number;
   totalGeral: number;
   conferido: string;
   observacao: string;
@@ -248,6 +253,7 @@ export default function ResumoDiario() {
       { data: comprovantesData },
       { data: afericoesData },
       { data: pixFechData },
+      { data: cartoesFechData },
     ] = await Promise.all([
       supabase.from('depositos_brinks').select('data_caixa, turno, valor, centro_custo')
         .eq('posto_id', selectedPostoId).not('data_caixa', 'is', null).not('turno', 'is', null)
@@ -266,6 +272,11 @@ export default function ResumoDiario() {
         .eq('posto_id', selectedPostoId).gte('data', dfRange.start).lte('data', dfRange.end),
       (supabase as any).from('pix_fechamentos')
         .select('id, data, centro_custo, bruto_conferido, recebido_banco')
+        .eq('posto_id', selectedPostoId)
+        .gte('data', dfRange.start)
+        .lte('data', dfRange.end),
+      (supabase as any).from('cartoes_fechamentos')
+        .select('id, data, centro_custo, adquirente, status')
         .eq('posto_id', selectedPostoId)
         .gte('data', dfRange.start)
         .lte('data', dfRange.end),
@@ -305,6 +316,36 @@ export default function ResumoDiario() {
       });
     });
 
+    // cartoesMap: "data|cc|numero_turno" → { total_calculado, id, status }
+    // Agregamos múltiplos adquirentes do mesmo turno somando total_calculado
+    const cartoesMap = new Map<string, { total_calculado: number; id: string; status: string }>();
+    const cartoesFechIds = (cartoesFechData as any[] ?? []).map((f: any) => f.id as string);
+    if (cartoesFechIds.length > 0) {
+      const { data: cartoesTurnosData } = await (supabase as any)
+        .from('cartoes_fechamentos_turnos')
+        .select('id, fechamento_id, numero_turno, total_calculado, status')
+        .in('fechamento_id', cartoesFechIds);
+
+      const cartFechIdToKey = new Map<string, string>();
+      (cartoesFechData as any[]).forEach((f: any) => cartFechIdToKey.set(f.id, `${f.data}|${f.centro_custo}`));
+
+      (cartoesTurnosData as any[] ?? []).forEach((t: any) => {
+        const gKey = cartFechIdToKey.get(t.fechamento_id);
+        if (!gKey) return;
+        const mapKey = `${gKey}|${t.numero_turno}`;
+        const existing = cartoesMap.get(mapKey);
+        if (existing) {
+          existing.total_calculado += Number(t.total_calculado) || 0;
+        } else {
+          cartoesMap.set(mapKey, {
+            total_calculado: Number(t.total_calculado) || 0,
+            id: t.id as string,
+            status: t.status as string,
+          });
+        }
+      });
+    }
+
     // Build turno aggregations
     const turnoMap = new Map<string, { brinks: number; manual: number }>();
     brinks?.forEach((b) => {
@@ -337,6 +378,7 @@ export default function ResumoDiario() {
       const arr = groupMap.get(gKey) || [];
       const turnoNum = parseTurnoNum(turno);
       const pixEntry = turnoNum !== null ? pixMap.get(`${gKey}|${turnoNum}`) : undefined;
+      const cartEntry = turnoNum !== null ? cartoesMap.get(`${gKey}|${turnoNum}`) : undefined;
       arr.push({
         turno,
         cofreBrinks: val.brinks,
@@ -345,9 +387,67 @@ export default function ResumoDiario() {
         pixTarifa: pixEntry?.total_tarifa,
         pixTurnoId: pixEntry?.id,
         pixStatus: pixEntry?.status,
+        cartoes: cartEntry?.total_calculado,
+        cartoesTurnoId: cartEntry?.id,
+        cartoesStatus: cartEntry?.status,
         total: val.brinks + val.manual,
       });
       groupMap.set(gKey, arr);
+    });
+
+    // Adiciona turnos que existem APENAS no Pix (sem caixa) — semCaixa: true
+    pixMap.forEach((pixEntry, mapKey) => {
+      const parts = mapKey.split('|');
+      const turnoNum = parts[2];
+      const gKey = `${parts[0]}|${parts[1]}`;
+      const arr = groupMap.get(gKey) || [];
+      const alreadyExists = arr.some((r) => {
+        const n = parseInt(r.turno.replace(/\D/g, ''), 10);
+        return !isNaN(n) && n === parseInt(turnoNum, 10);
+      });
+      if (!alreadyExists) {
+        const cartEntry = cartoesMap.get(mapKey);
+        arr.push({
+          turno: `T${turnoNum}`,
+          cofreBrinks: 0,
+          manual: 0,
+          semCaixa: true,
+          pix: pixEntry.total_calculado,
+          pixTarifa: pixEntry.total_tarifa,
+          pixTurnoId: pixEntry.id,
+          pixStatus: pixEntry.status,
+          cartoes: cartEntry?.total_calculado,
+          cartoesTurnoId: cartEntry?.id,
+          cartoesStatus: cartEntry?.status,
+          total: 0,
+        });
+        groupMap.set(gKey, arr);
+      }
+    });
+
+    // Adiciona turnos que existem APENAS em Cartões (sem caixa e sem pix) — semCaixa: true
+    cartoesMap.forEach((cartEntry, mapKey) => {
+      const parts = mapKey.split('|');
+      const turnoNum = parts[2];
+      const gKey = `${parts[0]}|${parts[1]}`;
+      const arr = groupMap.get(gKey) || [];
+      const alreadyExists = arr.some((r) => {
+        const n = parseInt(r.turno.replace(/\D/g, ''), 10);
+        return !isNaN(n) && n === parseInt(turnoNum, 10);
+      });
+      if (!alreadyExists) {
+        arr.push({
+          turno: `T${turnoNum}`,
+          cofreBrinks: 0,
+          manual: 0,
+          semCaixa: true,
+          cartoes: cartEntry.total_calculado,
+          cartoesTurnoId: cartEntry.id,
+          cartoesStatus: cartEntry.status,
+          total: 0,
+        });
+        groupMap.set(gKey, arr);
+      }
     });
 
     // Conferencia map
@@ -396,10 +496,11 @@ export default function ResumoDiario() {
       .map(([key, turnos]) => {
         const [data, centroCusto] = key.split('|');
         const sorted = turnos.sort((a, b) => a.turno.localeCompare(b.turno));
-        const totalBrinks    = sorted.reduce((s, t) => s + t.cofreBrinks, 0);
-        const totalManual    = sorted.reduce((s, t) => s + t.manual, 0);
+        const totalBrinks    = sorted.reduce((s, t) => s + (t.semCaixa ? 0 : t.cofreBrinks), 0);
+        const totalManual    = sorted.reduce((s, t) => s + (t.semCaixa ? 0 : t.manual), 0);
         const totalPix       = sorted.reduce((s, t) => s + (t.pix ?? 0), 0);
         const totalPixTarifa = sorted.reduce((s, t) => s + (t.pixTarifa ?? 0), 0);
+        const totalCartoes   = sorted.reduce((s, t) => s + (t.cartoes ?? 0), 0);
         const conf    = confMap.get(key);
         const pixFech = pixFechMap.get(key);
         return {
@@ -410,6 +511,7 @@ export default function ResumoDiario() {
           totalManual,
           totalPix,
           totalPixTarifa,
+          totalCartoes,
           totalGeral: totalBrinks + totalManual,
           conferido: conf?.conferido || 'PENDENTE',
           observacao: conf?.observacao || '',
@@ -1379,17 +1481,21 @@ export default function ResumoDiario() {
                                 <TableHead className="text-right text-xs h-7 py-0">Manual</TableHead>
                                 <TableHead className="text-right text-xs h-7 py-0">Dinheiro</TableHead>
                                 <TableHead className="text-right text-xs h-7 py-0 text-primary">Pix</TableHead>
+                                <TableHead className="text-right text-xs h-7 py-0 text-purple-600">Premmia</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
                               {group.turnos.map((turno) => (
-                                <TableRow key={turno.turno} className="bg-muted/30">
+                                <TableRow key={turno.turno} className={`bg-muted/30 ${turno.semCaixa ? 'opacity-70' : ''}`}>
                                   <TableCell className="py-1 text-xs text-muted-foreground">{turno.turno}</TableCell>
-                                  <TableCell className="py-1 text-right text-xs">{fmt(turno.cofreBrinks)}</TableCell>
-                                  <TableCell className="py-1 text-right text-xs">{fmt(turno.manual)}</TableCell>
-                                  <TableCell className="py-1 text-right text-xs font-medium">{fmt(turno.total)}</TableCell>
+                                  <TableCell className="py-1 text-right text-xs">{turno.semCaixa ? '—' : fmt(turno.cofreBrinks)}</TableCell>
+                                  <TableCell className="py-1 text-right text-xs">{turno.semCaixa ? '—' : fmt(turno.manual)}</TableCell>
+                                  <TableCell className="py-1 text-right text-xs font-medium">{turno.semCaixa ? '—' : fmt(turno.total)}</TableCell>
                                   <TableCell className="py-1 text-right text-xs text-primary">
                                     {turno.pix !== undefined ? fmt(turno.pix) : '—'}
+                                  </TableCell>
+                                  <TableCell className="py-1 text-right text-xs text-purple-600">
+                                    {turno.cartoes !== undefined ? fmt(turno.cartoes) : '—'}
                                   </TableCell>
                                 </TableRow>
                               ))}
@@ -1400,6 +1506,9 @@ export default function ResumoDiario() {
                                 <TableCell className="py-1 text-right text-xs">{fmt(group.totalGeral)}</TableCell>
                                 <TableCell className="py-1 text-right text-xs text-primary">
                                   {group.totalPix > 0 ? fmt(group.totalPix) : '—'}
+                                </TableCell>
+                                <TableCell className="py-1 text-right text-xs text-purple-600">
+                                  {group.totalCartoes > 0 ? fmt(group.totalCartoes) : '—'}
                                 </TableCell>
                               </TableRow>
                             </TableBody>
