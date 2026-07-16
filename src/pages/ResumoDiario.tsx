@@ -1486,8 +1486,8 @@ export default function ResumoDiario() {
                             </TableHeader>
                             <TableBody>
                               {group.turnos.map((turno) => (
-                                <TableRow key={turno.turno} className={`bg-muted/30 ${turno.semCaixa ? 'opacity-70' : ''}`}>
-                                  <TableCell className="py-1 text-xs text-muted-foreground">{turno.turno}</TableCell>
+                                <TableRow key={turno.turno} className="bg-muted/30">
+                                  <TableCell className="py-1 text-xs text-muted-foreground uppercase">{turno.turno}</TableCell>
                                   <TableCell className="py-1 text-right text-xs">{turno.semCaixa ? '—' : fmt(turno.cofreBrinks)}</TableCell>
                                   <TableCell className="py-1 text-right text-xs">{turno.semCaixa ? '—' : fmt(turno.manual)}</TableCell>
                                   <TableCell className="py-1 text-right text-xs font-medium">{turno.semCaixa ? '—' : fmt(turno.total)}</TableCell>
