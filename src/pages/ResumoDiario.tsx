@@ -408,7 +408,7 @@ export default function ResumoDiario() {
       if (!alreadyExists) {
         const cartEntry = cartoesMap.get(mapKey);
         arr.push({
-          turno: `T${turnoNum}`,
+          turno: `Turno ${turnoNum}`,
           cofreBrinks: 0,
           manual: 0,
           semCaixa: true,
@@ -437,7 +437,7 @@ export default function ResumoDiario() {
       });
       if (!alreadyExists) {
         arr.push({
-          turno: `T${turnoNum}`,
+          turno: `Turno ${turnoNum}`,
           cofreBrinks: 0,
           manual: 0,
           semCaixa: true,
@@ -495,7 +495,7 @@ export default function ResumoDiario() {
     const result: GroupData[] = Array.from(groupMap.entries())
       .map(([key, turnos]) => {
         const [data, centroCusto] = key.split('|');
-        const sorted = turnos.sort((a, b) => a.turno.localeCompare(b.turno));
+        const sorted = turnos.sort((a, b) => (parseTurnoNum(a.turno) ?? 0) - (parseTurnoNum(b.turno) ?? 0));
         const totalBrinks    = sorted.reduce((s, t) => s + (t.semCaixa ? 0 : t.cofreBrinks), 0);
         const totalManual    = sorted.reduce((s, t) => s + (t.semCaixa ? 0 : t.manual), 0);
         const totalPix       = sorted.reduce((s, t) => s + (t.pix ?? 0), 0);
