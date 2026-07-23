@@ -607,44 +607,33 @@ export default function DepositosBrinks() {
       centro_custo: r.centro_custo || null,
     }));
 
-    // Buscar depósitos existentes para evitar duplicatas
-    const { data: existingData, error: fetchError } = await supabase
+    // Dedup fica a cargo do índice único do banco (depositos_brinks_unico):
+    // posto_id, data_deposito, valor, depositante. Conflitos são ignorados,
+    // nunca sobrescritos — o usuário edita turno/data_caixa/observacao depois.
+    const { data: inserted, error } = await supabase
       .from('depositos_brinks')
-      .select('data_deposito, valor, depositante')
-      .eq('posto_id', selectedPostoId);
+      .upsert(inserts, {
+        onConflict: 'posto_id,data_deposito,valor,depositante',
+        ignoreDuplicates: true,
+      })
+      .select('id');
 
-    if (fetchError) {
-      toast.error('Erro ao verificar duplicatas: ' + fetchError.message);
-      setSaving(false);
-      return;
-    }
-
-    const existingKeys = new Set(
-      (existingData || []).map(d => `${d.data_deposito}|${d.valor}|${d.depositante}`)
-    );
-
-    const novosInserts = inserts.filter(
-      r => !existingKeys.has(`${r.data_deposito}|${r.valor}|${r.depositante}`)
-    );
-
-    if (novosInserts.length === 0) {
-      toast.info('Todos os depósitos já existem no banco. Nenhum novo registro importado.');
-      setSaving(false);
-      return;
-    }
-
-    const { error } = await supabase.from('depositos_brinks').insert(novosInserts);
     if (error) {
       toast.error('Erro ao salvar: ' + error.message);
       setSaving(false);
       return;
     }
 
-    const ignorados = inserts.length - novosInserts.length;
-    const msg = ignorados > 0
-      ? `${novosInserts.length} depósitos salvos, ${ignorados} ignorados (já existiam).`
-      : `${novosInserts.length} depósitos salvos com sucesso!`;
-    toast.success(msg);
+    const importados = inserted?.length ?? 0;
+    const ignorados = inserts.length - importados;
+
+    if (importados === 0) {
+      toast.info(`Todos os ${inserts.length} depósitos já existem no banco. Nenhum novo registro importado.`);
+    } else if (ignorados > 0) {
+      toast.success(`${importados} depósito(s) importado(s), ${ignorados} ignorado(s) (já existiam).`);
+    } else {
+      toast.success(`${importados} depósito(s) importado(s) com sucesso!`);
+    }
     setImportRows([]);
     setIsImporting(false);
     loadAllDepositos();
